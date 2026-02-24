@@ -40,10 +40,11 @@ export default function WelcomeScreen() {
             <MaterialIcons name="chevron-right" size={24} color="#cbd5e1" />
           </TouchableOpacity>
 
-          {/* Yönetici Girişi */}
+          {/* Yönetici Girişi Butonu */}
           <TouchableOpacity
             style={styles.card}
-            onPress={() => router.push("/auth/login?type=admin")}
+            // BURAYI DEĞİŞTİR: "/auth/login" yerine direkt "/auth/admin-login" yapıyoruz
+            onPress={() => router.push("/auth/admin-login")}
             activeOpacity={0.8}
           >
             <View style={[styles.iconBox, { backgroundColor: "#f8f9fa" }]}>

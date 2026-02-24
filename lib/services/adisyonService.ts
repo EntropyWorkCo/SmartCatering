@@ -1,25 +1,43 @@
 import { supabase } from "../supabase";
 
-// 1️⃣ Adisyonları getir
-export const getAdisyonlar = async () => {
-  const { data, error } = await supabase.from("adisyonlar").select("*");
+export const adisyonService = {
+  async createOrder(userId: string, totalAmount: number, items: any[]) {
+    // 1. Adisyon Başlığı
+    const { data: adisyon, error: adisyonError } = await supabase
+      .from("adisyon")
+      .insert([
+        { user_id: userId, total_amount: totalAmount, status: "bekliyor" },
+      ])
+      .select()
+      .single();
 
-  if (error) {
-    console.log("Adisyon getirme hatası:", error);
-    throw error;
-  }
+    if (adisyonError) throw adisyonError;
 
-  return data;
-};
+    // 2. Adisyon Kalemleri
+    const orderItems = items.map((item) => ({
+      adisyon_id: adisyon.id,
+      menu_item_id: item.menu_item_id,
+      quantity: item.quantity,
+      unit_price: item.price,
+      line_total: item.quantity * item.price,
+    }));
 
-// 2️⃣ Yeni adisyon ekle
-export const addAdisyon = async (adisyon: any) => {
-  const { data, error } = await supabase.from("adisyonlar").insert([adisyon]);
+    const { error: itemsError } = await supabase
+      .from("adisyon_items")
+      .insert(orderItems);
 
-  if (error) {
-    console.log("Adisyon ekleme hatası:", error);
-    throw error;
-  }
+    if (itemsError) throw itemsError;
+    return adisyon;
+  },
 
-  return data;
+  async getUserOrders(userId: string) {
+    const { data, error } = await supabase
+      .from("adisyon")
+      .select("*, adisyon_items(*, menu_items(name))")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
 };

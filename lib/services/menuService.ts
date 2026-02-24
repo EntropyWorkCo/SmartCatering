@@ -1,12 +1,13 @@
 import { supabase } from "../supabase";
 
-export const getMenu = async () => {
-  console.log("API ÇAĞRILDI");
-
-  const { data, error } = await supabase.from("menu_items").select("*");
-
-  console.log("DATA:", data);
-  console.log("ERROR:", error);
-
-  return data ?? [];
+export const menuService = {
+  async getActiveMenu() {
+    const { data, error } = await supabase
+      .from("menu_items")
+      .select("*")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data;
+  },
 };

@@ -5,22 +5,23 @@ export default function Dashboard() {
   const { adisyonlar, createAdisyon } = useAdisyon();
 
   return (
-    <View style={{ padding: 20 }}>
+    <View>
       <Button
         title="Yeni Adisyon Ekle"
         onPress={() =>
           createAdisyon({
-            total_amount: 250,
+            masa_no: 3,
+            toplam_tutar: 250,
           })
         }
       />
 
       <FlatList
         data={adisyonlar}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <Text>
-            Tutar: {item.total_amount} | Durum: {item.status}
+            Masa: {item.masa_no} - Tutar: {item.toplam_tutar}
           </Text>
         )}
       />

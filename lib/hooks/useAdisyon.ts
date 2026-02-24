@@ -1,31 +1,61 @@
 import { useEffect, useState } from "react";
+import { adisyonService } from "../services/adisyonService";
 import { supabase } from "../supabase";
 
-export function useAdisyon() {
-  const [adisyonlar, setAdisyonlar] = useState([]);
+export const useAdisyon = (userId?: string) => {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  async function fetchAdisyonlar() {
-    const { data, error } = await supabase
-      .from("adisyon")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (!error) setAdisyonlar(data);
-    else console.log("FETCH ERROR", error);
-  }
-
-  async function createAdisyon(values: { total_amount: number }) {
-    const { error } = await supabase.from("adisyon").insert({
-      total_amount: values.total_amount,
-    });
-
-    if (!error) fetchAdisyonlar();
-    else console.log("INSERT ERROR", error);
-  }
+  const fetchOrders = async () => {
+    if (!userId) return;
+    setLoading(true);
+    try {
+      const data = await adisyonService.getUserOrders(userId);
+      setOrders(data || []);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    fetchAdisyonlar();
-  }, []);
+    fetchOrders();
 
-  return { adisyonlar, createAdisyon };
-}
+    // Realtime Güncelleme Dinleyicisi
+    if (userId) {
+      const channel = supabase
+        .channel("custom-update-channel")
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "adisyon",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            setOrders((prev) =>
+              prev.map((order) =>
+                order.id === payload.new.id
+                  ? { ...order, status: payload.new.status }
+                  : order,
+              ),
+            );
+          },
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [userId]);
+
+  return {
+    orders,
+    loading,
+    fetchOrders,
+    createOrder: adisyonService.createOrder,
+  };
+};

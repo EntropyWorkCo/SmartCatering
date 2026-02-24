@@ -55,8 +55,18 @@ function RootLayoutNav() {
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack>
+        {/* Müşteri tarafı */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="(admin)/login" options={{ headerShown: false }} />
+
+        {/* Giriş klasörü (yeni ekledik) */}
+        <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="auth/admin-login"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen name="auth/register" options={{ headerShown: false }} />
+
+        {/* Yönetici paneli */}
         <Stack.Screen
           name="(admin)/dashboard"
           options={{ headerShown: false }}

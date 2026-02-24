@@ -1,67 +1,53 @@
 import { supabase } from "./supabase";
 
-// YARDIMCI: Telefonu Email formatına çevirir
 const formatPhoneToEmail = (phone: string) => {
   const cleanPhone = phone.replace(/[^0-9]/g, "");
-  // DİKKAT: Buradaki işaretler klavyedeki "Alt Gr + ," ile yapılan ters tırnaktır.
   return `${cleanPhone}@meydan.app`;
 };
 
-// 1. KAYIT OLMA
+// KAYIT OLMA (Müşteriler için)
 export const registerUser = async (params: {
   adSoyad: string;
   telefon: string;
   password: string;
-  isKurumsal: boolean;
-  firmaUnvani?: string;
-  vergiNo?: string;
 }) => {
   const email = formatPhoneToEmail(params.telefon);
-
   const { data: authData, error: authError } = await supabase.auth.signUp({
-    email: email,
+    email,
     password: params.password,
   });
 
   if (authError) return { success: false, error: authError.message };
 
   if (authData.user) {
-    const { error: profileError } = await supabase.from("profiles").insert({
+    // Sütun isimlerini veritabanındaki (full_name, phone) isimlerle eşleştirdik
+    const { error } = await supabase.from("users").insert({
       id: authData.user.id,
-      ad_soyad: params.adSoyad,
-      telefon: params.telefon,
-      is_kurumsal: params.isKurumsal,
-      firma_unvani: params.isKurumsal ? params.firmaUnvani : null,
-      vergi_no: params.isKurumsal ? params.vergiNo : null,
-      bakiye: 0,
+      full_name: params.adSoyad,
+      phone: params.telefon,
+      role: "customer",
     });
-
-    if (profileError) return { success: false, error: profileError.message };
+    if (error) return { success: false, error: error.message };
   }
-
   return { success: true, data: authData };
 };
 
-// 2. GİRİŞ YAPMA
+// GİRİŞ YAPMA
 export const loginUser = async (telefon: string, password: string) => {
   const email = formatPhoneToEmail(telefon);
-
   const { data, error } = await supabase.auth.signInWithPassword({
-    email: email,
-    password: password,
+    email,
+    password,
   });
-
   if (error) return { success: false, error: error.message };
-
-  if (data.user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", data.user.id)
-      .single();
-
-    return { success: true, data: data, profile: profile };
-  }
-
+  return { success: true, data };
+};
+// lib/auth.ts dosyasına ekle:
+export const loginAdmin = async (email: string, code: string) => {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email, // Adminin gerçek maili
+    password: code, // Şifresi
+  });
+  if (error) return { success: false, error: error.message };
   return { success: true, data };
 };
