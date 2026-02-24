@@ -2,30 +2,31 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { supabase } from "../../lib/supabase";
 
 export default function RegisterScreen() {
   const router = useRouter();
 
-  // State tanımlamaları
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [personalPhone, setPersonalPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [isCompanyExpanded, setIsCompanyExpanded] = useState(false);
 
-  // Firma bilgileri state
   const [companyName, setCompanyName] = useState("");
-  const [companyPhone, setCompanyPhone] = useState("");
   const [vkn, setVkn] = useState("");
 
   const colors = {
@@ -37,20 +38,66 @@ export default function RegisterScreen() {
     muted: "#94a3b8",
   };
 
-  const handleRegister = () => {
-    if (!name || !personalPhone) {
+  const handleRegister = async () => {
+    if (!name || !personalPhone || !password) {
       return Alert.alert(
         "Hata",
-        "Lütfen Ad Soyad ve Kişisel İletişim Numarası alanlarını doldurun.",
+        "Lütfen Ad Soyad, Telefon ve Şifre alanlarını doldurun.",
       );
     }
 
-    if (isCompanyExpanded && (!companyName || !companyPhone || !vkn)) {
-      return Alert.alert("Hata", "Lütfen tüm firma bilgilerini doldurun.");
-    }
+    setLoading(true);
 
-    Alert.alert("Başarılı", "Kaydınız oluşturuldu!");
-    router.replace("/(tabs)");
+    try {
+      const formattedPhone = personalPhone.replace(/\D/g, "");
+      const fakeEmail = `${formattedPhone}@meydan.com`;
+
+      // 1. Supabase Auth Kaydı
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: fakeEmail,
+        password: password,
+      });
+
+      if (authError) throw authError;
+
+      // 🚨 OTURUM KONTROLÜ: Session yoksa RLS izin vermez
+      if (authData.user && authData.session) {
+        // 2. USERS TABLOSUNA UPSERT (İsimlerin dolması için)
+        const { error: dbError } = await supabase.from("users").upsert({
+          id: authData.user.id,
+          full_name: name,
+          phone: formattedPhone,
+          role: "customer",
+          is_company: isCompanyExpanded,
+        });
+
+        if (dbError) throw dbError;
+
+        // 3. COMPANIES TABLOSUNA KAYIT
+        if (isCompanyExpanded) {
+          const { error: companyError } = await supabase
+            .from("companies")
+            .upsert({
+              user_id: authData.user.id, // Şema bağlantısı
+              company_name: companyName,
+              tax_number: vkn, // Şemadaki tax_number sütunu ile eşleştirildi
+            });
+
+          if (companyError) throw companyError;
+        }
+
+        Alert.alert("Başarılı", "Kaydınız başarıyla tamamlandı!");
+        router.replace("/(tabs)");
+      } else {
+        throw new Error(
+          "Kayıt oluşturuldu ancak oturum açılamadı. Lütfen giriş yapmayı deneyin.",
+        );
+      }
+    } catch (error: any) {
+      Alert.alert("Kayıt Hatası", error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -62,7 +109,6 @@ export default function RegisterScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Header Bölümü */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <TouchableOpacity
@@ -84,8 +130,6 @@ export default function RegisterScreen() {
                 </Text>
               </View>
             </View>
-
-            {/* Dark Mode Toggle */}
             <TouchableOpacity
               onPress={() => setIsDarkMode(!isDarkMode)}
               style={[
@@ -104,7 +148,6 @@ export default function RegisterScreen() {
 
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-          {/* Form Alanı */}
           <View style={styles.form}>
             <Text style={styles.label}>AD SOYAD</Text>
             <View
@@ -116,14 +159,14 @@ export default function RegisterScreen() {
               <MaterialIcons name="person" size={20} color={colors.muted} />
               <TextInput
                 style={[styles.input, { color: colors.text }]}
-                placeholder="Örn: Ahmet Yılmaz"
+                placeholder="Ahmet Yılmaz"
                 placeholderTextColor={colors.muted}
                 value={name}
                 onChangeText={setName}
               />
             </View>
 
-            <Text style={styles.label}>KİŞİSEL İLETİŞİM NUMARASI</Text>
+            <Text style={styles.label}>TELEFON</Text>
             <View
               style={[
                 styles.inputWrapper,
@@ -133,7 +176,7 @@ export default function RegisterScreen() {
               <MaterialIcons name="call" size={20} color={colors.muted} />
               <TextInput
                 style={[styles.input, { color: colors.text }]}
-                placeholder="(5XX) XXX XX XX"
+                placeholder="5XX XXX XX XX"
                 placeholderTextColor={colors.muted}
                 keyboardType="phone-pad"
                 value={personalPhone}
@@ -141,7 +184,24 @@ export default function RegisterScreen() {
               />
             </View>
 
-            {/* Firma Bilgileri Accordion */}
+            <Text style={styles.label}>ŞİFRE</Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <MaterialIcons name="lock" size={20} color={colors.muted} />
+              <TextInput
+                style={[styles.input, { color: colors.text }]}
+                placeholder="••••••••"
+                placeholderTextColor={colors.muted}
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
+            </View>
+
             <TouchableOpacity
               onPress={() => setIsCompanyExpanded(!isCompanyExpanded)}
               style={styles.accordionHeader}
@@ -152,116 +212,51 @@ export default function RegisterScreen() {
                 color={colors.primary}
               />
               <Text style={[styles.accordionTitle, { color: colors.primary }]}>
-                FİRMA BİLGİLERİNİ EKLE
+                FİRMA BİLGİLERİ
               </Text>
             </TouchableOpacity>
 
             {isCompanyExpanded && (
               <View style={styles.companyForm}>
-                <Text style={styles.label}>FİRMA ADI / KODU</Text>
-                <View
+                <TextInput
                   style={[
-                    styles.inputWrapper,
+                    styles.input,
                     {
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
+                      color: colors.text,
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.border,
+                      paddingBottom: 10,
                     },
                   ]}
-                >
-                  <MaterialIcons name="domain" size={20} color={colors.muted} />
-                  <TextInput
-                    style={[styles.input, { color: colors.text }]}
-                    placeholder="Örn: ABC Lojistik"
-                    placeholderTextColor={colors.muted}
-                    value={companyName}
-                    onChangeText={setCompanyName}
-                  />
-                </View>
-
-                <Text style={styles.label}>FİRMA İLETİŞİM NUMARASI</Text>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    {
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <MaterialIcons name="call" size={20} color={colors.muted} />
-                  <TextInput
-                    style={[styles.input, { color: colors.text }]}
-                    placeholder="(5XX) XXX XX XX"
-                    placeholderTextColor={colors.muted}
-                    keyboardType="phone-pad"
-                    value={companyPhone}
-                    onChangeText={setCompanyPhone}
-                  />
-                </View>
-
-                <Text style={styles.label}>VERGİ KİMLİK NO</Text>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    {
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <MaterialIcons name="work" size={20} color={colors.muted} />
-                  <TextInput
-                    style={[styles.input, { color: colors.text }]}
-                    placeholder="10 haneli VKN"
-                    placeholderTextColor={colors.muted}
-                    value={vkn}
-                    onChangeText={setVkn}
-                  />
-                </View>
+                  placeholder="Firma Adı"
+                  placeholderTextColor={colors.muted}
+                  value={companyName}
+                  onChangeText={setCompanyName}
+                />
+                <TextInput
+                  style={[styles.input, { color: colors.text, paddingTop: 10 }]}
+                  placeholder="VKN"
+                  placeholderTextColor={colors.muted}
+                  value={vkn}
+                  onChangeText={setVkn}
+                />
               </View>
             )}
 
-            {/* Submit Butonu */}
             <TouchableOpacity
-              style={[styles.submitBtn, { backgroundColor: colors.primary }]}
-              onPress={handleRegister}
-            >
-              <Text style={styles.submitText}>Kayıt Ol</Text>
-              <MaterialIcons name="arrow-forward" size={20} color="#0d1510" />
-            </TouchableOpacity>
-
-            <Text style={styles.legalText}>
-              Kayıt olarak kurumsal yemek hizmeti kullanım şartlarını kabul
-              etmiş olursunuz.
-            </Text>
-
-            <View style={styles.footerNav}>
-              <Text style={{ color: colors.muted }}>
-                Zaten bir hesabınız var mı?{" "}
-              </Text>
-              <TouchableOpacity onPress={() => router.back()}>
-                <Text style={{ color: colors.primary, fontWeight: "bold" }}>
-                  Giriş Yapın
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Logo Footer */}
-          <View style={styles.logoFooter}>
-            <MaterialIcons
-              name="restaurant"
-              size={24}
-              color={isDarkMode ? "#fff" : "#0d1510"}
-            />
-            <Text
               style={[
-                styles.footerBrand,
-                { color: isDarkMode ? "#fff" : "#0d1510" },
+                styles.submitBtn,
+                { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 },
               ]}
+              onPress={handleRegister}
+              disabled={loading}
             >
-              MEYDAN
-            </Text>
+              {loading ? (
+                <ActivityIndicator color="#0d1510" />
+              ) : (
+                <Text style={styles.submitText}>Kayıt Ol</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -275,7 +270,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
     marginBottom: 20,
   },
   headerLeft: { flexDirection: "row", gap: 15 },
@@ -286,17 +280,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  brand: { fontSize: 10, fontWeight: "900", letterSpacing: 2, marginBottom: 5 },
-  title: { fontSize: 36, fontWeight: "900", letterSpacing: -1 },
-  divider: { height: 1, width: "100%", marginBottom: 30 },
+  brand: { fontSize: 10, fontWeight: "900", letterSpacing: 2 },
+  title: { fontSize: 36, fontWeight: "900" },
+  divider: { height: 1, marginBottom: 30 },
   form: { gap: 15 },
-  label: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: "#94a3b8",
-    letterSpacing: 1.5,
-    marginLeft: 5,
-  },
+  label: { fontSize: 10, fontWeight: "900", color: "#94a3b8", marginLeft: 5 },
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
@@ -318,43 +306,16 @@ const styles = StyleSheet.create({
     borderLeftWidth: 2,
     borderLeftColor: "#74CF62",
     paddingLeft: 15,
-    marginVertical: 10,
   },
   submitBtn: {
-    flexDirection: "row",
     height: 60,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
     marginTop: 10,
   },
   submitText: { fontSize: 18, fontWeight: "900", color: "#0d1510" },
-  legalText: {
-    fontSize: 10,
-    color: "#94a3b8",
-    textAlign: "center",
-    lineHeight: 16,
-    paddingHorizontal: 20,
-  },
-  footerNav: { flexDirection: "row", justifyContent: "center", marginTop: 10 },
-  logoFooter: {
-    marginTop: "auto",
-    paddingVertical: 30,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 10,
-    opacity: 0.3,
-  },
-  footerBrand: { fontSize: 18, fontWeight: "900", letterSpacing: 2 },
-  toggleBg: {
-    width: 48,
-    height: 24,
-    borderRadius: 12,
-    padding: 2,
-    justifyContent: "center",
-  },
+  toggleBg: { width: 48, height: 24, borderRadius: 12, padding: 2 },
   toggleCircle: {
     width: 20,
     height: 20,
