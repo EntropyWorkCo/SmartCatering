@@ -52,49 +52,49 @@ export default function RegisterScreen() {
       const formattedPhone = personalPhone.replace(/\D/g, "");
       const fakeEmail = `${formattedPhone}@meydan.com`;
 
-      // 1. Supabase Auth Kaydı
+      // 1. ADIM: Auth Kaydı ve Metadata Gönderimi
+      // 'options.data' içindeki bilgiler SQL'deki 'raw_user_meta_data' kısmına gider.
+      // SQL'deki Trigger bu bilgileri yakalayıp public.users tablosunu anında doldurur.
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: fakeEmail,
         password: password,
+        options: {
+          data: {
+            full_name: name,
+            phone: formattedPhone,
+            is_company: isCompanyExpanded,
+          },
+        },
       });
 
       if (authError) throw authError;
 
-      // 🚨 OTURUM KONTROLÜ: Session yoksa RLS izin vermez
-      if (authData.user && authData.session) {
-        // 2. USERS TABLOSUNA UPSERT (İsimlerin dolması için)
-        const { error: dbError } = await supabase.from("users").upsert({
-          id: authData.user.id,
-          full_name: name,
-          phone: formattedPhone,
-          role: "customer",
-          is_company: isCompanyExpanded,
-        });
-
-        if (dbError) throw dbError;
-
-        // 3. COMPANIES TABLOSUNA KAYIT
+      if (authData.user) {
+        // 2. ADIM: Şirket Bilgileri (Eğer seçilmişse)
+        // Public.users satırı trigger sayesinde çoktan oluştu.
+        // Şimdi aynı UUID üzerinden şirket bilgilerini ekliyoruz.
         if (isCompanyExpanded) {
           const { error: companyError } = await supabase
             .from("companies")
             .upsert({
-              user_id: authData.user.id, // Şema bağlantısı
+              user_id: authData.user.id, // Auth UUID ile tam eşleşme sağlanır
               company_name: companyName,
-              tax_number: vkn, // Şemadaki tax_number sütunu ile eşleştirildi
+              tax_number: vkn,
             });
 
           if (companyError) throw companyError;
         }
 
-        Alert.alert("Başarılı", "Kaydınız başarıyla tamamlandı!");
-        router.replace("/(tabs)");
-      } else {
-        throw new Error(
-          "Kayıt oluşturuldu ancak oturum açılamadı. Lütfen giriş yapmayı deneyin.",
+        Alert.alert(
+          "Başarılı",
+          "Kaydınız başarıyla tamamlandı ve profiller eşleşti!",
         );
+        router.replace("/(tabs)");
       }
     } catch (error: any) {
-      Alert.alert("Kayıt Hatası", error.message);
+      // Eğer 'permission denied' gelirse RLS/Grant ayarlarını kontrol etmelisin.
+      Alert.alert("Kayıt Hatası", "Bir sorun oluştu. Detay: " + error.message);
+      console.error("Hata Detayı:", error.message);
     } finally {
       setLoading(false);
     }
