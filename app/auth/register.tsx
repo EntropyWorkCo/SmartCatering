@@ -53,8 +53,6 @@ export default function RegisterScreen() {
       const fakeEmail = `${formattedPhone}@meydan.com`;
 
       // 1. ADIM: Auth Kaydı ve Metadata Gönderimi
-      // 'options.data' içindeki bilgiler SQL'deki 'raw_user_meta_data' kısmına gider.
-      // SQL'deki Trigger bu bilgileri yakalayıp public.users tablosunu anında doldurur.
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: fakeEmail,
         password: password,
@@ -71,13 +69,11 @@ export default function RegisterScreen() {
 
       if (authData.user) {
         // 2. ADIM: Şirket Bilgileri (Eğer seçilmişse)
-        // Public.users satırı trigger sayesinde çoktan oluştu.
-        // Şimdi aynı UUID üzerinden şirket bilgilerini ekliyoruz.
         if (isCompanyExpanded) {
           const { error: companyError } = await supabase
             .from("companies")
             .upsert({
-              user_id: authData.user.id, // Auth UUID ile tam eşleşme sağlanır
+              user_id: authData.user.id,
               company_name: companyName,
               tax_number: vkn,
             });
@@ -85,15 +81,22 @@ export default function RegisterScreen() {
           if (companyError) throw companyError;
         }
 
-        Alert.alert(
-          "Başarılı",
-          "Kaydınız başarıyla tamamlandı ve profiller eşleşti!",
-        );
-        router.replace("/(tabs)");
+        // EKLEME: Kayıt sonrası doğrudan giriş yapabilmek için session kontrolü
+        // Eğer Supabase panelinde "Confirm Email" kapalıysa authData.session dolu gelir.
+        if (authData.session) {
+          Alert.alert("Başarılı", "Kaydınız tamamlandı ve giriş yapıldı!");
+          router.replace("/(tabs)/home");
+        } else {
+          // Eğer session yoksa e-posta onayı bekliyor demektir (Bu durumda login'e yönlendirilir)
+          Alert.alert(
+            "Kayıt Başarılı",
+            "Lütfen giriş ekranından telefon numaranızla giriş yapın.",
+          );
+          router.replace("/auth/login");
+        }
       }
     } catch (error: any) {
-      // Eğer 'permission denied' gelirse RLS/Grant ayarlarını kontrol etmelisin.
-      Alert.alert("Kayıt Hatası", "Bir sorun oluştu. Detay: " + error.message);
+      Alert.alert("Kayıt Hatası", "Bir sorun oluştu: " + error.message);
       console.error("Hata Detayı:", error.message);
     } finally {
       setLoading(false);
@@ -145,9 +148,7 @@ export default function RegisterScreen() {
               />
             </TouchableOpacity>
           </View>
-
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
           <View style={styles.form}>
             <Text style={styles.label}>AD SOYAD</Text>
             <View
@@ -165,7 +166,6 @@ export default function RegisterScreen() {
                 onChangeText={setName}
               />
             </View>
-
             <Text style={styles.label}>TELEFON</Text>
             <View
               style={[
@@ -183,7 +183,6 @@ export default function RegisterScreen() {
                 onChangeText={setPersonalPhone}
               />
             </View>
-
             <Text style={styles.label}>ŞİFRE</Text>
             <View
               style={[
@@ -201,7 +200,6 @@ export default function RegisterScreen() {
                 onChangeText={setPassword}
               />
             </View>
-
             <TouchableOpacity
               onPress={() => setIsCompanyExpanded(!isCompanyExpanded)}
               style={styles.accordionHeader}
@@ -215,7 +213,6 @@ export default function RegisterScreen() {
                 FİRMA BİLGİLERİ
               </Text>
             </TouchableOpacity>
-
             {isCompanyExpanded && (
               <View style={styles.companyForm}>
                 <TextInput
@@ -242,7 +239,6 @@ export default function RegisterScreen() {
                 />
               </View>
             )}
-
             <TouchableOpacity
               style={[
                 styles.submitBtn,

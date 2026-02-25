@@ -2,33 +2,95 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { supabase } from "../../lib/supabase";
 
-// BURASI ÇOK ÖNEMLİ: "export default" olmazsa Expo sayfayı tanımaz!
 export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [companyCode, setCompanyCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    // Boş alan kontrolü
+    if (!phone || !password) {
+      Alert.alert(
+        "Eksik Bilgi",
+        "Lütfen telefon numaranızı ve şifrenizi girin.",
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Telefon numarasını kayıt formatına (email@meydan.com) çeviriyoruz
+      const formattedPhone = phone.replace(/\D/g, "");
+      const loginEmail = `${formattedPhone}@meydan.com`;
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: password,
+      });
+
+      if (error) throw error;
+
+      if (data.session) {
+        // Başarılı giriş durumunda (tabs) ana sayfasına yönlendir
+        router.replace("/(tabs)");
+      }
+    } catch (error: any) {
+      // SENİN İSTEDİĞİN ÖZELLİK: Hata durumunda kayıt ol seçeneği sunan profesyonel Alert
+      Alert.alert(
+        "Giriş Başarısız",
+        "Bu bilgilerle kayıtlı bir hesap bulunamadı veya bilgiler hatalı. Kayıt olmak ister misiniz?",
+        [
+          {
+            text: "Vazgeç",
+            style: "cancel",
+          },
+          {
+            text: "Kayıt Ol",
+            onPress: () => router.push("/auth/register"),
+          },
+        ],
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
+    <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Geri Butonu */}
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
+            <MaterialIcons name="arrow-back" size={24} color="#64748b" />
+          </TouchableOpacity>
+
           <View style={styles.header}>
             <Text style={styles.brand}>MEYDAN LOKANTA</Text>
             <Text style={styles.title}>Giriş Yap</Text>
@@ -41,21 +103,10 @@ export default function LoginScreen() {
 
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>AD SOYAD</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ahmet Yılmaz"
-                placeholderTextColor="#cbd5e1"
-                value={name}
-                onChangeText={setName}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
               <Text style={styles.label}>İLETİŞİM NUMARASI</Text>
               <TextInput
                 style={styles.input}
-                placeholder="(5XX) XXX XX XX"
+                placeholder="5XX XXX XX XX"
                 keyboardType="phone-pad"
                 placeholderTextColor="#cbd5e1"
                 value={phone}
@@ -63,41 +114,48 @@ export default function LoginScreen() {
               />
             </View>
 
-            <View style={styles.divider}>
-              <MaterialIcons name="business" size={20} color="#74CF62" />
-              <Text style={styles.dividerText}>Firma ile Giriş Yap</Text>
-            </View>
-
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>FİRMA ADI / KODU</Text>
+              <Text style={styles.label}>ŞİFRE</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Firma adını veya kodunu girin"
+                placeholder="••••••••"
+                secureTextEntry
                 placeholderTextColor="#cbd5e1"
-                value={companyCode}
-                onChangeText={setCompanyCode}
+                value={password}
+                onChangeText={setPassword}
               />
             </View>
 
             <TouchableOpacity
-              style={styles.loginButton}
-              onPress={() => router.replace("/(tabs)")}
+              style={[styles.loginButton, loading && { opacity: 0.7 }]}
+              onPress={handleLogin}
+              disabled={loading}
             >
-              <Text style={styles.loginButtonText}>Giriş Yap</Text>
-              <MaterialIcons name="login" size={20} color="#064e3b" />
+              {loading ? (
+                <ActivityIndicator color="#064e3b" />
+              ) : (
+                <View style={styles.buttonContent}>
+                  <Text style={styles.loginButtonText}>Giriş Yap</Text>
+                  <MaterialIcons name="login" size={20} color="#064e3b" />
+                </View>
+              )}
             </TouchableOpacity>
 
-            <View style={styles.registerLink}>
-              <Text style={styles.linkText}>Henüz hesabınız yok mu? </Text>
-              <TouchableOpacity onPress={() => router.push("/auth/register")}>
+            {/* Ekrandaki Kayıt Ol Linki */}
+            <TouchableOpacity
+              onPress={() => router.push("/auth/register")}
+              style={styles.registerLinkContainer}
+            >
+              <Text style={styles.linkText}>
+                Henüz hesabınız yok mu?{" "}
                 <Text style={styles.linkHighlight}>Kayıt Olun</Text>
-              </TouchableOpacity>
-            </View>
+              </Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.footer}>
             <MaterialIcons name="restaurant" size={16} color="#cbd5e1" />
-            <Text style={styles.footerText}>MEYDAN</Text>
+            <Text style={styles.footerText}>MEYDAN LOKANTA v3.0</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -106,8 +164,19 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  scrollContent: { padding: 30, flexGrow: 1 },
-  header: { marginBottom: 40, marginTop: 20 },
+  container: { flex: 1, backgroundColor: "#fff" },
+  scrollContent: { paddingHorizontal: 30, paddingBottom: 40, flexGrow: 1 },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+    marginTop: 10,
+  },
+  header: { marginBottom: 40 },
   brand: {
     fontSize: 10,
     fontWeight: "900",
@@ -125,14 +194,15 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   badgeText: { fontSize: 10, fontWeight: "bold", color: "#64748b" },
-  form: { gap: 20 },
-  inputGroup: { gap: 8 },
+  form: { gap: 10 },
+  inputGroup: { marginBottom: 15 },
   label: {
     fontSize: 10,
     fontWeight: "900",
     color: "#94a3b8",
     letterSpacing: 1,
     marginLeft: 4,
+    marginBottom: 5,
   },
   input: {
     height: 56,
@@ -144,31 +214,23 @@ const styles = StyleSheet.create({
     color: "#0f172a",
     backgroundColor: "#fcfcfc",
   },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 10,
-  },
-  dividerText: { fontSize: 14, fontWeight: "bold", color: "#74CF62" },
   loginButton: {
     height: 60,
     backgroundColor: "#74CF62",
     borderRadius: 20,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
     marginTop: 10,
   },
+  buttonContent: { flexDirection: "row", alignItems: "center", gap: 8 },
   loginButtonText: { fontSize: 16, fontWeight: "900", color: "#064e3b" },
-  registerLink: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 10,
+  registerLinkContainer: {
+    marginTop: 25,
+    alignItems: "center",
+    paddingVertical: 10,
   },
-  linkText: { fontSize: 12, color: "#94a3b8" },
-  linkHighlight: { fontSize: 12, fontWeight: "bold", color: "#74CF62" },
+  linkText: { fontSize: 15, color: "#94a3b8" },
+  linkHighlight: { fontWeight: "bold", color: "#74CF62" },
   footer: {
     flexDirection: "row",
     alignItems: "center",

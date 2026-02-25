@@ -3,9 +3,18 @@ import { Tabs } from "expo-router";
 
 export default function TabLayout() {
   return (
-    <Tabs>
+    <Tabs screenOptions={{ tabBarActiveTintColor: "#74CF62" }}>
+      {/* Index (Yönlendirici) - Tab Bar'da görünmesin diye href: null yapıyoruz */}
       <Tabs.Screen
         name="index"
+        options={{
+          href: null,
+        }}
+      />
+
+      {/* Ana Sayfa (Home) */}
+      <Tabs.Screen
+        name="home"
         options={{
           title: "Ana Sayfa",
           tabBarIcon: ({ color }) => (
@@ -14,6 +23,7 @@ export default function TabLayout() {
         }}
       />
 
+      {/* Menü */}
       <Tabs.Screen
         name="menu"
         options={{

@@ -1,3 +1,4 @@
+import { useColorScheme } from "@/components/useColorScheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
   DarkTheme,
@@ -10,19 +11,13 @@ import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import "react-native-reanimated";
 
-import { useColorScheme } from "@/components/useColorScheme";
+export { ErrorBoundary } from "expo-router";
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary
-} from "expo-router";
-
+// initialRouteName kaldırıldı veya "welcome" yapıldı
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: "(tabs)",
+  initialRouteName: "welcome",
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -31,7 +26,6 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
     if (error) throw error;
   }, [error]);
@@ -42,9 +36,7 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
-  if (!loaded) {
-    return null;
-  }
+  if (!loaded) return null;
 
   return <RootLayoutNav />;
 }
@@ -54,24 +46,20 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack>
-        {/* Müşteri tarafı */}
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack screenOptions={{ headerShown: false }}>
+        {/* 1. SIRALAMA: Welcome en üstte olmalı ki Tab Bar dışında kalsın */}
+        <Stack.Screen name="welcome" />
 
-        {/* Giriş klasörü (yeni ekledik) */}
-        <Stack.Screen name="auth/login" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="auth/admin-login"
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen name="auth/register" options={{ headerShown: false }} />
+        {/* 2. SIRALAMA: Auth klasörü */}
+        <Stack.Screen name="auth/login" />
+        <Stack.Screen name="auth/admin-login" />
+        <Stack.Screen name="auth/register" />
+
+        {/* 3. SIRALAMA: Tab yapısı (Giriş sonrası) */}
+        <Stack.Screen name="(tabs)" />
 
         {/* Yönetici paneli */}
-        <Stack.Screen
-          name="(admin)/dashboard"
-          options={{ headerShown: false }}
-        />
-
+        <Stack.Screen name="(admin)/dashboard" />
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       </Stack>
     </ThemeProvider>
