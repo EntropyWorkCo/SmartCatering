@@ -6,6 +6,7 @@ export const useCompany = (userId?: string) => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // userId yoksa hiçbir şey yapma
     if (!userId) return;
 
     const fetchCompany = async () => {
@@ -24,16 +25,32 @@ export const useCompany = (userId?: string) => {
   }, [userId]);
 
   const updateCompany = async (companyData: any) => {
+    // 1. KRİTİK KONTROL: userId yoksa veya boşsa kaydı asla başlatma
+    if (!userId) {
+      return { success: false, error: "Kullanıcı oturumu bulunamadı!" };
+    }
+
+    // 2. BOŞ VERİ KONTROLÜ: İsim veya Adres girilmemişse durdur
+    const name = companyData?.name?.toString().trim();
+    const address = companyData?.address?.toString().trim();
+
+    if (!name || !address) {
+      return { success: false, error: "Firma adı ve adres boş bırakılamaz!" };
+    }
+
     setLoading(true);
     try {
+      // TypeScript hatasını önlemek için userId'nin varlığını garanti ettik
       const data = await companyService.saveCompany({
         ...companyData,
-        user_id: userId,
+        name,
+        address,
+        user_id: userId, // Artık burada hata vermeyecek
       });
       setCompany(data);
       return { success: true, data };
     } catch (error: any) {
-      console.error(error);
+      console.error("Şirket kaydedilirken hata:", error);
       return { success: false, error: error.message };
     } finally {
       setLoading(false);

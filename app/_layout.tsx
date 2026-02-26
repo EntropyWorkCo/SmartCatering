@@ -14,9 +14,7 @@ import "react-native-reanimated";
 export { ErrorBoundary } from "expo-router";
 
 // initialRouteName kaldırıldı veya "welcome" yapıldı
-export const unstable_settings = {
-  initialRouteName: "welcome",
-};
+// unstable_settings iOS'ta kaydırma (swipe) ile welcome'a dönme sorununa yol açabileceği için kaldırıldı.
 
 SplashScreen.preventAutoHideAsync();
 
