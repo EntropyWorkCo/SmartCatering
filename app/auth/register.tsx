@@ -46,6 +46,13 @@ export default function RegisterScreen() {
       );
     }
 
+    if (isCompanyExpanded && (!companyName.trim() || !vkn.trim())) {
+      return Alert.alert(
+        "Eksik Bilgi",
+        "Lütfen Firma Adı ve VKN alanlarını doldurun veya Firma Bilgileri bölümünü kapatın.",
+      );
+    }
+
     setLoading(true);
 
     try {
