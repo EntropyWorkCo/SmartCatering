@@ -40,4 +40,16 @@ export const adisyonService = {
     if (error) throw error;
     return data;
   },
+
+  async updateOrderStatus(orderId: string, status: string) {
+    const { data, error } = await supabase
+      .from("adisyon")
+      .update({ status })
+      .eq("id", orderId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
 };

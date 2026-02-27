@@ -57,5 +57,17 @@ export const useAdisyon = (userId?: string) => {
     loading,
     fetchOrders,
     createOrder: adisyonService.createOrder,
+    updateOrderStatus: async (orderId: string, status: string) => {
+      setLoading(true);
+      try {
+        await adisyonService.updateOrderStatus(orderId, status);
+        await fetchOrders(); // refresh
+      } catch (error) {
+        console.error(error);
+        throw error;
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 };
