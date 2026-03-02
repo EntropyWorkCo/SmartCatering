@@ -6,7 +6,7 @@ export const menuService = {
     const { data, error } = await supabase
       .from("menu_items")
       .select("*")
-      .eq("is_active", true)
+      .in("status", ["active", "sold_out"])
       .order("created_at", { ascending: false });
     if (error) throw error;
     return data;
@@ -46,7 +46,7 @@ export const menuService = {
     const { data, error } = await supabase
       .from("menu_items")
       .insert([
-        { name, category, price, image_url: finalImageUrl || null, is_active: true }
+        { name, category, price, image_url: finalImageUrl || null, is_active: false, status: 'draft' }
       ])
       .select();
     if (error) throw error;
@@ -56,8 +56,52 @@ export const menuService = {
   async deleteMenuItem(id: string) {
     const { error } = await supabase
       .from("menu_items")
-      .update({ is_active: false }) // Soft delete
+      .delete()
       .eq("id", id);
     if (error) throw error;
+  },
+
+  async toggleItemStatus(id: string, newStatus: 'passive' | 'active' | 'sold_out' | 'draft') {
+    const { error } = await supabase
+      .from("menu_items")
+      .update({ status: newStatus, is_active: newStatus === 'active' })
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  async publishDraftMenu() {
+    const { error } = await supabase
+      .from("menu_items")
+      .update({ status: 'active', is_active: true })
+      .eq("status", "draft");
+    if (error) throw error;
+  },
+
+  async updateMenuItem(id: string, data: { name: string; price: number; category: string }) {
+    const { error } = await supabase
+      .from("menu_items")
+      .update({ name: data.name, price: data.price, category: data.category })
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  async getSystemPrices() {
+    const { data, error } = await supabase
+      .from("menu_items")
+      .select("*")
+      .eq("status", "sistem_fiyati")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return data;
+  },
+
+  async getAllMenu() {
+    const { data, error } = await supabase
+      .from("menu_items")
+      .select("*")
+      .neq("status", "sistem_fiyati")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data;
   }
 };

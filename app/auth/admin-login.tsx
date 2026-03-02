@@ -17,11 +17,19 @@ import {
 import { userService } from "../../lib/services/userService";
 import { supabase } from "../../lib/supabase";
 
+import ThemeSwitcher from "@/components/ThemeSwitcher";
+import Colors from "@/constants/Colors";
+import { useResolvedTheme } from "@/lib/store/themeStore";
+
 export default function AdminLoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const theme = useResolvedTheme();
+  const colors = Colors[theme];
+  const styles = getStyles(colors);
 
   const handleLogin = async () => {
     // 1. BOŞ ALAN KONTROLÜ
@@ -81,13 +89,17 @@ export default function AdminLoginScreen() {
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Geri Butonu */}
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <MaterialIcons name="arrow-back" size={24} color="#64748b" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          {/* Geri Butonu */}
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
+            <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+
+          <ThemeSwitcher />
+        </View>
 
         <View style={styles.content}>
           {/* Logo */}
@@ -107,7 +119,7 @@ export default function AdminLoginScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Yönetici E-posta"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor={colors.muted}
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
@@ -119,7 +131,7 @@ export default function AdminLoginScreen() {
               <TextInput
                 style={[styles.input, { letterSpacing: 2 }]}
                 placeholder="Erişim Kodu"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor={colors.muted}
                 secureTextEntry
                 value={code}
                 onChangeText={setCode}
@@ -150,29 +162,29 @@ export default function AdminLoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  scrollContent: { flexGrow: 1, padding: 24 },
+const getStyles = (colors: any) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  scrollContent: { flexGrow: 1, padding: 24, paddingTop: Platform.OS === 'ios' ? 60 : 40 },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 20,
-    marginTop: Platform.OS === "ios" ? 20 : 0,
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
   },
   content: { flex: 1, alignItems: "center", justifyContent: "center" },
   logoContainer: {
     width: 80,
     height: 80,
-    backgroundColor: "#74CF62",
+    backgroundColor: colors.primary,
     borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 24,
-    shadowColor: "#74CF62",
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.2,
     shadowRadius: 15,
@@ -185,28 +197,28 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   headerTextContainer: { alignItems: "center", marginBottom: 32 },
-  title: { fontSize: 32, fontWeight: "900", color: "#0f172a", marginBottom: 6 },
+  title: { fontSize: 32, fontWeight: "900", color: colors.text, marginBottom: 6 },
   subtitle: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#64748b",
+    color: colors.muted,
     letterSpacing: 3,
   },
   form: { width: "100%", maxWidth: 320, gap: 14 },
   inputWrapper: {
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.surface,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.surfaceBorder,
   },
-  input: { padding: 18, fontSize: 15, fontWeight: "600", color: "#0f172a" },
+  input: { padding: 18, fontSize: 15, fontWeight: "600", color: colors.text },
   loginButton: {
-    backgroundColor: "#74CF62",
+    backgroundColor: colors.primary,
     paddingVertical: 20,
     borderRadius: 18,
     alignItems: "center",
     marginTop: 10,
-    shadowColor: "#74CF62",
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -217,7 +229,7 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 9,
     fontWeight: "900",
-    color: "#94a3b8",
+    color: colors.muted,
     letterSpacing: 2,
   },
 });

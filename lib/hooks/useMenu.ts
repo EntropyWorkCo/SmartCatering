@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 import { menuService } from "../services/menuService";
 
-export const useMenu = () => {
+export const useMenu = (onlyActive: boolean = true) => {
   const [menu, setMenu] = useState<any[]>([]);
+  const [systemPrices, setSystemPrices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchMenu = async () => {
     try {
       setLoading(true);
-      const data = await menuService.getActiveMenu();
+      const data = onlyActive ? await menuService.getActiveMenu() : await menuService.getAllMenu();
+      const sysData = await menuService.getSystemPrices();
       setMenu(data || []);
+      setSystemPrices(sysData || []);
     } catch (error) {
       console.error(error);
     } finally {
@@ -19,7 +22,7 @@ export const useMenu = () => {
 
   useEffect(() => {
     fetchMenu();
-  }, []);
+  }, [onlyActive]);
 
-  return { menu, loading, refetch: fetchMenu };
+  return { menu, systemPrices, loading, refetch: fetchMenu };
 };

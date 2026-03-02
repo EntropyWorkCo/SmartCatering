@@ -1,3 +1,6 @@
+import ThemeSwitcher from "@/components/ThemeSwitcher";
+import Colors from "@/constants/Colors";
+import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -20,6 +23,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 export default function UnitPriceFormScreen() {
     const insets = useSafeAreaInsets();
     const [loading, setLoading] = useState(false);
+
+    const theme = useResolvedTheme();
+    const colors = Colors[theme];
+    const styles = getStyles(colors);
+
     const [prices, setPrices] = useState({
         CORBA: "135",
         ANAYEMEK: "180",
@@ -27,7 +35,6 @@ export default function UnitPriceFormScreen() {
         ICECEKLER: "40",
     });
 
-    // Load initial unit prices from AsyncStorage
     useFocusEffect(
         useCallback(() => {
             const loadPrices = async () => {
@@ -47,10 +54,6 @@ export default function UnitPriceFormScreen() {
     const handleSave = async () => {
         setLoading(true);
         try {
-            // Save to local storage for quick access
-            await AsyncStorage.setItem("unit_prices", JSON.stringify(prices));
-
-            // Sabit fiyatlar AsyncStorage'a kaydedilir
             await AsyncStorage.setItem("unit_prices", JSON.stringify(prices));
 
             Alert.alert(
@@ -61,7 +64,7 @@ export default function UnitPriceFormScreen() {
                         text: "Sadece Varsayılanları Güncelle",
                         onPress: () => {
                             Alert.alert("Başarılı", "Yeni kategori taban fiyatları güncellendi.");
-                            router.replace("/(admin)/menu");
+                            router.back();
                         }
                     },
                     {
@@ -79,14 +82,16 @@ export default function UnitPriceFormScreen() {
 
                                 for (const update of updates) {
                                     if (!isNaN(update.price) && update.price > 0) {
-                                        await supabase
+                                        const { error } = await supabase
                                             .from("menu_items")
                                             .update({ price: update.price })
-                                            .eq("category", update.category);
+                                            .eq("category", update.category)
+                                            .select();
+                                        if (error) throw error;
                                     }
                                 }
                                 Alert.alert("Başarılı", "Tüm eski ürünlerin fiyatları da güncellendi.");
-                                router.replace("/(admin)/menu");
+                                router.back();
                             } catch (e: any) {
                                 Alert.alert("Hata", e.message);
                             } finally {
@@ -106,22 +111,23 @@ export default function UnitPriceFormScreen() {
 
     return (
         <KeyboardAvoidingView
-            style={{ flex: 1, backgroundColor: "#f8fafc" }}
+            style={styles.keyboardContainer}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
             <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
-                <TouchableOpacity onPress={() => router.replace("/(admin)/menu")} style={styles.backButton}>
-                    <MaterialIcons name="arrow-back" size={24} color="#1e293b" />
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <View>
+                <View style={{ flex: 1 }}>
                     <Text style={styles.title}>Birim Fiyatlar</Text>
-                    <Text style={styles.subtitle}>KATEGORİ TABANLI FİYAT GÜNCELLEME</Text>
+                    <Text style={styles.subtitle}>KATEGORİ TABANLI FİYATGÜNCELLEME</Text>
                 </View>
+                <ThemeSwitcher />
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.infoBox}>
-                    <MaterialIcons name="info" size={24} color="#3b82f6" style={{ marginTop: 2 }} />
+                    <MaterialIcons name="info" size={24} color={colors.info} style={{ marginTop: 2 }} />
                     <View style={{ flex: 1, marginLeft: 12 }}>
                         <Text style={styles.infoText}>
                             Burada yaptığınız değişiklikler, <Text style={{ fontWeight: 'bold' }}>Sabit Listedeki</Text> o kategoriye ait tüm ürünlerin fiyatlarını otomatik olarak güncelleyecektir.
@@ -135,32 +141,40 @@ export default function UnitPriceFormScreen() {
                         icon="soup-kitchen"
                         value={prices.CORBA}
                         onChangeText={(text) => setPrices({ ...prices, CORBA: text })}
+                        colors={colors}
+                        styles={styles}
                     />
                     <InputField
                         label="ANA YEMEK"
                         icon="restaurant"
                         value={prices.ANAYEMEK}
                         onChangeText={(text) => setPrices({ ...prices, ANAYEMEK: text })}
+                        colors={colors}
+                        styles={styles}
                     />
                     <InputField
                         label="YARDIMCI"
                         icon="flatware"
                         value={prices.YARDIMCI}
                         onChangeText={(text) => setPrices({ ...prices, YARDIMCI: text })}
+                        colors={colors}
+                        styles={styles}
                     />
                     <InputField
                         label="İÇECEKLER (Ayran, Gazoz vs.)"
                         icon="local-drink"
                         value={prices.ICECEKLER}
                         onChangeText={(text) => setPrices({ ...prices, ICECEKLER: text })}
+                        colors={colors}
+                        styles={styles}
                     />
 
                     <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading}>
                         {loading ? (
-                            <ActivityIndicator color="#fff" />
+                            <ActivityIndicator color={colors.background} />
                         ) : (
                             <>
-                                <MaterialIcons name="save" size={20} color="#fff" />
+                                <MaterialIcons name="save" size={20} color={colors.background} />
                                 <Text style={styles.saveBtnText}>TÜMÜNÜ GÜNCELLE</Text>
                             </>
                         )}
@@ -171,10 +185,10 @@ export default function UnitPriceFormScreen() {
     );
 }
 
-const InputField = ({ label, icon, value, onChangeText }: { label: string, icon: any, value: string, onChangeText: (t: string) => void }) => (
+const InputField = ({ label, icon, value, onChangeText, colors, styles }: any) => (
     <View style={styles.inputWrapper}>
         <View style={styles.inputIconRow}>
-            <MaterialIcons name={icon} size={18} color="#64748b" />
+            <MaterialIcons name={icon} size={18} color={colors.muted} />
             <Text style={styles.inputLabel}>{label}</Text>
         </View>
         <View style={styles.inputContainer}>
@@ -185,39 +199,49 @@ const InputField = ({ label, icon, value, onChangeText }: { label: string, icon:
                 onChangeText={onChangeText}
                 keyboardType="numeric"
                 placeholder="0"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor={colors.muted}
                 maxLength={4}
             />
         </View>
     </View>
 );
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
+    keyboardContainer: {
+        flex: 1,
+        backgroundColor: colors.background,
+    },
     header: {
         flexDirection: "row",
         alignItems: "center",
         paddingHorizontal: 20,
         paddingBottom: 20,
-        backgroundColor: "#fff",
+        backgroundColor: colors.surface,
         borderBottomWidth: 1,
-        borderBottomColor: "#e2e8f0",
+        borderBottomColor: colors.surfaceBorder,
     },
     backButton: {
-        padding: 8,
-        marginRight: 12,
-        backgroundColor: "#f1f5f9",
-        borderRadius: 8,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: colors.surface,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+        marginRight: 16,
     },
     title: {
         fontSize: 22,
         fontWeight: "bold",
-        color: "#1e293b",
+        color: colors.text,
     },
     subtitle: {
-        fontSize: 12,
-        color: "#64748b",
+        fontSize: 10,
+        color: colors.muted,
         marginTop: 2,
-        fontWeight: "600",
+        fontWeight: "900",
+        letterSpacing: 1,
     },
     scrollContent: {
         padding: 20,
@@ -225,27 +249,25 @@ const styles = StyleSheet.create({
     },
     infoBox: {
         flexDirection: 'row',
-        backgroundColor: '#eff6ff',
+        backgroundColor: colors.infoBg,
         padding: 16,
         borderRadius: 12,
         marginBottom: 24,
         borderWidth: 1,
-        borderColor: '#bfdbfe'
+        borderColor: colors.info
     },
     infoText: {
-        color: '#1e40af',
+        color: colors.info,
         fontSize: 14,
         lineHeight: 20
     },
     formContainer: {
-        backgroundColor: "#fff",
+        backgroundColor: colors.surface,
         borderRadius: 16,
         padding: 24,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 12,
-        elevation: 2,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+        marginBottom: 32,
     },
     inputWrapper: {
         marginBottom: 20,
@@ -258,15 +280,15 @@ const styles = StyleSheet.create({
     },
     inputLabel: {
         fontSize: 14,
-        fontWeight: "600",
-        color: "#475569",
+        fontWeight: "900",
+        color: colors.muted,
     },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: "#f8fafc",
+        backgroundColor: colors.background,
         borderWidth: 1,
-        borderColor: "#e2e8f0",
+        borderColor: colors.surfaceBorder,
         borderRadius: 12,
         paddingHorizontal: 16,
         paddingVertical: 12,
@@ -274,17 +296,17 @@ const styles = StyleSheet.create({
     currencySymbol: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#1e293b',
+        color: colors.text,
         marginRight: 8,
     },
     input: {
         flex: 1,
         fontSize: 18,
-        fontWeight: '600',
-        color: "#1e293b",
+        fontWeight: 'bold',
+        color: colors.text,
     },
     saveBtn: {
-        backgroundColor: "#74CF62",
+        backgroundColor: colors.primary,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
@@ -294,8 +316,8 @@ const styles = StyleSheet.create({
         marginTop: 12,
     },
     saveBtnText: {
-        color: "#fff",
-        fontSize: 16,
+        color: colors.background,
+        fontSize: 14,
         fontWeight: "bold",
     },
 });

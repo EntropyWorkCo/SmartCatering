@@ -1,17 +1,23 @@
+import Colors from "@/constants/Colors";
+import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
 
 export default function AdminLayout() {
+    const theme = useResolvedTheme();
+    const colors = Colors[theme];
+
     return (
-        <Tabs screenOptions={{
-            tabBarActiveTintColor: "#74CF62",
+        <Tabs backBehavior="history" screenOptions={{
+            tabBarActiveTintColor: colors.primary,
+            tabBarInactiveTintColor: colors.tabIconDefault,
             headerShown: false,
             tabBarStyle: {
-                backgroundColor: '#fff',
+                backgroundColor: colors.surface,
                 borderTopWidth: 1,
-                borderTopColor: '#f1f5f9',
+                borderTopColor: colors.surfaceBorder,
                 paddingBottom: Platform.OS === "android" ? 10 : 5,
                 paddingTop: 5,
                 height: Platform.OS === "android" ? 70 : 60

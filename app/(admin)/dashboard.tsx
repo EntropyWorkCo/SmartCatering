@@ -1,5 +1,9 @@
+import ThemeSwitcher from "@/components/ThemeSwitcher";
+import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
+import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,6 +19,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 export default function AdminDashboard() {
   const { orders, loading, updateOrderStatus } = useAdisyon();
   const insets = useSafeAreaInsets();
+  const theme = useResolvedTheme();
+  const colors = Colors[theme];
+  const styles = getStyles(colors);
+
   const [mainTab, setMainTab] = useState<"BIREYSEL" | "KURUMSAL">("KURUMSAL");
 
   const groupedAccounts = useMemo(() => {
@@ -108,14 +116,24 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <View style={[styles.center, { backgroundColor: "#f8fafc" }]}>
-        <ActivityIndicator size="large" color="#74CF62" />
+      <View style={[styles.center, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Özet Dashboard</Text>
+        </View>
+        <ThemeSwitcher />
+      </View>
+
       <View style={styles.tabContainer}>
         <TouchableOpacity
           style={[
@@ -127,7 +145,7 @@ export default function AdminDashboard() {
           <MaterialIcons
             name="apartment"
             size={24}
-            color={mainTab === "KURUMSAL" ? "#0f172a" : "#94a3b8"}
+            color={mainTab === "KURUMSAL" ? (theme === 'dark' ? '#0f172a' : '#fff') : colors.muted}
           />
           <Text
             style={[
@@ -148,7 +166,7 @@ export default function AdminDashboard() {
           <MaterialIcons
             name="person"
             size={24}
-            color={mainTab === "BIREYSEL" ? "#0f172a" : "#94a3b8"}
+            color={mainTab === "BIREYSEL" ? (theme === 'dark' ? '#0f172a' : '#fff') : colors.muted}
           />
           <Text
             style={[
@@ -201,7 +219,7 @@ export default function AdminDashboard() {
                     Bakiye:{" "}
                     <Text
                       style={{
-                        color: account.total > 0 ? "#f59e0b" : "#94a3b8",
+                        color: account.total > 0 ? "#f59e0b" : colors.muted,
                       }}
                     >
                       ₺{account.total.toLocaleString("tr-TR")}
@@ -235,8 +253,8 @@ export default function AdminDashboard() {
 
         {groupedAccounts.length === 0 && (
           <View style={{ padding: 40, alignItems: 'center' }}>
-            <MaterialIcons name="inbox" size={48} color="#cbd5e1" />
-            <Text style={{ marginTop: 10, color: '#94a3b8', fontWeight: 'bold' }}>Kayıt bulunamadı</Text>
+            <MaterialIcons name="inbox" size={48} color={colors.surfaceBorder} />
+            <Text style={{ marginTop: 10, color: colors.muted, fontWeight: 'bold' }}>Kayıt bulunamadı</Text>
           </View>
         )}
       </ScrollView>
@@ -244,12 +262,31 @@ export default function AdminDashboard() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.background,
   },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    marginBottom: 16,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
+    marginRight: 16,
+  },
+  title: { fontSize: 24, fontWeight: "900", color: colors.text },
   tabContainer: {
     flexDirection: "row",
     paddingHorizontal: 24,
@@ -258,7 +295,7 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderWidth: 2,
     borderColor: "transparent",
     borderRadius: 24,
@@ -274,25 +311,25 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   activeTab: {
-    backgroundColor: "#74CF62",
-    borderColor: "#74CF62",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   tabText: {
     fontSize: 10,
     fontWeight: "900",
-    color: "#94a3b8",
+    color: colors.muted,
     textTransform: "uppercase",
     letterSpacing: 1,
   },
   activeTabText: {
-    color: "#0f172a",
+    color: colors.background === '#0f172a' ? '#0f172a' : '#fff', // ensures contrast on primary
   },
   scrollContent: {
     paddingHorizontal: 24,
     paddingBottom: 40,
   },
   totalCard: {
-    backgroundColor: "#0f172a",
+    backgroundColor: colors.surfaceBorder,
     borderRadius: 32,
     padding: 28,
     marginBottom: 24,
@@ -305,24 +342,24 @@ const styles = StyleSheet.create({
     top: 10,
   },
   totalLabel: {
-    color: "#74CF62",
+    color: colors.primary,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 2,
     marginBottom: 8,
   },
   totalAmount: {
-    color: "#fff",
+    color: colors.text,
     fontSize: 32,
     fontWeight: "900",
   },
   accountCard: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: colors.surfaceBorder,
   },
   accountTop: {
     flexDirection: "row",
@@ -349,14 +386,14 @@ const styles = StyleSheet.create({
   accountName: {
     fontSize: 16,
     fontWeight: "bold",
-    color: "#0f172a",
+    color: colors.text,
     marginBottom: 4,
   },
   accountBalance: {
     fontSize: 10,
     fontWeight: "900",
     textTransform: "uppercase",
-    color: "#94a3b8",
+    color: colors.muted,
   },
   accountActions: {
     flexDirection: 'row',
@@ -364,22 +401,22 @@ const styles = StyleSheet.create({
   },
   outlineBtn: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e2e8f0'
+    borderColor: colors.surfaceBorder
   },
   outlineBtnText: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#64748b',
+    color: colors.muted,
     letterSpacing: 1
   },
   primaryBtn: {
     flex: 1,
-    backgroundColor: '#10b981',
+    backgroundColor: colors.primary,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',

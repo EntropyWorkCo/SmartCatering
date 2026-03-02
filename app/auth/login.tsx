@@ -1,3 +1,6 @@
+import ThemeSwitcher from "@/components/ThemeSwitcher";
+import Colors from "@/constants/Colors";
+import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -23,6 +26,10 @@ export default function LoginScreen() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const theme = useResolvedTheme();
+  const colors = Colors[theme];
+  const styles = getStyles(colors);
 
   const handleLogin = async () => {
     // Boş alan kontrolü
@@ -83,13 +90,16 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Geri Butonu */}
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-          >
-            <MaterialIcons name="arrow-back" size={24} color="#64748b" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            {/* Geri Butonu */}
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.backButton}
+            >
+              <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <ThemeSwitcher />
+          </View>
 
           <View style={styles.header}>
             <Text style={styles.brand}>MEYDAN LOKANTA</Text>
@@ -108,7 +118,7 @@ export default function LoginScreen() {
                 style={styles.input}
                 placeholder="5XX XXX XX XX"
                 keyboardType="phone-pad"
-                placeholderTextColor="#cbd5e1"
+                placeholderTextColor={colors.muted}
                 value={phone}
                 onChangeText={setPhone}
               />
@@ -120,7 +130,7 @@ export default function LoginScreen() {
                 style={styles.input}
                 placeholder="••••••••"
                 secureTextEntry
-                placeholderTextColor="#cbd5e1"
+                placeholderTextColor={colors.muted}
                 value={password}
                 onChangeText={setPassword}
               />
@@ -132,11 +142,11 @@ export default function LoginScreen() {
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#064e3b" />
+                <ActivityIndicator color={colors.background} />
               ) : (
                 <View style={styles.buttonContent}>
                   <Text style={styles.loginButtonText}>Giriş Yap</Text>
-                  <MaterialIcons name="login" size={20} color="#064e3b" />
+                  <MaterialIcons name="login" size={20} color={colors.background} />
                 </View>
               )}
             </TouchableOpacity>
@@ -154,7 +164,7 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.footer}>
-            <MaterialIcons name="restaurant" size={16} color="#cbd5e1" />
+            <MaterialIcons name="restaurant" size={16} color={colors.muted} />
             <Text style={styles.footerText}>MEYDAN LOKANTA v3.0</Text>
           </View>
         </ScrollView>
@@ -163,43 +173,47 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+const getStyles = (colors: any) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
   scrollContent: { paddingHorizontal: 30, paddingBottom: 40, flexGrow: 1 },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
     marginTop: 10,
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
   },
   header: { marginBottom: 40 },
   brand: {
     fontSize: 10,
     fontWeight: "900",
-    color: "#74CF62",
+    color: colors.primary,
     letterSpacing: 2,
     marginBottom: 8,
   },
-  title: { fontSize: 36, fontWeight: "900", color: "#0f172a" },
+  title: { fontSize: 36, fontWeight: "900", color: colors.text },
   badge: {
-    backgroundColor: "#f1f5f9",
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
     alignSelf: "flex-start",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
     marginTop: 8,
   },
-  badgeText: { fontSize: 10, fontWeight: "bold", color: "#64748b" },
+  badgeText: { fontSize: 10, fontWeight: "bold", color: colors.text },
   form: { gap: 10 },
   inputGroup: { marginBottom: 15 },
   label: {
     fontSize: 10,
     fontWeight: "900",
-    color: "#94a3b8",
+    color: colors.muted,
     letterSpacing: 1,
     marginLeft: 4,
     marginBottom: 5,
@@ -207,30 +221,30 @@ const styles = StyleSheet.create({
   input: {
     height: 56,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.surfaceBorder,
     borderRadius: 16,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: "#0f172a",
-    backgroundColor: "#fcfcfc",
+    color: colors.text,
+    backgroundColor: colors.surface,
   },
   loginButton: {
     height: 60,
-    backgroundColor: "#74CF62",
+    backgroundColor: colors.primary,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 10,
   },
   buttonContent: { flexDirection: "row", alignItems: "center", gap: 8 },
-  loginButtonText: { fontSize: 16, fontWeight: "900", color: "#064e3b" },
+  loginButtonText: { fontSize: 16, fontWeight: "900", color: colors.background },
   registerLinkContainer: {
     marginTop: 25,
     alignItems: "center",
     paddingVertical: 10,
   },
-  linkText: { fontSize: 15, color: "#94a3b8" },
-  linkHighlight: { fontWeight: "bold", color: "#74CF62" },
+  linkText: { fontSize: 15, color: colors.muted },
+  linkHighlight: { fontWeight: "bold", color: colors.primary },
   footer: {
     flexDirection: "row",
     alignItems: "center",
@@ -243,7 +257,7 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
     fontWeight: "900",
-    color: "#cbd5e1",
+    color: colors.muted,
     letterSpacing: 2,
   },
 });

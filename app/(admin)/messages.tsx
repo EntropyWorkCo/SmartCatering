@@ -1,4 +1,7 @@
+import ThemeSwitcher from "@/components/ThemeSwitcher";
+import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
+import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React from "react";
@@ -15,9 +18,11 @@ export default function AdminMessages() {
     const { orders } = useAdisyon();
     const insets = useSafeAreaInsets();
 
-    // Şimdilik not içeren siparişleri bulalım veya mock yaratılım
-    // (Uygulamada orders modelinizde note veya notes alanı var mı diye bakılabilir)
-    // Mock veri üzerinden gidelim, çünkü mevcut orders.ts yapısında 'note' alanı garanti değil
+    const theme = useResolvedTheme();
+    const colors = Colors[theme];
+    const styles = getStyles(colors);
+
+    // Mock veri üzerinden gidelim
     const ordersWithNotes = [
         {
             id: "1",
@@ -41,20 +46,21 @@ export default function AdminMessages() {
         <View style={[styles.container, { paddingTop: insets.top }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <MaterialIcons name="arrow-back" size={24} color="#64748b" />
+                    <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <View style={styles.headerText}>
                     <Text style={styles.preTitle}>MEYDAN LOKANTA</Text>
                     <Text style={styles.title}>Gelen Mesajlar</Text>
                     <Text style={styles.subtitle}>Sipariş notları ve müşteri talepleri</Text>
                 </View>
+                <ThemeSwitcher />
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {ordersWithNotes.length === 0 ? (
                     <View style={styles.emptyState}>
                         <View style={styles.emptyIconCircle}>
-                            <MaterialIcons name="chat-bubble-outline" size={48} color="#cbd5e1" />
+                            <MaterialIcons name="chat-bubble-outline" size={48} color={colors.surfaceBorder} />
                         </View>
                         <Text style={styles.emptyText}>Henüz mesaj yok</Text>
                     </View>
@@ -64,7 +70,7 @@ export default function AdminMessages() {
                             <View style={styles.cardHeader}>
                                 <View style={styles.userInfo}>
                                     <View style={styles.avatar}>
-                                        <MaterialIcons name="person" size={20} color="#74CF62" />
+                                        <MaterialIcons name="person" size={20} color={colors.primary} />
                                     </View>
                                     <View>
                                         <Text style={styles.userName}>{order.userName || "Müşteri"}</Text>
@@ -84,7 +90,7 @@ export default function AdminMessages() {
                                 </View>
                                 <TouchableOpacity style={styles.markReadBtn}>
                                     <Text style={styles.markReadText}>OKUNDU İŞARETLE</Text>
-                                    <MaterialIcons name="done-all" size={16} color="#74CF62" />
+                                    <MaterialIcons name="done-all" size={16} color={colors.primary} />
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -95,10 +101,10 @@ export default function AdminMessages() {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#f8fafc",
+        backgroundColor: colors.background,
     },
     header: {
         flexDirection: "row",
@@ -111,11 +117,11 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: "#fff",
+        backgroundColor: colors.surface,
         alignItems: "center",
         justifyContent: "center",
         borderWidth: 1,
-        borderColor: "#e2e8f0",
+        borderColor: colors.surfaceBorder,
         marginRight: 16,
         marginTop: 4,
     },
@@ -123,13 +129,13 @@ const styles = StyleSheet.create({
     preTitle: {
         fontSize: 10,
         fontWeight: "900",
-        color: "#74CF62",
+        color: colors.primary,
         textTransform: "uppercase",
         letterSpacing: 2,
         marginBottom: 4,
     },
-    title: { fontSize: 28, fontWeight: "900", color: "#0f172a", marginBottom: 4 },
-    subtitle: { fontSize: 12, color: "#64748b", fontWeight: "bold" },
+    title: { fontSize: 28, fontWeight: "900", color: colors.text, marginBottom: 4 },
+    subtitle: { fontSize: 12, color: colors.muted, fontWeight: "bold" },
     scrollContent: {
         paddingHorizontal: 24,
         paddingBottom: 40,
@@ -143,32 +149,27 @@ const styles = StyleSheet.create({
         width: 100,
         height: 100,
         borderRadius: 50,
-        backgroundColor: "#fff",
+        backgroundColor: colors.surface,
         alignItems: "center",
         justifyContent: "center",
         marginBottom: 16,
         borderWidth: 1,
-        borderColor: "#f1f5f9",
+        borderColor: colors.surfaceBorder,
     },
     emptyText: {
         fontSize: 14,
         fontWeight: "bold",
-        color: "#94a3b8",
+        color: colors.muted,
         textTransform: "uppercase",
         letterSpacing: 1.5,
     },
     messageCard: {
-        backgroundColor: "#fff",
+        backgroundColor: colors.surface,
         borderWidth: 1,
-        borderColor: "#f1f5f9",
+        borderColor: colors.surfaceBorder,
         borderRadius: 24,
         padding: 20,
         marginBottom: 16,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 2,
     },
     cardHeader: {
         flexDirection: "row",
@@ -185,39 +186,39 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: "rgba(116, 207, 98, 0.1)",
+        backgroundColor: colors.cardHighlight,
         alignItems: "center",
         justifyContent: "center",
     },
     userName: {
         fontSize: 16,
         fontWeight: "bold",
-        color: "#0f172a",
+        color: colors.text,
         marginBottom: 2,
     },
     orderLabel: {
         fontSize: 10,
         fontWeight: "900",
-        color: "#94a3b8",
+        color: colors.muted,
         textTransform: "uppercase",
         letterSpacing: 0.5,
     },
     timeText: {
         fontSize: 10,
         fontWeight: "900",
-        color: "#cbd5e1",
+        color: colors.muted,
         textTransform: "uppercase",
     },
     messageBox: {
-        backgroundColor: "#f8fafc",
+        backgroundColor: colors.background,
         padding: 16,
         borderRadius: 16,
         borderLeftWidth: 4,
-        borderLeftColor: "#74CF62",
+        borderLeftColor: colors.primary,
     },
     messageText: {
         fontSize: 14,
-        color: "#334155",
+        color: colors.text,
         fontWeight: "500",
         fontStyle: "italic",
         lineHeight: 22,
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
         marginTop: 16,
     },
     badge: {
-        backgroundColor: "#f1f5f9",
+        backgroundColor: colors.background,
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 8,
@@ -237,7 +238,7 @@ const styles = StyleSheet.create({
     badgeText: {
         fontSize: 10,
         fontWeight: "bold",
-        color: "#64748b",
+        color: colors.muted,
     },
     markReadBtn: {
         flexDirection: "row",
@@ -247,7 +248,7 @@ const styles = StyleSheet.create({
     markReadText: {
         fontSize: 10,
         fontWeight: "900",
-        color: "#74CF62",
+        color: colors.primary,
         textTransform: "uppercase",
         letterSpacing: 1,
     },

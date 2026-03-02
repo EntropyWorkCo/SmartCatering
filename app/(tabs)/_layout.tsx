@@ -1,14 +1,36 @@
+import ThemeSwitcher from "@/components/ThemeSwitcher";
+import Colors from "@/constants/Colors";
+import { useResolvedTheme } from "@/lib/store/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Tabs } from "expo-router";
+import { View } from "react-native";
 
 export default function TabLayout() {
+  const theme = useResolvedTheme();
+  const colors = Colors[theme];
+
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: "#74CF62" }}>
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: colors.primary,
+        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.surfaceBorder },
+        tabBarInactiveTintColor: colors.tabIconDefault,
+        headerStyle: { backgroundColor: colors.background, shadowColor: 'transparent', elevation: 0 },
+        headerTintColor: colors.text,
+        headerTitleStyle: { fontWeight: 'bold' },
+        headerRight: () => (
+          <View style={{ marginRight: 16 }}>
+            <ThemeSwitcher />
+          </View>
+        )
+      }}
+    >
       {/* Index (Yönlendirici) - Tab Bar'da görünmesin diye href: null yapıyoruz */}
       <Tabs.Screen
         name="index"
         options={{
           href: null,
+          headerShown: false
         }}
       />
 
@@ -28,8 +50,21 @@ export default function TabLayout() {
         name="menu"
         options={{
           title: "Menü",
+          headerShown: false,
           tabBarIcon: ({ color }) => (
             <FontAwesome name="list" size={24} color={color} />
+          ),
+        }}
+      />
+
+      {/* Sepet */}
+      <Tabs.Screen
+        name="cart"
+        options={{
+          title: "Sepet",
+          headerShown: false,
+          tabBarIcon: ({ color }) => (
+            <FontAwesome name="shopping-cart" size={24} color={color} />
           ),
         }}
       />

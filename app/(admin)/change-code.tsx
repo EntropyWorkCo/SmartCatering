@@ -1,3 +1,6 @@
+import ThemeSwitcher from "@/components/ThemeSwitcher";
+import Colors from "@/constants/Colors";
+import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
@@ -14,6 +17,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function AdminChangeCode() {
     const insets = useSafeAreaInsets();
+
+    const theme = useResolvedTheme();
+    const colors = Colors[theme];
+    const styles = getStyles(colors);
 
     const [oldCode, setOldCode] = useState("");
     const [newCode, setNewCode] = useState("");
@@ -44,9 +51,12 @@ export default function AdminChangeCode() {
         <View style={[styles.container, { paddingTop: insets.top }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <MaterialIcons name="arrow-back" size={24} color="#64748b" />
+                    <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.title}>Giriş Kodu Değiştir</Text>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.title}>Kodu Değiştir</Text>
+                </View>
+                <ThemeSwitcher />
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -88,7 +98,7 @@ export default function AdminChangeCode() {
                 </View>
 
                 <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.8}>
-                    <MaterialIcons name="lock-reset" size={24} color="#fff" />
+                    <MaterialIcons name="lock-reset" size={24} color={colors.background} />
                     <Text style={styles.saveBtnText}>Kodu Güncelle</Text>
                 </TouchableOpacity>
             </ScrollView>
@@ -96,10 +106,10 @@ export default function AdminChangeCode() {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#f8fafc",
+        backgroundColor: colors.background,
     },
     header: {
         flexDirection: "row",
@@ -112,14 +122,14 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: "#fff",
+        backgroundColor: colors.surface,
         alignItems: "center",
         justifyContent: "center",
         borderWidth: 1,
-        borderColor: "#e2e8f0",
+        borderColor: colors.surfaceBorder,
         marginRight: 16,
     },
-    title: { fontSize: 24, fontWeight: "900", color: "#0f172a" },
+    title: { fontSize: 24, fontWeight: "900", color: colors.text },
     scrollContent: {
         paddingHorizontal: 24,
         paddingBottom: 40,
@@ -133,28 +143,28 @@ const styles = StyleSheet.create({
     inputLabel: {
         fontSize: 10,
         fontWeight: "900",
-        color: "#94a3b8",
+        color: colors.muted,
         textTransform: "uppercase",
         letterSpacing: 2,
         marginBottom: 12,
         marginLeft: 4,
     },
     input: {
-        backgroundColor: "#fff",
+        backgroundColor: colors.surface,
         borderRadius: 24,
         paddingVertical: 20,
         paddingHorizontal: 24,
         fontSize: 24,
         fontWeight: "900",
         letterSpacing: 10,
-        color: "#0f172a",
+        color: colors.text,
         textAlign: "center",
         borderWidth: 1,
-        borderColor: "#f1f5f9",
+        borderColor: colors.surfaceBorder,
     },
     divider: {
         height: 1,
-        backgroundColor: "#e2e8f0",
+        backgroundColor: colors.surfaceBorder,
         marginVertical: 8,
         marginBottom: 32,
     },
@@ -163,17 +173,12 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         gap: 12,
-        backgroundColor: "#74CF62",
+        backgroundColor: colors.primary,
         paddingVertical: 24,
         borderRadius: 24,
-        shadowColor: "#74CF62",
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.2,
-        shadowRadius: 20,
-        elevation: 10,
     },
     saveBtnText: {
-        color: "#fff",
+        color: colors.background,
         fontSize: 14,
         fontWeight: "900",
     },

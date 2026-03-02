@@ -1,12 +1,12 @@
 import { supabase } from "../supabase";
 
 export const adisyonService = {
-  async createOrder(userId: string, totalAmount: number, items: any[]) {
+  async createOrder(userId: string, totalAmount: number, items: any[], orderType: string = "Şimdi Ye", note: string = "") {
     // 1. Adisyon Başlığı
     const { data: adisyon, error: adisyonError } = await supabase
       .from("adisyon")
       .insert([
-        { user_id: userId, total_amount: totalAmount, status: "bekliyor" },
+        { user_id: userId, total_amount: totalAmount, status: "bekliyor", order_type: orderType, note: note },
       ])
       .select()
       .single();
@@ -20,6 +20,7 @@ export const adisyonService = {
       quantity: item.quantity,
       unit_price: item.price,
       line_total: item.quantity * item.price,
+      selections: item.selections || null
     }));
 
     const { error: itemsError } = await supabase

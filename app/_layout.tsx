@@ -1,4 +1,4 @@
-import { useColorScheme } from "@/components/useColorScheme";
+import { useResolvedTheme } from "@/lib/store/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
   DarkTheme,
@@ -40,7 +40,7 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const colorScheme = useResolvedTheme();
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
@@ -57,7 +57,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" />
 
         {/* Yönetici paneli */}
-        <Stack.Screen name="(admin)/dashboard" />
+        <Stack.Screen name="(admin)" />
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       </Stack>
     </ThemeProvider>

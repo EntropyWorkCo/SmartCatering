@@ -1,3 +1,6 @@
+import ThemeSwitcher from "@/components/ThemeSwitcher";
+import Colors from "@/constants/Colors";
+import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -26,6 +29,10 @@ export default function AdminCustomers() {
     const [customers, setCustomers] = useState<User[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
     const insets = useSafeAreaInsets();
+
+    const theme = useResolvedTheme();
+    const colors = Colors[theme];
+    const styles = getStyles(colors);
 
     useEffect(() => {
         const fetchCustomers = async () => {
@@ -66,20 +73,21 @@ export default function AdminCustomers() {
         <View style={[styles.container, { paddingTop: insets.top }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <MaterialIcons name="arrow-back" size={24} color="#64748b" />
+                    <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <View style={styles.headerText}>
                     <Text style={styles.title}>Müşteri Listesi</Text>
                     <Text style={styles.subtitle}>Kayıtlı Tüm Kullanıcılar</Text>
                 </View>
+                <ThemeSwitcher />
             </View>
 
             <View style={styles.searchContainer}>
-                <MaterialIcons name="search" size={24} color="#94a3b8" style={styles.searchIcon} />
+                <MaterialIcons name="search" size={24} color={colors.muted} style={styles.searchIcon} />
                 <TextInput
                     style={styles.searchInput}
                     placeholder="İsim, telefon veya firma ara..."
-                    placeholderTextColor="#94a3b8"
+                    placeholderTextColor={colors.muted}
                     value={searchTerm}
                     onChangeText={setSearchTerm}
                 />
@@ -94,8 +102,8 @@ export default function AdminCustomers() {
                                     style={[
                                         styles.avatar,
                                         customer.company && customer.company !== "Bireysel Üyelik"
-                                            ? { backgroundColor: "rgba(116, 207, 98, 0.1)" }
-                                            : { backgroundColor: "rgba(59, 130, 246, 0.1)" },
+                                            ? { backgroundColor: colors.cardHighlight }
+                                            : { backgroundColor: colors.infoBg },
                                     ]}
                                 >
                                     <MaterialIcons
@@ -107,8 +115,8 @@ export default function AdminCustomers() {
                                         size={28}
                                         color={
                                             customer.company && customer.company !== "Bireysel Üyelik"
-                                                ? "#74CF62"
-                                                : "#3b82f6"
+                                                ? colors.primary
+                                                : colors.info
                                         }
                                     />
                                 </View>
@@ -120,7 +128,7 @@ export default function AdminCustomers() {
                                     <Text style={styles.customerPhone}>{customer.phone}</Text>
                                     {customer.company && customer.company !== "Bireysel Üyelik" && (
                                         <View style={styles.companyTag}>
-                                            <MaterialIcons name="verified" size={12} color="#74CF62" />
+                                            <MaterialIcons name="verified" size={12} color={colors.primary} />
                                             <Text style={styles.companyText}>{customer.company}</Text>
                                         </View>
                                     )}
@@ -137,7 +145,7 @@ export default function AdminCustomers() {
                     ))
                 ) : (
                     <View style={styles.emptyState}>
-                        <MaterialIcons name="person-off" size={64} color="#cbd5e1" />
+                        <MaterialIcons name="person-off" size={64} color={colors.surfaceBorder} />
                         <Text style={styles.emptyText}>Müşteri bulunamadı.</Text>
                     </View>
                 )}
@@ -146,10 +154,10 @@ export default function AdminCustomers() {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#f8fafc",
+        backgroundColor: colors.background,
     },
     header: {
         flexDirection: "row",
@@ -161,19 +169,19 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: "#fff",
+        backgroundColor: colors.surface,
         alignItems: "center",
         justifyContent: "center",
         borderWidth: 1,
-        borderColor: "#e2e8f0",
+        borderColor: colors.surfaceBorder,
         marginRight: 16,
     },
     headerText: { flex: 1 },
-    title: { fontSize: 24, fontWeight: "900", color: "#0f172a" },
+    title: { fontSize: 24, fontWeight: "900", color: colors.text },
     subtitle: {
         fontSize: 10,
         fontWeight: "bold",
-        color: "#64748b",
+        color: colors.muted,
         textTransform: "uppercase",
         letterSpacing: 1,
         marginTop: 2,
@@ -190,28 +198,28 @@ const styles = StyleSheet.create({
         zIndex: 1,
     },
     searchInput: {
-        backgroundColor: "#fff",
+        backgroundColor: colors.surface,
         borderWidth: 1,
-        borderColor: "#e2e8f0",
+        borderColor: colors.surfaceBorder,
         borderRadius: 16,
         paddingVertical: 16,
         paddingLeft: 48,
         paddingRight: 16,
         fontSize: 16,
         fontWeight: "bold",
-        color: "#0f172a",
+        color: colors.text,
     },
     scrollContent: {
         paddingHorizontal: 24,
         paddingBottom: 40,
     },
     customerCard: {
-        backgroundColor: "#fff",
+        backgroundColor: colors.surface,
         borderRadius: 24,
         padding: 20,
         marginBottom: 16,
         borderWidth: 1,
-        borderColor: "#f1f5f9",
+        borderColor: colors.surfaceBorder,
     },
     cardContent: {
         flexDirection: "row",
@@ -231,13 +239,13 @@ const styles = StyleSheet.create({
     customerName: {
         fontSize: 16,
         fontWeight: "900",
-        color: "#0f172a",
+        color: colors.text,
         marginBottom: 4,
     },
     customerPhone: {
         fontSize: 12,
         fontWeight: "bold",
-        color: "#64748b",
+        color: colors.muted,
         marginBottom: 6,
     },
     companyTag: {
@@ -248,23 +256,23 @@ const styles = StyleSheet.create({
     companyText: {
         fontSize: 10,
         fontWeight: "900",
-        color: "#74CF62",
+        color: colors.primary,
         textTransform: "uppercase",
         letterSpacing: 0.5,
     },
     balanceContainer: {
-        backgroundColor: "#f8fafc",
+        backgroundColor: colors.background,
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 12,
         alignItems: "flex-end",
         borderWidth: 1,
-        borderColor: "#f1f5f9",
+        borderColor: colors.surfaceBorder,
     },
     balanceLabel: {
         fontSize: 9,
         fontWeight: "900",
-        color: "#94a3b8",
+        color: colors.muted,
         textTransform: "uppercase",
         letterSpacing: 1,
         marginBottom: 2,
@@ -272,7 +280,7 @@ const styles = StyleSheet.create({
     balanceAmount: {
         fontSize: 14,
         fontWeight: "900",
-        color: "#0f172a",
+        color: colors.text,
     },
     emptyState: {
         alignItems: "center",
@@ -283,6 +291,6 @@ const styles = StyleSheet.create({
         marginTop: 16,
         fontSize: 16,
         fontWeight: "bold",
-        color: "#94a3b8",
+        color: colors.muted,
     },
 });

@@ -1,8 +1,14 @@
+import Colors from "@/constants/Colors";
+import { useResolvedTheme } from "@/lib/store/themeStore";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function HomeScreen() {
+  const theme = useResolvedTheme();
+  const colors = Colors[theme];
+  const styles = getStyles(colors);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -19,15 +25,20 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+const getStyles = (colors: any) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
   content: { padding: 20 },
-  welcomeText: { fontSize: 24, fontWeight: "bold", color: "#0f172a" },
+  welcomeText: { fontSize: 24, fontWeight: "bold", color: colors.text },
   balanceCard: {
-    backgroundColor: "#74CF62",
+    backgroundColor: colors.primary,
     padding: 20,
     borderRadius: 20,
     marginTop: 20,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   balanceLabel: { color: "#064e3b", fontWeight: "bold" },
   balanceAmount: {
@@ -36,5 +47,5 @@ const styles = StyleSheet.create({
     color: "#064e3b",
     marginTop: 5,
   },
-  infoText: { marginTop: 20, color: "#64748b" },
+  infoText: { marginTop: 20, color: colors.muted },
 });
