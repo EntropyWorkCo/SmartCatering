@@ -68,6 +68,30 @@ export default function TabLayout() {
           ),
         }}
       />
+
+      {/* Siparişlerim */}
+      <Tabs.Screen
+        name="past-orders"
+        options={{
+          title: "Siparişlerim",
+          headerShown: false,
+          tabBarIcon: ({ color }) => (
+            <FontAwesome name="history" size={24} color={color} />
+          ),
+        }}
+      />
+
+      {/* Profil */}
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profil",
+          headerShown: false,
+          tabBarIcon: ({ color }) => (
+            <FontAwesome name="user" size={24} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

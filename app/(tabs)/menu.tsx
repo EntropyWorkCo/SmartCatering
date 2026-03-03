@@ -57,19 +57,19 @@ export default function MenuScreen() {
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
   const [packageSelections, setPackageSelections] = useState<{ category: string, item_id: string, item_name: string }[]>([]);
 
-  const activeCategories = ["TÜMÜ", "GÜNÜN YEMEKLERİ", "İÇECEKLER", "EKSTRALAR"];
+  const activeCategories = ["TÜMÜ", "İÇECEKLER", "EKSTRALAR"];
 
   let filteredMenu: any[] = [];
 
+  // Günün Menüsü (Always separate unless filtered out entirely, but user wants it at top)
+  const dailyMenu = menu.filter(m => ["ÇORBA", "ANA YEMEK", "YARDIMCI"].includes(m.category));
+
   if (selectedCategory === "TÜMÜ") {
     filteredMenu = [
-      ...menu.filter(m => ["ÇORBA", "ANA YEMEK", "YARDIMCI"].includes(m.category)),
       ...menu.filter(m => m.category === "İÇECEK"),
       ...systemPrices.filter(p => p.category === "İÇECEK"),
       ...systemPrices.filter(p => p.category === "EKSTRA")
     ];
-  } else if (selectedCategory === "GÜNÜN YEMEKLERİ") {
-    filteredMenu = menu.filter(m => ["ÇORBA", "ANA YEMEK", "YARDIMCI"].includes(m.category));
   } else if (selectedCategory === "İÇECEKLER") {
     filteredMenu = [
       ...menu.filter(m => m.category === "İÇECEK"),
@@ -204,8 +204,52 @@ export default function MenuScreen() {
           </ScrollView>
         </View>
 
-        {/* Items List */}
+        {/* Günün Menüsü (Always at top) */}
+        {(selectedCategory === "TÜMÜ" && dailyMenu.length > 0) && (
+          <View style={{ paddingTop: 24, paddingHorizontal: 24 }}>
+            <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 16 }}>Günün Menüsü</Text>
+            <View style={{ gap: 16 }}>
+              {dailyMenu.map(item => (
+                <View key={item.id} style={[styles.foodCard, item.status === 'sold_out' && { opacity: 0.6 }]}>
+                  <View style={styles.foodImageContainer}>
+                    {item.image_url ? (
+                      <Image source={{ uri: item.image_url }} style={styles.foodImage} />
+                    ) : (
+                      <MaterialIcons name={
+                        item.category === "İÇECEK" ? "local-drink" :
+                          item.category === "ÇORBA" ? "soup-kitchen" :
+                            item.category === "EKSTRA" ? "add-circle-outline" :
+                              "restaurant"
+                      } size={40} color={colors.muted} />
+                    )}
+                  </View>
+                  <View style={styles.foodDetails}>
+                    <Text style={styles.foodName}>{item.name}</Text>
+                    <Text style={styles.foodCategory}>{item.category}</Text>
+                    <View style={styles.foodBottomRow}>
+                      <Text style={styles.foodPrice}>₺{item.price}</Text>
+                      {item.status === 'sold_out' ? (
+                        <View style={{ backgroundColor: colors.danger, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                          <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>TÜKENDİ</Text>
+                        </View>
+                      ) : (
+                        <TouchableOpacity style={styles.addBtn} onPress={() => handleAddToCart(item)}>
+                          <MaterialIcons name="add-shopping-cart" size={20} color="#fff" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Items List (Diğer Sabit Menü/Kategoriler) */}
         <View style={styles.listContainer}>
+          {selectedCategory === "TÜMÜ" && (
+            <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 8 }}>Diğer Ürünler</Text>
+          )}
           {filteredMenu.length === 0 ? (
             <View style={styles.emptyContainer}>
               <MaterialIcons name="fastfood" size={48} color={colors.surfaceBorder} />

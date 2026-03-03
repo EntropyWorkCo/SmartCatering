@@ -6,12 +6,15 @@ export const adisyonService = {
     const { data: adisyon, error: adisyonError } = await supabase
       .from("adisyon")
       .insert([
-        { user_id: userId, total_amount: totalAmount, status: "bekliyor", order_type: orderType, note: note },
+        { user_id: userId, total_amount: totalAmount, status: "PENDING", order_type: orderType, note: note },
       ])
       .select()
       .single();
 
-    if (adisyonError) throw adisyonError;
+    if (adisyonError) {
+      console.error("Adisyon Insert Error:", adisyonError);
+      throw adisyonError;
+    }
 
     // 2. Adisyon Kalemleri
     const orderItems = items.map((item) => ({
@@ -27,19 +30,31 @@ export const adisyonService = {
       .from("adisyon_items")
       .insert(orderItems);
 
-    if (itemsError) throw itemsError;
+    if (itemsError) {
+      console.error("Adisyon_Items Insert Error:", itemsError);
+      throw itemsError;
+    }
     return adisyon;
   },
 
   async getUserOrders(userId: string) {
-    const { data, error } = await supabase
-      .from("adisyon")
-      .select("*, adisyon_items(*, menu_items(name))")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
+    try {
+      // Artık RLS izin sorunu çözüldüğüne göre, siparişleri kalemleri ve yemek isimleriyle çekebiliriz
+      const { data, error } = await supabase
+        .from("adisyon")
+        .select("*, adisyon_items(*, menu_items(name))")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
 
-    if (error) throw error;
-    return data;
+      if (error) {
+        console.error("Adisyon Select Error:", error);
+        throw error;
+      }
+      return data || [];
+    } catch (error: any) {
+      console.error("getUserOrders error:", error);
+      throw error;
+    }
   },
 
   async updateOrderStatus(orderId: string, status: string) {

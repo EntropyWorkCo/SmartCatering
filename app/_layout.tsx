@@ -58,6 +58,15 @@ function RootLayoutNav() {
 
         {/* Yönetici paneli */}
         <Stack.Screen name="(admin)" />
+
+        {/* Customer Screens (Outside Tabs) */}
+        <Stack.Screen name="order-selection" />
+        <Stack.Screen name="order-success" />
+        <Stack.Screen name="adisyon" />
+        <Stack.Screen name="account-info" />
+        <Stack.Screen name="corporate-info" />
+        <Stack.Screen name="rating" />
+
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       </Stack>
     </ThemeProvider>

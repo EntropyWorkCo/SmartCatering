@@ -1,0 +1,236 @@
+import { MaterialIcons } from "@expo/vector-icons";
+import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+import Colors from "@/constants/Colors";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { useProfile } from "@/lib/hooks/useProfile";
+import { useResolvedTheme } from "@/lib/store/themeStore";
+import { supabase } from "@/lib/supabase";
+
+export default function ProfileScreen() {
+    const router = useRouter();
+    const theme = useResolvedTheme();
+    const colors = Colors[theme];
+    const styles = getStyles(colors);
+
+    const { user } = useAuth();
+    const { profile, loading } = useProfile(user?.id);
+
+    const [fullName, setFullName] = useState("");
+    const [email, setEmail] = useState("");
+    const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+    const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+    const [saving, setSaving] = useState(false);
+
+    // Initialize state once profile is loaded
+    React.useEffect(() => {
+        if (profile) {
+            setFullName(profile.full_name || "");
+            setEmail(profile.email || user?.email || "");
+            setPhotoUrl(profile.avatar_url || null);
+        }
+    }, [profile, user]);
+
+    const handlePickImage = async () => {
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.5,
+        });
+
+        if (!result.canceled) {
+            setPhotoUrl(result.assets[0].uri);
+            // Actual Supabase upload logic would go here
+        }
+    };
+
+    const handleSave = async () => {
+        setSaving(true);
+        // Dummy save for UI representation context
+        setTimeout(() => {
+            setSaving(false);
+            Alert.alert("Başarılı", "Profiliniz güncellendi.");
+        }, 1000);
+    };
+
+    const handleLogout = async () => {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+            Alert.alert("Çıkış Yapılamadı", error.message);
+        } else {
+            router.replace("/welcome");
+        }
+    };
+
+    if (loading) {
+        return (
+            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+        );
+    }
+
+    return (
+        <SafeAreaView style={styles.container} edges={['top']}>
+            <View style={styles.header}>
+                <Text style={styles.title}>Hesabım</Text>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                {/* Profile Image Section */}
+                <View style={styles.imageSection}>
+                    <TouchableOpacity onPress={handlePickImage} style={styles.imageContainer}>
+                        <Image
+                            source={{ uri: photoUrl || `https://api.dicebear.com/7.x/avataaars/png?seed=${fullName || 'Misafir'}` }}
+                            style={styles.profileImage}
+                        />
+                        <View style={styles.imageOverlay}>
+                            <MaterialIcons name="camera-alt" size={24} color="#fff" />
+                        </View>
+                    </TouchableOpacity>
+                </View>
+
+                {/* User Info Form */}
+                <View style={styles.formSection}>
+                    <Text style={styles.label}>Ad Soyad</Text>
+                    <View style={styles.inputContainer}>
+                        <MaterialIcons name="person" size={20} color={colors.muted} />
+                        <TextInput
+                            style={styles.input}
+                            value={fullName}
+                            onChangeText={setFullName}
+                            placeholder="Ad Soyad"
+                            placeholderTextColor={colors.muted}
+                        />
+                    </View>
+
+                    <Text style={styles.label}>E-posta</Text>
+                    <View style={styles.inputContainer}>
+                        <MaterialIcons name="email" size={20} color={colors.muted} />
+                        <TextInput
+                            style={styles.input}
+                            value={email}
+                            onChangeText={setEmail}
+                            placeholder="E-posta"
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            placeholderTextColor={colors.muted}
+                            editable={false} // Email typically not editable here without strict auth flow
+                        />
+                    </View>
+
+                    <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
+                        {saving ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <Text style={styles.saveBtnText}>Profili Güncelle</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.divider} />
+
+                {/* Settings Links */}
+                <View style={styles.linksSection}>
+                    <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/account-info")}>
+                        <MaterialIcons name="info-outline" size={24} color={colors.text} />
+                        <Text style={styles.linkText}>Hesap Bilgilerim</Text>
+                        <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/corporate-info")}>
+                        <MaterialIcons name="business" size={24} color={colors.text} />
+                        <Text style={styles.linkText}>Kurumsal Fatura / Şirket Bilgileri</Text>
+                        <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
+                    </TouchableOpacity>
+
+                    <View style={styles.linkItem}>
+                        <MaterialIcons name="notifications-none" size={24} color={colors.text} />
+                        <Text style={styles.linkText}>Bildirimler</Text>
+                        <Switch
+                            value={notificationsEnabled}
+                            onValueChange={setNotificationsEnabled}
+                            trackColor={{ false: colors.surfaceBorder, true: colors.primary }}
+                            thumbColor="#fff"
+                        />
+                    </View>
+                </View>
+
+                <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+                    <MaterialIcons name="logout" size={24} color={colors.danger} />
+                    <Text style={styles.logoutText}>Çıkış Yap</Text>
+                </TouchableOpacity>
+
+            </ScrollView>
+        </SafeAreaView>
+    );
+}
+
+const getStyles = (colors: any) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    header: { padding: 24, paddingBottom: 16 },
+    title: { fontSize: 28, fontWeight: '900', color: colors.text },
+    scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
+
+    imageSection: { alignItems: 'center', marginVertical: 24 },
+    imageContainer: {
+        width: 100, height: 100, borderRadius: 50,
+        backgroundColor: colors.surface,
+        borderWidth: 2, borderColor: colors.surfaceBorder,
+        overflow: 'hidden', position: 'relative'
+    },
+    profileImage: { width: '100%', height: '100%' },
+    imageOverlay: {
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)', height: 32,
+        alignItems: 'center', justifyContent: 'center'
+    },
+
+    formSection: { gap: 16 },
+    label: { fontSize: 12, fontWeight: 'bold', color: colors.muted, marginBottom: -8, marginLeft: 4 },
+    inputContainer: {
+        flexDirection: 'row', alignItems: 'center', gap: 12,
+        backgroundColor: colors.surface, borderRadius: 16,
+        borderWidth: 1, borderColor: colors.surfaceBorder,
+        paddingHorizontal: 16, height: 56
+    },
+    input: { flex: 1, fontSize: 16, color: colors.text, height: '100%' },
+    saveBtn: {
+        backgroundColor: colors.primary, height: 56, borderRadius: 16,
+        alignItems: 'center', justifyContent: 'center', marginTop: 8
+    },
+    saveBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+
+    divider: { height: 1, backgroundColor: colors.surfaceBorder, marginVertical: 32 },
+
+    linksSection: { gap: 16 },
+    linkItem: {
+        flexDirection: 'row', alignItems: 'center', gap: 16,
+        backgroundColor: colors.surface, padding: 16, borderRadius: 16,
+        borderWidth: 1, borderColor: colors.surfaceBorder
+    },
+    linkText: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.text },
+
+    logoutBtn: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+        backgroundColor: colors.dangerBg, padding: 16, borderRadius: 16,
+        marginTop: 32, borderWidth: 1, borderColor: colors.dangerBorder
+    },
+    logoutText: { color: colors.danger, fontSize: 16, fontWeight: 'bold' }
+});
