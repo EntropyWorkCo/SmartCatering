@@ -2,9 +2,10 @@ import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useResolvedTheme } from "@/lib/store/themeStore";
+import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     ScrollView,
     StyleSheet,
@@ -25,18 +26,42 @@ export default function AdminReports() {
     const colors = Colors[theme];
     const styles = getStyles(colors);
 
-    // Mock Ratings
-    const mockRatings = [
-        { id: '1', userName: 'Sena Arslan', company: 'Tech A.Ş.', generalStars: 5, note: 'Yemekler harikaydı, elinize sağlık.', date: '25.10.2023' },
-        { id: '2', userName: 'Ahmet Yılmaz', company: '', generalStars: 4, note: 'Çorba biraz soğuktu ama lezzetliydi.', date: '24.10.2023' },
-    ];
+    const [ratings, setRatings] = useState<any[]>([]);
+    const [loadingRatings, setLoadingRatings] = useState(true);
+
+    useEffect(() => {
+        const fetchRatings = async () => {
+            const { data, error } = await supabase
+                .from("feedbacks")
+                .select("*, users(full_name)")
+                .order("created_at", { ascending: false });
+
+            if (data) {
+                const formatted = data.map((r: any) => ({
+                    id: r.id,
+                    userName: r.users?.full_name || 'Müşteri',
+                    company: 'Bireysel',
+                    generalStars: r.rating,
+                    rating_ana: r.rating_ana || r.rating,
+                    rating_corba: r.rating_corba || r.rating,
+                    rating_yan: r.rating_yan || r.rating,
+                    rating_tatli: r.rating_tatli || r.rating,
+                    note: r.note || '',
+                    date: new Date(r.created_at).toLocaleDateString()
+                }));
+                setRatings(formatted);
+            }
+            setLoadingRatings(false);
+        };
+        fetchRatings();
+    }, []);
 
     if (view === "SALES")
         return <DailySalesView onBack={() => setView("MAIN")} orders={orders} colors={colors} styles={styles} />;
     if (view === "STATS")
-        return <PerformanceDashboard onBack={() => setView("MAIN")} ratings={mockRatings} colors={colors} styles={styles} />;
+        return <PerformanceDashboard onBack={() => setView("MAIN")} ratings={ratings} colors={colors} styles={styles} />;
     if (view === "FEEDBACK")
-        return <FeedbackView onBack={() => setView("MAIN")} ratings={mockRatings} colors={colors} styles={styles} />;
+        return <FeedbackView onBack={() => setView("MAIN")} ratings={ratings} colors={colors} styles={styles} />;
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -162,7 +187,19 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
 
 const PerformanceDashboard = ({ onBack, ratings, colors, styles }: any) => {
     const insets = useSafeAreaInsets();
-    const stats = { general: "4.8", ana: "4.6", corba: "4.9", yan: "4.5", tatli: "4.7" };
+
+    const count = ratings.length;
+    const calcAvg = (key: string) => count
+        ? (ratings.reduce((acc: number, r: any) => acc + (r[key] || 0), 0) / count).toFixed(1)
+        : "5.0";
+
+    const stats = {
+        general: calcAvg('generalStars'),
+        ana: calcAvg('rating_ana'),
+        corba: calcAvg('rating_corba'),
+        yan: calcAvg('rating_yan'),
+        tatli: calcAvg('rating_tatli')
+    };
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>

@@ -140,7 +140,7 @@ export default function UnitPriceFormScreen() {
                         label="ÇORBA ÇEŞİTLERİ"
                         icon="soup-kitchen"
                         value={prices.CORBA}
-                        onChangeText={(text) => setPrices({ ...prices, CORBA: text })}
+                        onChangeText={(text: string) => setPrices({ ...prices, CORBA: text })}
                         colors={colors}
                         styles={styles}
                     />
@@ -148,7 +148,7 @@ export default function UnitPriceFormScreen() {
                         label="ANA YEMEK"
                         icon="restaurant"
                         value={prices.ANAYEMEK}
-                        onChangeText={(text) => setPrices({ ...prices, ANAYEMEK: text })}
+                        onChangeText={(text: string) => setPrices({ ...prices, ANAYEMEK: text })}
                         colors={colors}
                         styles={styles}
                     />
@@ -156,7 +156,7 @@ export default function UnitPriceFormScreen() {
                         label="YARDIMCI"
                         icon="flatware"
                         value={prices.YARDIMCI}
-                        onChangeText={(text) => setPrices({ ...prices, YARDIMCI: text })}
+                        onChangeText={(text: string) => setPrices({ ...prices, YARDIMCI: text })}
                         colors={colors}
                         styles={styles}
                     />
@@ -164,7 +164,7 @@ export default function UnitPriceFormScreen() {
                         label="İÇECEKLER (Ayran, Gazoz vs.)"
                         icon="local-drink"
                         value={prices.ICECEKLER}
-                        onChangeText={(text) => setPrices({ ...prices, ICECEKLER: text })}
+                        onChangeText={(text: string) => setPrices({ ...prices, ICECEKLER: text })}
                         colors={colors}
                         styles={styles}
                     />

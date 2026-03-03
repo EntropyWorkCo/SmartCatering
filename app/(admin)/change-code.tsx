@@ -1,6 +1,7 @@
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
+import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
@@ -26,12 +27,11 @@ export default function AdminChangeCode() {
     const [newCode, setNewCode] = useState("");
     const [confirmCode, setConfirmCode] = useState("");
 
-    const handleSave = () => {
-        // Current code from your auth logic/storage: Mock 1234
-        const currentCode = "1234";
+    const [loading, setLoading] = useState(false);
 
-        if (oldCode !== currentCode) {
-            Alert.alert("Hata", "Mevcut kod hatalı!");
+    const handleSave = async () => {
+        if (!oldCode || !newCode || !confirmCode) {
+            Alert.alert("Hata", "Lütfen tüm alanları doldurun.");
             return;
         }
         if (newCode !== confirmCode) {
@@ -43,8 +43,38 @@ export default function AdminChangeCode() {
             return;
         }
 
-        Alert.alert("Başarılı", "Erişim kodu başarıyla değiştirildi.");
-        router.back();
+        setLoading(true);
+        try {
+            // 1. Kullanıcının mevcut e-postasını al
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user || !user.email) throw new Error("Kullanıcı oturumu bulunamadı.");
+
+            // 2. Mevcut parolası (kodu) doğru mu diye teyit et
+            const { error: signInError } = await supabase.auth.signInWithPassword({
+                email: user.email,
+                password: oldCode,
+            });
+
+            if (signInError) {
+                setLoading(false);
+                Alert.alert("Hata", "Mevcut kodunuz (parola) hatalı!");
+                return;
+            }
+
+            // 3. Doğrulandıysa yeni parolayı (kodu) belirle
+            const { error: updateError } = await supabase.auth.updateUser({
+                password: newCode
+            });
+
+            if (updateError) throw updateError;
+
+            Alert.alert("Başarılı", "Erişim kodu (Parola) başarıyla değiştirildi.");
+            router.back();
+        } catch (err: any) {
+            Alert.alert("Hata", "Kod güncellenirken bir hata oluştu: " + err.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (

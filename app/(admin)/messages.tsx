@@ -2,9 +2,10 @@ import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useResolvedTheme } from "@/lib/store/themeStore";
+import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
     ScrollView,
     StyleSheet,
@@ -22,25 +23,49 @@ export default function AdminMessages() {
     const colors = Colors[theme];
     const styles = getStyles(colors);
 
-    // Mock veri üzerinden gidelim
-    const ordersWithNotes = [
-        {
-            id: "1",
-            userName: "Sena Arslan",
-            orderNumber: "10025",
-            date: "2023-10-25 12:30",
-            note: "Lütfen yemekler sıcak gelsin, çatal bıçak eklemeyi unutmayın.",
-            itemsCount: 5
-        },
-        {
-            id: "2",
-            userName: "Tech A.Ş.",
-            orderNumber: "10026",
-            date: "2023-10-25 13:15",
-            note: "Kurumsal fatura kesilecek, ilgili birime iletildi.",
-            itemsCount: 15
+    const [messages, setMessages] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchMessages = async () => {
+            const { data, error } = await supabase
+                .from("messages")
+                .select("*, users(full_name)")
+                .order("created_at", { ascending: false });
+
+            if (data) {
+                const formatted = data.map((m: any) => ({
+                    id: m.id,
+                    userName: m.users?.full_name || "Müşteri",
+                    orderNumber: "---", // Could join with orders if needed
+                    date: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    note: m.content,
+                    itemsCount: 0,
+                    is_read: m.is_read
+                }));
+                setMessages(formatted);
+            }
+            setLoading(false);
+        };
+
+        fetchMessages();
+
+        // Realtime Subscription
+        const channel = supabase.channel('messages_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+                fetchMessages();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
         }
-    ];
+    }, []);
+
+    const markAsRead = async (id: string) => {
+        await supabase.from("messages").update({ is_read: true }).eq("id", id);
+        setMessages(prev => prev.map(m => m.id === id ? { ...m, is_read: true } : m));
+    };
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -57,27 +82,27 @@ export default function AdminMessages() {
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                {ordersWithNotes.length === 0 ? (
+                {messages.length === 0 ? (
                     <View style={styles.emptyState}>
                         <View style={styles.emptyIconCircle}>
                             <MaterialIcons name="chat-bubble-outline" size={48} color={colors.surfaceBorder} />
                         </View>
-                        <Text style={styles.emptyText}>Henüz mesaj yok</Text>
+                        <Text style={styles.emptyText}>{loading ? "Yükleniyor..." : "Henüz mesaj yok"}</Text>
                     </View>
                 ) : (
-                    ordersWithNotes.map((order) => (
-                        <View key={order.id} style={styles.messageCard}>
+                    messages.map((order) => (
+                        <View key={order.id} style={[styles.messageCard, !order.is_read && { borderColor: colors.primary, borderWidth: 2 }]}>
                             <View style={styles.cardHeader}>
                                 <View style={styles.userInfo}>
                                     <View style={styles.avatar}>
                                         <MaterialIcons name="person" size={20} color={colors.primary} />
                                     </View>
                                     <View>
-                                        <Text style={styles.userName}>{order.userName || "Müşteri"}</Text>
-                                        <Text style={styles.orderLabel}>Sipariş #{order.orderNumber}</Text>
+                                        <Text style={styles.userName}>{order.userName}</Text>
+                                        <Text style={styles.orderLabel}>Bildirim Müşteriden Geldi</Text>
                                     </View>
                                 </View>
-                                <Text style={styles.timeText}>{order.date.split(" ")[1]}</Text>
+                                <Text style={styles.timeText}>{order.date}</Text>
                             </View>
 
                             <View style={styles.messageBox}>
@@ -86,12 +111,14 @@ export default function AdminMessages() {
 
                             <View style={styles.cardFooter}>
                                 <View style={styles.badge}>
-                                    <Text style={styles.badgeText}>{order.itemsCount} Porsiyon</Text>
+                                    <Text style={styles.badgeText}>{order.is_read ? 'Okundu' : 'Yeni Mesaj'}</Text>
                                 </View>
-                                <TouchableOpacity style={styles.markReadBtn}>
-                                    <Text style={styles.markReadText}>OKUNDU İŞARETLE</Text>
-                                    <MaterialIcons name="done-all" size={16} color={colors.primary} />
-                                </TouchableOpacity>
+                                {!order.is_read && (
+                                    <TouchableOpacity style={styles.markReadBtn} onPress={() => markAsRead(order.id)}>
+                                        <Text style={styles.markReadText}>OKUNDU İŞARETLE</Text>
+                                        <MaterialIcons name="done-all" size={16} color={colors.primary} />
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         </View>
                     ))

@@ -248,6 +248,113 @@ export type Database = {
         }
         Relationships: []
       }
+      system_settings: {
+        Row: {
+          key: string
+          value: string
+          updated_at: string
+        }
+        Insert: {
+          key: string
+          value: string
+          updated_at?: string
+        }
+        Update: {
+          key?: string
+          value?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      feedbacks: {
+        Row: {
+          id: string
+          user_id: string
+          order_id: string | null
+          rating: number
+          rating_ana: number | null
+          rating_corba: number | null
+          rating_yan: number | null
+          rating_tatli: number | null
+          note: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          order_id?: string | null
+          rating: number
+          rating_ana?: number | null
+          rating_corba?: number | null
+          rating_yan?: number | null
+          rating_tatli?: number | null
+          note?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          order_id?: string | null
+          rating?: number
+          rating_ana?: number | null
+          rating_corba?: number | null
+          rating_yan?: number | null
+          rating_tatli?: number | null
+          note?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feedbacks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedbacks_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "adisyon"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      messages: {
+        Row: {
+          id: string
+          user_id: string
+          content: string
+          is_read: boolean | null
+          is_from_admin: boolean | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          content: string
+          is_read?: boolean | null
+          is_from_admin?: boolean | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          content?: string
+          is_read?: boolean | null
+          is_from_admin?: boolean | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
