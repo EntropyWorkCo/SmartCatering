@@ -18,6 +18,10 @@ export default function RatingScreen() {
     const { user } = useAuth();
 
     const [rating, setRating] = useState(0);
+    const [ratingAna, setRatingAna] = useState(0);
+    const [ratingCorba, setRatingCorba] = useState(0);
+    const [ratingYan, setRatingYan] = useState(0);
+    const [ratingTatli, setRatingTatli] = useState(0);
     const [comment, setComment] = useState("");
     const [submitting, setSubmitting] = useState(false);
 
@@ -45,8 +49,11 @@ export default function RatingScreen() {
                 await supabase.from("feedbacks").insert({
                     user_id: user.id,
                     rating,
-                    message: comment,
-                    // selectedTags could be handled based on db schema, skipping here for UI focus
+                    rating_ana: ratingAna || rating,
+                    rating_corba: ratingCorba || rating,
+                    rating_yan: ratingYan || rating,
+                    rating_tatli: ratingTatli || rating,
+                    note: comment,
                 });
             }
 
@@ -81,12 +88,21 @@ export default function RatingScreen() {
                                 <TouchableOpacity key={star} onPress={() => setRating(star)} activeOpacity={0.7} style={styles.starBtn}>
                                     <MaterialIcons
                                         name={rating >= star ? "star" : "star-border"}
-                                        size={48}
+                                        size={40}
                                         color={rating >= star ? "#fbbf24" : colors.surfaceBorder}
                                     />
                                 </TouchableOpacity>
                             ))}
                         </View>
+                    </View>
+
+                    <View style={styles.categoriesSection}>
+                        <Text style={styles.categoryTitle}>Kategori Bazlı Puanlama</Text>
+
+                        <RatingRow label="Ana Yemek" value={ratingAna} onSelect={setRatingAna} colors={colors} styles={styles} />
+                        <RatingRow label="Çorba" value={ratingCorba} onSelect={setRatingCorba} colors={colors} styles={styles} />
+                        <RatingRow label="Yan Yemek" value={ratingYan} onSelect={setRatingYan} colors={colors} styles={styles} />
+                        <RatingRow label="Tatlı" value={ratingTatli} onSelect={setRatingTatli} colors={colors} styles={styles} />
                     </View>
 
                     {rating > 0 && (
@@ -144,6 +160,25 @@ export default function RatingScreen() {
     );
 }
 
+function RatingRow({ label, value, onSelect, colors, styles }: any) {
+    return (
+        <View style={styles.categoryRow}>
+            <Text style={styles.categoryLabel}>{label}</Text>
+            <View style={styles.categoryStars}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                    <TouchableOpacity key={star} onPress={() => onSelect(star)} activeOpacity={0.7}>
+                        <MaterialIcons
+                            name={value >= star ? "star" : "star-border"}
+                            size={24}
+                            color={value >= star ? "#fbbf24" : colors.surfaceBorder}
+                        />
+                    </TouchableOpacity>
+                ))}
+            </View>
+        </View>
+    );
+}
+
 const getStyles = (colors: any) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     header: {
@@ -168,6 +203,12 @@ const getStyles = (colors: any) => StyleSheet.create({
 
     starsContainer: { flexDirection: 'row', gap: 8, justifyContent: 'center' },
     starBtn: { padding: 4 },
+
+    categoriesSection: { padding: 24, borderBottomWidth: 1, borderColor: colors.surfaceBorder },
+    categoryTitle: { fontSize: 13, fontWeight: 'bold', color: colors.muted, marginBottom: 16, textTransform: 'uppercase' },
+    categoryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    categoryLabel: { fontSize: 15, fontWeight: '600', color: colors.text },
+    categoryStars: { flexDirection: 'row', gap: 4 },
 
     feedbackSection: { padding: 24, gap: 16 },
     sectionTitle: { fontSize: 13, fontWeight: 'bold', color: colors.text, marginBottom: 8, marginTop: 8 },

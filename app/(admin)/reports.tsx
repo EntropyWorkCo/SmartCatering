@@ -4,8 +4,8 @@ import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useMemo, useState } from "react";
 import {
     ScrollView,
     StyleSheet,
@@ -29,32 +29,34 @@ export default function AdminReports() {
     const [ratings, setRatings] = useState<any[]>([]);
     const [loadingRatings, setLoadingRatings] = useState(true);
 
-    useEffect(() => {
-        const fetchRatings = async () => {
-            const { data, error } = await supabase
-                .from("feedbacks")
-                .select("*, users(full_name)")
-                .order("created_at", { ascending: false });
+    useFocusEffect(
+        React.useCallback(() => {
+            const fetchRatings = async () => {
+                const { data, error } = await supabase
+                    .from("feedbacks")
+                    .select("*, users(full_name)")
+                    .order("created_at", { ascending: false });
 
-            if (data) {
-                const formatted = data.map((r: any) => ({
-                    id: r.id,
-                    userName: r.users?.full_name || 'Müşteri',
-                    company: 'Bireysel',
-                    generalStars: r.rating,
-                    rating_ana: r.rating_ana || r.rating,
-                    rating_corba: r.rating_corba || r.rating,
-                    rating_yan: r.rating_yan || r.rating,
-                    rating_tatli: r.rating_tatli || r.rating,
-                    note: r.note || '',
-                    date: new Date(r.created_at).toLocaleDateString()
-                }));
-                setRatings(formatted);
-            }
-            setLoadingRatings(false);
-        };
-        fetchRatings();
-    }, []);
+                if (data) {
+                    const formatted = data.map((r: any) => ({
+                        id: r.id,
+                        userName: r.users?.full_name || 'Müşteri',
+                        company: 'Bireysel',
+                        generalStars: r.rating,
+                        rating_ana: r.rating_ana || r.rating,
+                        rating_corba: r.rating_corba || r.rating,
+                        rating_yan: r.rating_yan || r.rating,
+                        rating_tatli: r.rating_tatli || r.rating,
+                        note: r.note || '',
+                        date: new Date(r.created_at).toLocaleDateString()
+                    }));
+                    setRatings(formatted);
+                }
+                setLoadingRatings(false);
+            };
+            fetchRatings();
+        }, [])
+    );
 
     if (view === "SALES")
         return <DailySalesView onBack={() => setView("MAIN")} orders={orders} colors={colors} styles={styles} />;
@@ -90,7 +92,7 @@ export default function AdminReports() {
                     <ReportMenuItem
                         icon="star"
                         label="Müşteri Geri Bildirimleri"
-                        subtitle="Gerçek zamanlı puanlar ve yorumlar."
+                        subtitle={`Ortalama: ${ratings.length > 0 ? (ratings.reduce((acc, r) => acc + (r.generalStars || 0), 0) / ratings.length).toFixed(1) : "5.0"} | ${ratings.length} Yorum`}
                         onClick={() => setView("FEEDBACK")}
                         colors={colors}
                         styles={styles}
@@ -133,9 +135,10 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
     const insets = useSafeAreaInsets();
 
     const stats = useMemo(() => {
-        const revenue = orders.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
-        const count = orders.length;
-        return { revenue, count, orders };
+        const validOrders = orders.filter((o: any) => !["CANCELLED", "İptal"].includes(o.status));
+        const revenue = validOrders.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
+        const count = validOrders.length;
+        return { revenue, count, orders: validOrders };
     }, [orders]);
 
     return (
@@ -229,10 +232,10 @@ const PerformanceDashboard = ({ onBack, ratings, colors, styles }: any) => {
                 </View>
 
                 <View style={styles.statsGrid}>
-                    <StatCard icon="restaurant" label="ANA YEMEK" score={stats.ana} color="#f97316" trend="+0.2" styles={styles} />
-                    <StatCard icon="soup-kitchen" label="ÇORBALAR" score={stats.corba} color="#3b82f6" trend="-0.1" styles={styles} />
-                    <StatCard icon="flatware" label="YAN YEMEK" score={stats.yan} color="#10b981" trend="+0.5" styles={styles} />
-                    <StatCard icon="cake" label="TATLI" score={stats.tatli} color="#ec4899" trend="0.0" styles={styles} />
+                    <StatCard icon="restaurant" label="ANA YEMEK" score={stats.ana} color="#f97316" trend="" styles={styles} />
+                    <StatCard icon="soup-kitchen" label="ÇORBALAR" score={stats.corba} color="#3b82f6" trend="" styles={styles} />
+                    <StatCard icon="flatware" label="YAN YEMEK" score={stats.yan} color="#10b981" trend="" styles={styles} />
+                    <StatCard icon="cake" label="TATLI" score={stats.tatli} color="#ec4899" trend="" styles={styles} />
                 </View>
             </ScrollView>
         </View>
@@ -251,7 +254,7 @@ const StatCard = ({ icon, label, score, color, trend, styles }: any) => (
                 <Text style={styles.smallStatScoreMax}> / 5</Text>
             </View>
             <Text style={[styles.smallStatTrend, { color: parseFloat(trend) >= 0 ? '#10b981' : '#ef4444' }]}>
-                {trend}
+                {trend ? (parseFloat(trend) >= 0 ? `+${trend}` : trend) : ""}
             </Text>
         </View>
     </View>

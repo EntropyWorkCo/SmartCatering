@@ -57,7 +57,7 @@ export default function MenuScreen() {
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
   const [packageSelections, setPackageSelections] = useState<{ category: string, item_id: string, item_name: string }[]>([]);
 
-  const activeCategories = ["TÜMÜ", "İÇECEKLER", "EKSTRALAR"];
+  const activeCategories = ["TÜMÜ", "TEK ÇEŞİTLER", "İÇECEKLER", "EKSTRALAR"];
 
   let filteredMenu: any[] = [];
 
@@ -66,10 +66,13 @@ export default function MenuScreen() {
 
   if (selectedCategory === "TÜMÜ") {
     filteredMenu = [
+      ...systemPrices.filter(p => p.category === "TEK ÇEŞİT"),
       ...menu.filter(m => m.category === "İÇECEK"),
       ...systemPrices.filter(p => p.category === "İÇECEK"),
       ...systemPrices.filter(p => p.category === "EKSTRA")
     ];
+  } else if (selectedCategory === "TEK ÇEŞİTLER") {
+    filteredMenu = systemPrices.filter(p => p.category === "TEK ÇEŞİT");
   } else if (selectedCategory === "İÇECEKLER") {
     filteredMenu = [
       ...menu.filter(m => m.category === "İÇECEK"),
@@ -224,13 +227,15 @@ export default function MenuScreen() {
                     )}
                   </View>
                   <View style={styles.foodDetails}>
-                    <Text style={styles.foodName}>{item.name}</Text>
-                    <Text style={styles.foodCategory}>{item.category}</Text>
-                    <View style={styles.foodBottomRow}>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
+                      <Text style={styles.foodCategory}>{item.category}</Text>
+                    </View>
+                    <View style={styles.foodBottomColumn}>
                       <Text style={styles.foodPrice}>₺{item.price}</Text>
                       {item.status === 'sold_out' ? (
-                        <View style={{ backgroundColor: colors.danger, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                          <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>TÜKENDİ</Text>
+                        <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
+                          <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
                         </View>
                       ) : (
                         <TouchableOpacity style={styles.addBtn} onPress={() => handleAddToCart(item)}>
@@ -271,13 +276,15 @@ export default function MenuScreen() {
                   )}
                 </View>
                 <View style={styles.foodDetails}>
-                  <Text style={styles.foodName}>{item.name}</Text>
-                  <Text style={styles.foodCategory}>{item.category === 'İÇECEK' || item.category === 'EKSTRA' ? 'Tabela Ürünü' : item.category}</Text>
-                  <View style={styles.foodBottomRow}>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
+                    <Text style={styles.foodCategory}>{item.category === 'İÇECEK' || item.category === 'EKSTRA' ? 'Tabela Ürünü' : item.category}</Text>
+                  </View>
+                  <View style={styles.foodBottomColumn}>
                     <Text style={styles.foodPrice}>₺{item.price}</Text>
                     {item.status === 'sold_out' ? (
-                      <View style={{ backgroundColor: colors.danger, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                        <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>TÜKENDİ</Text>
+                      <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
+                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
                       </View>
                     ) : (
                       <TouchableOpacity style={styles.addBtn} onPress={() => handleAddToCart(item)}>
@@ -449,13 +456,15 @@ const getStyles = (colors: any) => StyleSheet.create({
   foodDetails: {
     flex: 1,
     marginLeft: 16,
+    flexDirection: 'row',
     justifyContent: "space-between",
-    paddingVertical: 4,
+    alignItems: "center",
   },
   foodName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "bold",
     color: colors.text,
+    lineHeight: 20,
   },
   foodCategory: {
     fontSize: 11,
@@ -463,11 +472,10 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontWeight: "600",
     marginTop: 4,
   },
-  foodBottomRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 12,
+  foodBottomColumn: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    minWidth: 60,
   },
   foodPrice: {
     fontSize: 18,

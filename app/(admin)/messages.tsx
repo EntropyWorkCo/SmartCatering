@@ -30,19 +30,25 @@ export default function AdminMessages() {
         const fetchMessages = async () => {
             const { data, error } = await supabase
                 .from("messages")
-                .select("*, users(full_name)")
+                .select("*, users(full_name, companies(company_name))")
                 .order("created_at", { ascending: false });
 
             if (data) {
-                const formatted = data.map((m: any) => ({
-                    id: m.id,
-                    userName: m.users?.full_name || "Müşteri",
-                    orderNumber: "---", // Could join with orders if needed
-                    date: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    note: m.content,
-                    itemsCount: 0,
-                    is_read: m.is_read
-                }));
+                const formatted = data.map((m: any) => {
+                    const user = m.users?.[0] || m.users;
+                    const company = user?.companies?.[0] || user?.companies;
+
+                    return {
+                        id: m.id,
+                        userName: user?.full_name || "Müşteri",
+                        companyName: company?.company_name || null,
+                        orderNumber: "---",
+                        date: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        note: m.content,
+                        itemsCount: 0,
+                        is_read: m.is_read
+                    };
+                });
                 setMessages(formatted);
             }
             setLoading(false);
@@ -99,6 +105,11 @@ export default function AdminMessages() {
                                     </View>
                                     <View>
                                         <Text style={styles.userName}>{order.userName}</Text>
+                                        {order.companyName && (
+                                            <Text style={{ fontSize: 10, color: colors.primary, fontWeight: 'bold' }}>
+                                                {order.companyName}
+                                            </Text>
+                                        )}
                                         <Text style={styles.orderLabel}>Bildirim Müşteriden Geldi</Text>
                                     </View>
                                 </View>

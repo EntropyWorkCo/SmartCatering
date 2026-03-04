@@ -39,10 +39,9 @@ export const adisyonService = {
 
   async getUserOrders(userId: string) {
     try {
-      // Artık RLS izin sorunu çözüldüğüne göre, siparişleri kalemleri ve yemek isimleriyle çekebiliriz
       const { data, error } = await supabase
         .from("adisyon")
-        .select("*, adisyon_items(*, menu_items(name))")
+        .select("*, adisyon_items(*, menu_items(name)), users(*, companies(*))")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
@@ -53,6 +52,35 @@ export const adisyonService = {
       return data || [];
     } catch (error: any) {
       console.error("getUserOrders error:", error);
+      throw error;
+    }
+  },
+
+  async getAllOrders() {
+    try {
+      const { data, error } = await supabase
+        .from("adisyon")
+        .select("*, adisyon_items(*, menu_items(name)), users(*, companies(*))")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("getAllOrders Error:", error);
+        throw error;
+      }
+
+      return (data || []).map((order: any) => {
+        const user = order.users?.[0] || order.users;
+        const company = user?.companies?.[0] || user?.companies;
+
+        return {
+          ...order,
+          userName: user?.full_name || 'Müşteri',
+          companyName: company?.company_name || null,
+          isCorporate: !!company
+        };
+      });
+    } catch (error: any) {
+      console.error("getAllOrders error:", error);
       throw error;
     }
   },

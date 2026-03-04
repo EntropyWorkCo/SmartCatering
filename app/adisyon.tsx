@@ -25,7 +25,7 @@ export default function AdisyonScreen() {
     }, [orders]);
 
     const totalDebt = useMemo(() => {
-        return pendingOrders.reduce((acc, curr) => acc + (curr.total_price || curr.total || 0), 0);
+        return pendingOrders.reduce((acc, curr) => acc + (curr.total_amount || 0), 0);
     }, [pendingOrders]);
 
     if (loading) {
@@ -85,7 +85,7 @@ export default function AdisyonScreen() {
 
                             <View style={styles.orderFooter}>
                                 <Text style={styles.orderTotalLabel}>Tutar</Text>
-                                <Text style={styles.orderTotalValue}>₺{order.total_price || order.total}</Text>
+                                <Text style={styles.orderTotalValue}>₺{order.total_amount || 0}</Text>
                             </View>
                         </View>
                     ))

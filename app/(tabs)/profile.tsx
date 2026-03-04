@@ -1,4 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -38,11 +39,23 @@ export default function ProfileScreen() {
 
     // Initialize state once profile is loaded
     React.useEffect(() => {
-        if (profile) {
-            setFullName(profile.full_name || "");
-            setPhotoUrl(profile.avatar_url || null);
-        }
+        const init = async () => {
+            if (profile) {
+                setFullName(profile.full_name || "");
+                setPhotoUrl(profile.avatar_url || null);
+            }
+            const storedVal = await AsyncStorage.getItem("notifications_enabled");
+            if (storedVal !== null) {
+                setNotificationsEnabled(storedVal === "true");
+            }
+        };
+        init();
     }, [profile, user]);
+
+    const handleToggleNotifications = async (val: boolean) => {
+        setNotificationsEnabled(val);
+        await AsyncStorage.setItem("notifications_enabled", val.toString());
+    };
 
     const handlePickImage = async () => {
         let result = await ImagePicker.launchImageLibraryAsync({
@@ -157,12 +170,24 @@ export default function ProfileScreen() {
                         <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
                     </TouchableOpacity>
 
+                    <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/rating")}>
+                        <MaterialIcons name="star-outline" size={24} color={colors.text} />
+                        <Text style={styles.linkText}>Yemekleri Değerlendir</Text>
+                        <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/support")}>
+                        <MaterialIcons name="support-agent" size={24} color={colors.text} />
+                        <Text style={styles.linkText}>Mutfakla İletişime Geç (İstek/Öneri)</Text>
+                        <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
+                    </TouchableOpacity>
+
                     <View style={styles.linkItem}>
                         <MaterialIcons name="notifications-none" size={24} color={colors.text} />
                         <Text style={styles.linkText}>Bildirimler</Text>
                         <Switch
                             value={notificationsEnabled}
-                            onValueChange={setNotificationsEnabled}
+                            onValueChange={handleToggleNotifications}
                             trackColor={{ false: colors.surfaceBorder, true: colors.primary }}
                             thumbColor="#fff"
                         />

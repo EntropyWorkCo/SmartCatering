@@ -3,8 +3,8 @@ import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useState } from "react";
 import {
     ScrollView,
     StyleSheet,
@@ -34,33 +34,52 @@ export default function AdminCustomers() {
     const colors = Colors[theme];
     const styles = getStyles(colors);
 
-    useEffect(() => {
-        const fetchCustomers = async () => {
-            try {
-                // Fetch users
-                const { data, error } = await supabase.from('users').select('*');
-                if (error) {
-                    console.error("Müşteriler yüklenirken hata:", error);
-                    return;
-                }
+    useFocusEffect(
+        React.useCallback(() => {
+            const fetchCustomers = async () => {
+                try {
+                    // Fetch users
+                    const { data: usersData, error: usersError } = await supabase.from('users').select('*');
+                    if (usersError) {
+                        console.error("Müşteriler yüklenirken hata:", usersError);
+                        return;
+                    }
 
-                if (data) {
-                    const formattedUsers: User[] = data.map((profile: any) => ({
-                        id: profile.id,
-                        name: profile.full_name || 'İsimsiz Müşteri',
-                        phone: profile.phone || 'Telefon Yok',
-                        company: profile.company_name || 'Bireysel Üyelik',
-                        balance: 0 // Mock balance until adisyon is fully synced to users
-                    }));
-                    setCustomers(formattedUsers);
-                }
-            } catch (err) {
-                console.error("Veri çekme hatası:", err);
-            }
-        };
+                    // Fetch adisyon (orders) to calculate balance
+                    const { data: ordersData, error: ordersError } = await supabase.from('adisyon').select('*');
+                    if (ordersError) {
+                        console.error("Adisyonlar yüklenirken hata:", ordersError);
+                    }
 
-        fetchCustomers();
-    }, []);
+                    if (usersData) {
+                        const formattedUsers: User[] = usersData.map((profile: any) => {
+                            // Calculate balance
+                            let balance = 0;
+                            if (ordersData) {
+                                const userOrders = ordersData.filter((o: any) =>
+                                    o.user_id === profile.id && !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)
+                                );
+                                balance = userOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0);
+                            }
+
+                            return {
+                                id: profile.id,
+                                name: profile.full_name || 'İsimsiz Müşteri',
+                                phone: profile.phone || 'Telefon Yok',
+                                company: profile.company_name || 'Bireysel Üyelik',
+                                balance: balance
+                            };
+                        });
+                        setCustomers(formattedUsers);
+                    }
+                } catch (err) {
+                    console.error("Veri çekme hatası:", err);
+                }
+            };
+
+            fetchCustomers();
+        }, [])
+    );
 
     const filteredCustomers = customers.filter(
         (c) =>

@@ -60,9 +60,9 @@ export default function PastOrdersScreen() {
                                 <View style={styles.orderHeader}>
                                     <View style={styles.orderTitleBox}>
                                         <MaterialIcons
-                                            name={isCompleted ? "check-circle" : "access-time"}
+                                            name="receipt-long"
                                             size={20}
-                                            color={isCompleted ? colors.primary : colors.info}
+                                            color={colors.primary}
                                         />
                                         <Text style={styles.orderNumber}>
                                             Sipariş #{order.order_number || String(order.id).substring(0, 6).toUpperCase()}
@@ -74,22 +74,24 @@ export default function PastOrdersScreen() {
                                 </View>
 
                                 <View style={styles.orderItems}>
-                                    {/* Fallback to generic text if items array is not parsed properly */}
-                                    <Text style={styles.orderItemText} numberOfLines={2}>
-                                        Satın alım detaylarını admin panelinden veya restorandan öğrenebilirsiniz.
-                                        Not: {order.note || 'Belirtilmedi'}
-                                    </Text>
+                                    {order.adisyon_items && order.adisyon_items.length > 0 ? (
+                                        order.adisyon_items.map((item: any) => (
+                                            <Text key={item.id} style={styles.orderItemText}>
+                                                {item.quantity}x {item.menu_items?.name || 'Yemek'} - ₺{item.line_total}
+                                            </Text>
+                                        ))
+                                    ) : (
+                                        <Text style={styles.orderItemText} numberOfLines={2}>
+                                            Satın alım detaylarını restorandan öğrenebilirsiniz.
+                                        </Text>
+                                    )}
+                                    {order.note && <Text style={[styles.orderItemText, { marginTop: 8, fontStyle: 'italic' }]}>Not: {order.note}</Text>}
                                 </View>
 
                                 <View style={styles.orderFooter}>
-                                    <View style={[styles.statusBadge, { backgroundColor: isCompleted ? colors.cardHighlight : colors.infoBg }]}>
-                                        <Text style={[styles.statusText, { color: isCompleted ? colors.primary : colors.info }]}>
-                                            {isCompleted ? "TAMAMLANDI" : "HAZIRLANIYOR / BEKLEYEN"}
-                                        </Text>
-                                    </View>
                                     <View style={styles.totalBox}>
-                                        <Text style={styles.orderTotalLabel}>Tutar</Text>
-                                        <Text style={styles.orderTotalValue}>₺{order.total_price || order.total}</Text>
+                                        <Text style={styles.orderTotalLabel}>Toplam Tutar</Text>
+                                        <Text style={styles.orderTotalValue}>₺{order.total_amount || 0}</Text>
                                     </View>
                                 </View>
                             </View>

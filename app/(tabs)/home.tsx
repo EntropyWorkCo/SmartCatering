@@ -1,7 +1,8 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useMemo, useRef } from "react";
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/Colors";
@@ -24,9 +25,36 @@ export default function HomeScreen() {
   const { menu } = useMenu(true);
   const cartItems = useCartStore((state) => state.items);
 
+  const hasAlertedMenuRef = useRef(false);
+
   const dailyMenu = useMemo(() => {
     return menu.filter(m => ["ÇORBA", "ANA YEMEK", "YARDIMCI"].includes(m.category));
   }, [menu]);
+
+  useEffect(() => {
+    const checkNotification = async () => {
+      if (dailyMenu.length > 0 && !hasAlertedMenuRef.current) {
+        // 1. Kullanıcı bildirimleri kapatmış mı?
+        const isEnabled = await AsyncStorage.getItem("notifications_enabled");
+        if (isEnabled === "false") return;
+
+        // 2. Bu menü için zaten bildirim gösterildi mi? (Sadece yeni menü uyarısı)
+        const menuIds = dailyMenu.map(m => m.id).sort().join(",");
+        const lastNotifiedMenu = await AsyncStorage.getItem("last_notified_menu");
+
+        if (lastNotifiedMenu !== menuIds) {
+          Alert.alert(
+            "Günün Menüsü Hazır! 🍲",
+            "Bugünün taptaze sıcak yemekleri yayınlandı. Hemen inceleyip siparişini verebilirsin!",
+            [{ text: "Tamam", style: "default" }]
+          );
+          await AsyncStorage.setItem("last_notified_menu", menuIds);
+        }
+        hasAlertedMenuRef.current = true;
+      }
+    };
+    checkNotification();
+  }, [dailyMenu]);
 
   const handleAddToCart = (item: any) => {
     useCartStore.getState().addItem({
@@ -44,8 +72,10 @@ export default function HomeScreen() {
 
   const currentDebt = useMemo(() => {
     if (!orders) return 0;
-    const pendingOrders = orders.filter((o) => o.status === "PENDING" || o.status === "Bekliyor");
-    return pendingOrders.reduce((acc, curr) => acc + (curr.total_price || curr.total || 0), 0);
+    // PENDING, Bekliyor ve Hazırlanıyor gibi onaysız durumlardaki borçları kapsar.
+    // Admin dashboard üzerinden "Tahsil Et" denildiğinde status COMPLETED veya PAID olur, onlar borçtan düşer.
+    const activeOrders = orders.filter((o) => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status));
+    return activeOrders.reduce((acc, curr) => acc + (curr.total_amount || 0), 0);
   }, [orders]);
 
   // Last order based on date
@@ -117,42 +147,9 @@ export default function HomeScreen() {
             icon="restaurant-menu" title="SİPARİŞ VER" subtitle="Hızlı & Taze"
             bgColor="#10b981" onPress={() => router.push("/order-selection")}
           />
-          <ActionCard
-            icon="menu-book" title="MENÜYÜ GÖR" subtitle="Günlük Seçimler"
-            bgColor="#f59e0b" onPress={() => router.push("/(tabs)/menu")}
-          />
-          <ActionCard
-            icon="history" title="GEÇMİŞİM" subtitle="Tüm Siparişler"
-            bgColor="#3b82f6" onPress={() => router.push("/(tabs)/past-orders")}
-          />
-          <ActionCard
-            icon="shopping-cart" title="SEPETİM" subtitle={`${cartItemCount} Ürün Var`}
-            bgColor={colors.primary} onPress={() => router.push("/(tabs)/cart")}
-          />
         </View>
 
-        {/* Last Order Highlight */}
-        {lastOrder && (
-          <View style={styles.lastOrderSection}>
-            <Text style={styles.sectionTitle}>SON SİPARİŞİNİZ</Text>
-            <TouchableOpacity
-              style={styles.lastOrderCard}
-              activeOpacity={0.8}
-              onPress={() => router.push("/(tabs)/past-orders")}
-            >
-              <View style={styles.lastOrderIconBox}>
-                <MaterialIcons name="receipt-long" size={28} color={colors.primary} />
-              </View>
-              <View style={styles.lastOrderInfo}>
-                <Text style={styles.lastOrderName} numberOfLines={1}>Sipariş #{lastOrder.order_number || lastOrder.id?.substring(0, 6)}</Text>
-                <Text style={styles.lastOrderDate}>
-                  {new Date(lastOrder.created_at || lastOrder.date).toLocaleDateString('tr-TR')} • ₺{lastOrder.total_price || lastOrder.total}
-                </Text>
-              </View>
-              <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Removed Last Order Highlight based on user request */}
 
         {/* Günün Menüsü (Menu of the Day) */}
         {dailyMenu.length > 0 && (
@@ -176,13 +173,15 @@ export default function HomeScreen() {
                     )}
                   </View>
                   <View style={styles.foodDetails}>
-                    <Text style={styles.foodName}>{item.name}</Text>
-                    <Text style={styles.foodCategory}>{item.category}</Text>
-                    <View style={styles.foodBottomRow}>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
+                      <Text style={styles.foodCategory}>{item.category}</Text>
+                    </View>
+                    <View style={styles.foodBottomColumn}>
                       <Text style={styles.foodPrice}>₺{item.price}</Text>
                       {item.status === 'sold_out' ? (
-                        <View style={{ backgroundColor: colors.danger, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                          <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>TÜKENDİ</Text>
+                        <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
+                          <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
                         </View>
                       ) : (
                         <TouchableOpacity style={styles.addBtn} onPress={() => handleAddToCart(item)}>
@@ -197,26 +196,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Popular Section */}
-        <View style={styles.popularSection}>
-          <View style={styles.popularHeader}>
-            <Text style={styles.sectionTitle}>POPÜLER LEZZETLER</Text>
-            <TouchableOpacity onPress={() => router.push("/(tabs)/menu")}>
-              <Text style={styles.seeAllText}>TÜMÜ</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularScroll}>
-            {menu.slice(0, 5).map(item => (
-              <TouchableOpacity key={item.id} style={styles.popularCard} activeOpacity={0.9} onPress={() => router.push("/(tabs)/menu")}>
-                <View style={styles.popularImgBox}>
-                  <Image source={{ uri: item.image_url || `https://picsum.photos/seed/${item.id}food/200` }} style={styles.popularImg} />
-                </View>
-                <Text style={styles.popularItemName} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.popularItemPrice}>₺{item.price}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+        {/* Removed Popular Section based on user request */}
+
 
       </ScrollView>
     </SafeAreaView>
@@ -241,6 +222,7 @@ const ActionCard = ({ icon, title, subtitle, bgColor, onPress }: any) => {
 
 const stylesBase = StyleSheet.create({
   actionCard: {
+    flex: 1, // To make them take up half the width each nicely
     borderRadius: 24, padding: 16,
     borderWidth: 1,
     flexDirection: 'column',
@@ -374,10 +356,16 @@ const getStyles = (colors: any) => StyleSheet.create({
     alignItems: "center", justifyContent: "center", overflow: 'hidden',
   },
   foodImage: { width: "100%", height: "100%" },
-  foodDetails: { flex: 1, marginLeft: 16, justifyContent: "space-between", paddingVertical: 4 },
-  foodName: { fontSize: 16, fontWeight: "bold", color: colors.text },
+  foodDetails: {
+    flex: 1,
+    marginLeft: 16,
+    flexDirection: 'row',
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  foodName: { fontSize: 15, fontWeight: "bold", color: colors.text, lineHeight: 20 },
   foodCategory: { fontSize: 11, color: colors.muted, fontWeight: "600", marginTop: 4 },
-  foodBottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 12 },
+  foodBottomColumn: { alignItems: "flex-end", justifyContent: "center", minWidth: 60 },
   foodPrice: { fontSize: 18, fontWeight: "900", color: colors.primary },
   addBtn: {
     backgroundColor: colors.text, width: 40, height: 40, borderRadius: 12,

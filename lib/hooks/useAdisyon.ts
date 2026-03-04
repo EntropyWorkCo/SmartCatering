@@ -7,10 +7,15 @@ export const useAdisyon = (userId?: string) => {
   const [loading, setLoading] = useState(false);
 
   const fetchOrders = async () => {
-    if (!userId) return;
     setLoading(true);
     try {
-      const data = await adisyonService.getUserOrders(userId);
+      let data;
+      if (userId) {
+        data = await adisyonService.getUserOrders(userId);
+      } else {
+        // Admin mode - fetch all orders
+        data = await adisyonService.getAllOrders();
+      }
       setOrders(data || []);
     } catch (error: any) {
       if (error?.code === '42501') {
@@ -28,33 +33,32 @@ export const useAdisyon = (userId?: string) => {
     fetchOrders();
 
     // Realtime Güncelleme Dinleyicisi
+    let filterQuery: string | undefined = undefined;
     if (userId) {
-      const channel = supabase
-        .channel("custom-update-channel")
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "adisyon",
-            filter: `user_id=eq.${userId}`,
-          },
-          (payload) => {
-            setOrders((prev) =>
-              prev.map((order) =>
-                order.id === payload.new.id
-                  ? { ...order, status: payload.new.status }
-                  : order,
-              ),
-            );
-          },
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
+      filterQuery = `user_id=eq.${userId}`;
     }
+
+    const channelConf: any = {
+      event: "*",
+      schema: "public",
+      table: "adisyon"
+    };
+    if (filterQuery) channelConf.filter = filterQuery;
+
+    const channel = supabase
+      .channel(userId ? `custom-update-channel-${userId}` : "custom-update-channel-admin")
+      .on(
+        "postgres_changes",
+        channelConf,
+        () => {
+          fetchOrders();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [userId]);
 
   return {
