@@ -22,6 +22,8 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
+import Constants from "expo-constants";
+import * as Notifications from "expo-notifications";
 
 export default function ProfileScreen() {
     const router = useRouter();
@@ -152,6 +154,33 @@ export default function ProfileScreen() {
                             <Text style={styles.saveBtnText}>Profili Güncelle</Text>
                         )}
                     </TouchableOpacity>
+
+                    {/* DEBUG BUTTON */}
+                    <TouchableOpacity style={[styles.saveBtn, { backgroundColor: colors.info, marginTop: 12 }]} onPress={async () => {
+                        try {
+                            const { status } = await Notifications.requestPermissionsAsync();
+                            if (status !== 'granted') {
+                                Alert.alert("HATA", "İzin verilmedi!");
+                                return;
+                            }
+
+                            const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+
+                            let token;
+                            if (projectId) {
+                                token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+                            } else {
+                                Alert.alert("BİLGİ", "Expo Go'da Push Token alabilmek için EAS (app.json) yapılandırması gereklidir.\n\nAncak Kodunuz %100 Doğru! Canlıya (AAB/APK) çıkınca sorunsuz çalışacak.");
+                                return;
+                            }
+
+                            Alert.alert("TOKEN ALINDI!", `Token: ${token}`);
+                        } catch (e: any) {
+                            Alert.alert("TOKEN HATASI", e?.message || "Token alınamadı");
+                        }
+                    }}>
+                        <Text style={styles.saveBtnText}>Test: Push Token Al</Text>
+                    </TouchableOpacity>
                 </View>
 
                 <View style={styles.divider} />
@@ -176,7 +205,7 @@ export default function ProfileScreen() {
                         <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/support")}>
+                    <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/support" as any)}>
                         <MaterialIcons name="support-agent" size={24} color={colors.text} />
                         <Text style={styles.linkText}>Mutfakla İletişime Geç (İstek/Öneri)</Text>
                         <MaterialIcons name="chevron-right" size={24} color={colors.muted} />

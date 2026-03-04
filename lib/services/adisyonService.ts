@@ -1,3 +1,4 @@
+import * as Notifications from 'expo-notifications';
 import { supabase } from "../supabase";
 
 export const adisyonService = {
@@ -34,6 +35,25 @@ export const adisyonService = {
       console.error("Adisyon_Items Insert Error:", itemsError);
       throw itemsError;
     }
+
+    // Yemeği Değerlendir Local Notification (10 saniye test süresi)
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Yemeğiniz nasıldı? 🍽️",
+          body: "Siparişinizi afiyetle yediğinizi umuyoruz! Menüyü ve yemekleri değerlendirmek ister misiniz?",
+          data: { url: "/rating" },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 15 * 60, // 15 dakika sonra tetiklenir
+          repeats: false
+        },
+      });
+    } catch (e) {
+      console.log("Local notification schedule error:", e);
+    }
+
     return adisyon;
   },
 

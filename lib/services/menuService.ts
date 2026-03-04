@@ -1,5 +1,6 @@
 import { Buffer } from "buffer";
 import { supabase } from "../supabase";
+import { notificationService } from "./notificationService";
 
 export const menuService = {
   async getActiveMenu() {
@@ -75,6 +76,20 @@ export const menuService = {
       .update({ status: 'active', is_active: true })
       .eq("status", "draft");
     if (error) throw error;
+
+    try {
+      const tokens = await notificationService.getPushTokens();
+      if (tokens && tokens.length > 0) {
+        await notificationService.sendPushNotification(
+          tokens,
+          "Yeni Menü Yayında! 🥘",
+          "Bugünün lezzetli menüsü hazır, hemen siparişinizi verin!",
+          { url: "/(tabs)/menu" }
+        );
+      }
+    } catch (e) {
+      console.log("Menü yayınlama bildirimi gönderilirken hata oluştu:", e);
+    }
   },
 
   async updateMenuItem(id: string, data: { name: string; price: number; category: string }) {

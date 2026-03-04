@@ -5,13 +5,30 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
+import Constants from "expo-constants";
+import * as Device from "expo-device";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import * as Notifications from "expo-notifications";
+import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
+import { Platform } from "react-native";
 import "react-native-reanimated";
 
+import { useAuth } from "@/lib/hooks/useAuth";
+import { userService } from "@/lib/services/userService";
+
 export { ErrorBoundary } from "expo-router";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 // initialRouteName kaldırıldı veya "welcome" yapıldı
 // unstable_settings iOS'ta kaydırma (swipe) ile welcome'a dönme sorununa yol açabileceği için kaldırıldı.
@@ -41,6 +58,75 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useResolvedTheme();
+  const { user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    async function setupNotifications() {
+      if (!Device.isDevice) return;
+
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') return;
+
+      if (Platform.OS === 'android') {
+        Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+        });
+      }
+
+      try {
+        const projectId =
+          Constants?.expoConfig?.extra?.eas?.projectId ??
+          Constants?.easConfig?.projectId;
+
+        let pushTokenString;
+
+        if (projectId) {
+          pushTokenString = (
+            await Notifications.getExpoPushTokenAsync({
+              projectId,
+            })
+          ).data;
+        } else {
+          console.log("Expo Go without EAS Config detected. Skipping push token fetch to prevent crash.");
+          // We don't throw an error here to prevent the app from freezing on startup
+          return;
+        }
+
+        console.log("Got push token:", pushTokenString);
+
+        if (user && pushTokenString) {
+          await userService.updatePushToken(user.id, pushTokenString);
+          console.log("Push token saved to Supabase for user:", user.id);
+        }
+      } catch (e) {
+        console.log("Error fetching push token:", e);
+      }
+    }
+
+    setupNotifications();
+  }, [user]);
+
+  useEffect(() => {
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      const url = response.notification.request.content.data?.url;
+      if (url && typeof url === 'string') {
+        router.push(url as any);
+      }
+    });
+
+    return () => {
+      responseListener.remove();
+    };
+  }, []);
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>

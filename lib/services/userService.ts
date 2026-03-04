@@ -81,4 +81,16 @@ export const userService = {
     if (error) return false;
     return data;
   },
+
+  async updatePushToken(userId: string, token: string) {
+    const { error } = await supabase
+      .from("users")
+      .update({ push_token: token })
+      .eq("id", userId);
+
+    if (error) {
+      console.error("Error updating push token:", error);
+      throw error;
+    }
+  }
 };
