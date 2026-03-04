@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
+import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 
 export default function CorporateInfoScreen() {
@@ -19,27 +20,37 @@ export default function CorporateInfoScreen() {
     const { profile, loading } = useProfile(user?.id);
 
     const [companyName, setCompanyName] = useState("");
-    const [taxOffice, setTaxOffice] = useState("");
     const [taxNumber, setTaxNumber] = useState("");
+    const [companyPhone, setCompanyPhone] = useState("");
     const [invoiceAddress, setInvoiceAddress] = useState("");
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         if (profile?.corporate_info) {
             setCompanyName(profile.corporate_info.companyName || "");
-            setTaxOffice(profile.corporate_info.taxOffice || "");
             setTaxNumber(profile.corporate_info.taxNumber || "");
+            setCompanyPhone(profile.corporate_info.companyPhone || "");
             setInvoiceAddress(profile.corporate_info.invoiceAddress || "");
         }
     }, [profile]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
+        if (!user?.id) return;
         setSaving(true);
-        // Simulating save operation to Supabase
-        setTimeout(() => {
+        try {
+            await userService.updateCorporateInfo(user.id, {
+                companyName,
+                taxNumber,
+                companyPhone,
+                invoiceAddress
+            });
+            Alert.alert("Başarılı", "Kurumsal fatura bilgileriniz güncellendi.");
+        } catch (error: any) {
+            console.error("Firma bilgileri kaydedilirken hata:", error);
+            Alert.alert("Hata", error.message || "Bilgiler kaydedilirken bir hata oluştu.");
+        } finally {
             setSaving(false);
-            Alert.alert("Başarılı", "Kurumsal fatura bilgileriniz kaydedildi.");
-        }, 1000);
+        }
     };
 
     if (loading) {
@@ -80,19 +91,7 @@ export default function CorporateInfoScreen() {
                     </View>
                 </View>
 
-                <View style={styles.formGroup}>
-                    <Text style={styles.label}>Vergi Dairesi</Text>
-                    <View style={styles.inputContainer}>
-                        <MaterialIcons name="account-balance" size={20} color={colors.muted} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Vergi Dairesi"
-                            placeholderTextColor={colors.muted}
-                            value={taxOffice}
-                            onChangeText={setTaxOffice}
-                        />
-                    </View>
-                </View>
+
 
                 <View style={styles.formGroup}>
                     <Text style={styles.label}>Vergi Numarası / TCKN</Text>
@@ -106,6 +105,21 @@ export default function CorporateInfoScreen() {
                             onChangeText={setTaxNumber}
                             keyboardType="number-pad"
                             maxLength={11}
+                        />
+                    </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                    <Text style={styles.label}>Firma Telefon Numarası</Text>
+                    <View style={styles.inputContainer}>
+                        <MaterialIcons name="phone" size={20} color={colors.muted} />
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Firma Telefonu"
+                            placeholderTextColor={colors.muted}
+                            value={companyPhone}
+                            onChangeText={setCompanyPhone}
+                            keyboardType="phone-pad"
                         />
                     </View>
                 </View>

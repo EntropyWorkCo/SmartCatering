@@ -32,7 +32,6 @@ export default function ProfileScreen() {
     const { profile, loading } = useProfile(user?.id);
 
     const [fullName, setFullName] = useState("");
-    const [email, setEmail] = useState("");
     const [photoUrl, setPhotoUrl] = useState<string | null>(null);
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -41,14 +40,13 @@ export default function ProfileScreen() {
     React.useEffect(() => {
         if (profile) {
             setFullName(profile.full_name || "");
-            setEmail(profile.email || user?.email || "");
             setPhotoUrl(profile.avatar_url || null);
         }
     }, [profile, user]);
 
     const handlePickImage = async () => {
         let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ['images'],
             allowsEditing: true,
             aspect: [1, 1],
             quality: 0.5,
@@ -108,6 +106,18 @@ export default function ProfileScreen() {
 
                 {/* User Info Form */}
                 <View style={styles.formSection}>
+                    <View style={styles.roleBadgeContainer}>
+                        <View style={styles.roleBadge}>
+                            <MaterialIcons
+                                name={profile?.is_company ? 'business' : 'person'}
+                                size={20}
+                                color={colors.primary}
+                            />
+                            <Text style={styles.roleText}>
+                                {profile?.is_company ? 'Kurumsal Üye' : 'Bireysel Üye'}
+                            </Text>
+                        </View>
+                    </View>
                     <Text style={styles.label}>Ad Soyad</Text>
                     <View style={styles.inputContainer}>
                         <MaterialIcons name="person" size={20} color={colors.muted} />
@@ -120,20 +130,7 @@ export default function ProfileScreen() {
                         />
                     </View>
 
-                    <Text style={styles.label}>E-posta</Text>
-                    <View style={styles.inputContainer}>
-                        <MaterialIcons name="email" size={20} color={colors.muted} />
-                        <TextInput
-                            style={styles.input}
-                            value={email}
-                            onChangeText={setEmail}
-                            placeholder="E-posta"
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            placeholderTextColor={colors.muted}
-                            editable={false} // Email typically not editable here without strict auth flow
-                        />
-                    </View>
+
 
                     <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
                         {saving ? (
@@ -204,6 +201,15 @@ const getStyles = (colors: any) => StyleSheet.create({
 
     formSection: { gap: 16 },
     label: { fontSize: 12, fontWeight: 'bold', color: colors.muted, marginBottom: -8, marginLeft: 4 },
+    roleBadgeContainer: {
+        alignItems: 'center', marginBottom: 8, marginTop: -8
+    },
+    roleBadge: {
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+        backgroundColor: colors.surface, paddingHorizontal: 16, paddingVertical: 8,
+        borderRadius: 20, borderWidth: 1, borderColor: colors.primary + '40'
+    },
+    roleText: { color: colors.primary, fontWeight: 'bold', fontSize: 14 },
     inputContainer: {
         flexDirection: 'row', alignItems: 'center', gap: 12,
         backgroundColor: colors.surface, borderRadius: 16,

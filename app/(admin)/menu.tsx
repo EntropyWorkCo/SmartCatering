@@ -130,7 +130,7 @@ export default function AdminMenuAdd() {
 
     const handlePickImage = async () => {
         let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ['images'],
             allowsEditing: true,
             aspect: [4, 3],
             quality: 0.5,
@@ -293,7 +293,7 @@ export default function AdminMenuAdd() {
                                 label="YEMEK ADI"
                                 icon="restaurant"
                                 value={newItem.name}
-                                onChangeText={(t) => setNewItem({ ...newItem, name: t })}
+                                onChangeText={(t: string) => setNewItem({ ...newItem, name: t })}
                                 colors={colors}
                                 styles={styles}
                             />
@@ -334,7 +334,7 @@ export default function AdminMenuAdd() {
                                 icon="payments"
                                 keyboardType="numeric"
                                 value={newItem.price}
-                                onChangeText={(t) => setNewItem({ ...newItem, price: t })}
+                                onChangeText={(t: string) => setNewItem({ ...newItem, price: t })}
                                 colors={colors}
                                 styles={styles}
                             />
@@ -390,7 +390,7 @@ export default function AdminMenuAdd() {
                                 label={mainTab === 'SABIT_LISTE' ? "BAŞLIK İSMİ" : "ÖĞE ADI"}
                                 icon="edit"
                                 value={editingItem.name}
-                                onChangeText={(t) => setEditingItem(prev => prev ? { ...prev, name: t } : null)}
+                                onChangeText={(t: string) => setEditingItem(prev => prev ? { ...prev, name: t } : null)}
                                 colors={colors}
                                 styles={styles}
                             />
@@ -418,7 +418,7 @@ export default function AdminMenuAdd() {
                                 icon="payments"
                                 keyboardType="numeric"
                                 value={editingItem.price}
-                                onChangeText={(t) => setEditingItem(prev => prev ? { ...prev, price: t } : null)}
+                                onChangeText={(t: string) => setEditingItem(prev => prev ? { ...prev, price: t } : null)}
                                 colors={colors}
                                 styles={styles}
                             />

@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
+import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 
 export default function AccountInfoScreen() {
@@ -17,29 +18,33 @@ export default function AccountInfoScreen() {
 
     const { user } = useAuth();
     const { profile, loading } = useProfile(user?.id);
-
+    const [fullName, setFullName] = useState("");
     const [phone, setPhone] = useState("");
-    const [birthDate, setBirthDate] = useState("");
-    const [gender, setGender] = useState("");
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         if (profile) {
+            setFullName(profile.full_name || "");
             setPhone(profile.phone || "");
-            setBirthDate(profile.birth_date || "");
-            setGender(profile.gender || "");
         }
     }, [profile]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
+        if (!user?.id) return;
         setSaving(true);
-        // Simulating save operation
-        setTimeout(() => {
+        try {
+            await userService.updateProfile(user.id, {
+                fullName,
+                phone
+            });
+            Alert.alert("Başarılı", "Bilgileriniz başarıyla kaydedildi.");
+        } catch (error: any) {
+            console.error("Bilgiler güncellenirken hata:", error);
+            Alert.alert("Hata", error.message || "Bilgiler güncellenirken bir hata oluştu.");
+        } finally {
             setSaving(false);
-            Alert.alert("Başarılı", "Bilgileriniz kaydedildi.");
-        }, 1000);
+        }
     };
-
     if (loading) {
         return (
             <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -58,6 +63,34 @@ export default function AccountInfoScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+                <View style={styles.roleBadgeContainer}>
+                    <View style={styles.roleBadge}>
+                        <MaterialIcons
+                            name={profile?.is_company ? 'business' : 'person'}
+                            size={20}
+                            color={colors.primary}
+                        />
+                        <Text style={styles.roleText}>
+                            {profile?.is_company ? 'Kurumsal Üye' : 'Bireysel Üye'}
+                        </Text>
+                    </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                    <Text style={styles.label}>Ad Soyad</Text>
+                    <View style={styles.inputContainer}>
+                        <MaterialIcons name="person" size={20} color={colors.muted} />
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Ad Soyad"
+                            placeholderTextColor={colors.muted}
+                            value={fullName}
+                            onChangeText={setFullName}
+                        />
+                    </View>
+                </View>
+
                 <View style={styles.formGroup}>
                     <Text style={styles.label}>Telefon Numarası</Text>
                     <View style={styles.inputContainer}>
@@ -70,51 +103,6 @@ export default function AccountInfoScreen() {
                             onChangeText={setPhone}
                             keyboardType="phone-pad"
                         />
-                    </View>
-                </View>
-
-                <View style={styles.formGroup}>
-                    <Text style={styles.label}>Doğum Tarihi</Text>
-                    <View style={styles.inputContainer}>
-                        <MaterialIcons name="calendar-today" size={20} color={colors.muted} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="GG.AA.YYYY"
-                            placeholderTextColor={colors.muted}
-                            value={birthDate}
-                            onChangeText={setBirthDate}
-                        />
-                    </View>
-                </View>
-
-                <View style={styles.formGroup}>
-                    <Text style={styles.label}>Cinsiyet</Text>
-                    <View style={styles.genderRow}>
-                        <TouchableOpacity
-                            style={[styles.genderBtn, gender === "Erkek" && styles.genderBtnActive]}
-                            onPress={() => setGender("Erkek")}
-                            activeOpacity={0.8}
-                        >
-                            <MaterialIcons name="male" size={24} color={gender === "Erkek" ? "#fff" : colors.muted} />
-                            <Text style={[styles.genderBtnText, gender === "Erkek" && { color: "#fff" }]}>Erkek</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[styles.genderBtn, gender === "Kadın" && styles.genderBtnActive]}
-                            onPress={() => setGender("Kadın")}
-                            activeOpacity={0.8}
-                        >
-                            <MaterialIcons name="female" size={24} color={gender === "Kadın" ? "#fff" : colors.muted} />
-                            <Text style={[styles.genderBtnText, gender === "Kadın" && { color: "#fff" }]}>Kadın</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[styles.genderBtn, gender === "Belirtmek İstemiyorum" && styles.genderBtnActive]}
-                            onPress={() => setGender("Belirtmek İstemiyorum")}
-                            activeOpacity={0.8}
-                        >
-                            <Text style={[styles.genderBtnText, gender === "Belirtmek İstemiyorum" && { color: "#fff" }]}>Diğer</Text>
-                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -164,14 +152,15 @@ const getStyles = (colors: any) => StyleSheet.create({
     },
     input: { flex: 1, fontSize: 16, color: colors.text, height: '100%' },
 
-    genderRow: { flexDirection: 'row', gap: 12 },
-    genderBtn: {
-        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-        backgroundColor: colors.surface, borderRadius: 16, height: 56,
-        borderWidth: 1, borderColor: colors.surfaceBorder
+    roleBadgeContainer: {
+        alignItems: 'center', marginBottom: 8
     },
-    genderBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-    genderBtnText: { fontSize: 14, fontWeight: 'bold', color: colors.muted },
+    roleBadge: {
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+        backgroundColor: colors.surface, paddingHorizontal: 16, paddingVertical: 8,
+        borderRadius: 20, borderWidth: 1, borderColor: colors.primary + '40'
+    },
+    roleText: { color: colors.primary, fontWeight: 'bold', fontSize: 14 },
 
     saveBtn: {
         backgroundColor: colors.text,
