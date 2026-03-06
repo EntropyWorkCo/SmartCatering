@@ -7,9 +7,11 @@ import {
 } from "@react-navigation/native";
 import { useFonts } from "expo-font";
 // import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
+import { Platform } from "react-native";
 import "react-native-reanimated";
 
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -59,75 +61,38 @@ function RootLayoutNav() {
   const { user } = useAuth();
   const router = useRouter();
 
-  // Push notification kodları Expo Go ortamında (SDK 53+) hata verdiği için geçici olarak devre dışı bırakıldı.
-  /*
   useEffect(() => {
-    async function setupNotifications() {
-      if (!Device.isDevice) return;
+    // Android Expo Go SDK 53+ has issues with expo-notifications setup.
+    // We bypass it to prevent crashes, using our Alert fallback in notificationService instead.
+    const isAndroidExpoGo = Platform.OS === 'android' && Constants.appOwnership === 'expo';
+    if (isAndroidExpoGo) return;
 
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      if (finalStatus !== 'granted') return;
+    try {
+      const Notifications = require("expo-notifications");
 
-      if (Platform.OS === 'android') {
-        Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#FF231F7C',
-        });
-      }
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+          shouldShowBanner: true,
+        }),
+      });
 
-      try {
-        const projectId =
-          Constants?.expoConfig?.extra?.eas?.projectId ??
-          Constants?.easConfig?.projectId;
-
-        let pushTokenString;
-
-        if (projectId) {
-          pushTokenString = (
-            await Notifications.getExpoPushTokenAsync({
-              projectId,
-            })
-          ).data;
-        } else {
-          console.log("Expo Go without EAS Config detected. Skipping push token fetch to prevent crash.");
-          // We don't throw an error here to prevent the app from freezing on startup
-          return;
+      const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+        const url = response.notification.request.content.data?.url;
+        if (url && typeof url === 'string') {
+          router.push(url as any);
         }
+      });
 
-        console.log("Got push token:", pushTokenString);
-
-        if (user && pushTokenString) {
-          await userService.updatePushToken(user.id, pushTokenString);
-          console.log("Push token saved to Supabase for user:", user.id);
-        }
-      } catch (e) {
-        console.log("Error fetching push token:", e);
-      }
+      return () => {
+        responseListener.remove();
+      };
+    } catch (error) {
+      console.log("Notification listener setup failed (non-critical):", error);
     }
-
-    setupNotifications();
-  }, [user]);
-
-  useEffect(() => {
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-      const url = response.notification.request.content.data?.url;
-      if (url && typeof url === 'string') {
-        router.push(url as any);
-      }
-    });
-
-    return () => {
-      responseListener.remove();
-    };
   }, []);
-  */
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
