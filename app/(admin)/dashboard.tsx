@@ -167,7 +167,7 @@ export default function AdminDashboard() {
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Özet Dashboard</Text>
+          <Text style={styles.title}>Borçlar</Text>
         </View>
         <ThemeSwitcher />
       </View>
@@ -210,7 +210,7 @@ export default function AdminDashboard() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.totalCard}>
           <Text style={styles.totalLabel}>
-            TOPLAM BEKLEYEN BAKİYE
+            TOPLAM BEKLEYEN BORÇ
           </Text>
           <Text style={styles.totalAmount}>
             ₺{totalDebt.toLocaleString("tr-TR")}
@@ -241,7 +241,7 @@ export default function AdminDashboard() {
                   {account.displayName}
                 </Text>
                 <Text style={styles.accountBalance}>
-                  Açık Bakiye:{" "}
+                  Açık Borç:{" "}
                   <Text
                     style={{
                       color: account.total > 0 ? colors.text : colors.muted,
@@ -333,7 +333,7 @@ export default function AdminDashboard() {
               <View style={styles.invoiceDivider} />
 
               <View style={styles.invoiceTotalBox}>
-                <Text style={[styles.invoiceTotalLabel, { color: colors.text }]}>TOPLAM BAKİYE (KDV DAHİL)</Text>
+                <Text style={[styles.invoiceTotalLabel, { color: colors.text }]}>TOPLAM BORÇ (KDV DAHİL)</Text>
                 <Text style={[styles.invoiceTotalValue, { color: colors.text }]}>₺{previewAccount.total.toLocaleString("tr-TR")}</Text>
               </View>
 

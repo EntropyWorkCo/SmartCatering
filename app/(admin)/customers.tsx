@@ -28,8 +28,10 @@ interface User {
 export default function AdminCustomers() {
     const [customers, setCustomers] = useState<User[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
-    const insets = useSafeAreaInsets();
+    const [mainTab, setMainTab] = useState<"BIREYSEL" | "KURUMSAL">("KURUMSAL");
+    const [expandedCompanies, setExpandedCompanies] = useState<Record<string, boolean>>({});
 
+    const insets = useSafeAreaInsets();
     const theme = useResolvedTheme();
     const colors = Colors[theme];
     const styles = getStyles(colors);
@@ -51,8 +53,17 @@ export default function AdminCustomers() {
                         console.error("Adisyonlar yüklenirken hata:", ordersError);
                     }
 
+                    // Fetch companies to map corporate users
+                    const { data: companiesData, error: companiesError } = await supabase.from('companies').select('*');
+                    if (companiesError) {
+                        console.error("Şirketler yüklenirken hata:", companiesError);
+                    }
+
                     if (usersData) {
                         const formattedUsers: User[] = usersData.map((profile: any) => {
+                            // Find company if exists
+                            const userCompany = companiesData?.find((c: any) => c.user_id === profile.id);
+
                             // Calculate balance
                             let balance = 0;
                             if (ordersData) {
@@ -66,7 +77,7 @@ export default function AdminCustomers() {
                                 id: profile.id,
                                 name: profile.full_name || 'İsimsiz Müşteri',
                                 phone: profile.phone || 'Telefon Yok',
-                                company: profile.company_name || 'Bireysel Üyelik',
+                                company: userCompany ? userCompany.company_name : (profile.company_name || 'Bireysel Üyelik'),
                                 balance: balance
                             };
                         });
@@ -88,6 +99,61 @@ export default function AdminCustomers() {
             (c.company && c.company.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
+    const bireyselCustomers = filteredCustomers.filter(c => !c.company || c.company === 'Bireysel Üyelik');
+    const kurumsalCustomers = filteredCustomers.filter(c => c.company && c.company !== 'Bireysel Üyelik');
+
+    const groupedKurumsal = React.useMemo(() => {
+        const groups: Record<string, { companyName: string; totalDebt: number; customers: User[] }> = {};
+        for (const c of kurumsalCustomers) {
+            if (!c.company) continue;
+            if (!groups[c.company]) {
+                groups[c.company] = { companyName: c.company, totalDebt: 0, customers: [] };
+            }
+            groups[c.company].customers.push(c);
+            groups[c.company].totalDebt += (c.balance || 0);
+        }
+        return Object.values(groups).sort((a, b) => b.totalDebt - a.totalDebt);
+    }, [kurumsalCustomers]);
+
+    const toggleCompany = (companyName: string) => {
+        setExpandedCompanies(prev => ({
+            ...prev,
+            [companyName]: !prev[companyName]
+        }));
+    };
+
+    const renderCustomerCard = (customer: User, isNested: boolean = false) => (
+        <View key={customer.id} style={[styles.customerCard, isNested && styles.nestedCustomerCard]}>
+            <View style={styles.cardContent}>
+                <View style={[styles.avatar, isNested && styles.nestedAvatar]}>
+                    <Text style={{ fontSize: isNested ? 16 : 20, fontWeight: 'bold', color: colors.muted }}>
+                        {customer.name.charAt(0)}
+                    </Text>
+                </View>
+
+                <View style={styles.customerInfo}>
+                    <Text style={styles.customerName} numberOfLines={1}>
+                        {customer.name}
+                    </Text>
+                    <Text style={styles.customerPhone}>{customer.phone}</Text>
+                    {customer.company && customer.company !== "Bireysel Üyelik" && !isNested && (
+                        <View style={styles.companyTag}>
+                            <MaterialIcons name="verified" size={12} color={colors.primary} />
+                            <Text style={styles.companyText}>{customer.company}</Text>
+                        </View>
+                    )}
+                </View>
+
+                <View style={styles.balanceContainer}>
+                    <Text style={[styles.balanceAmount, { color: (customer.balance || 0) > 0 ? colors.text : colors.muted }]}>
+                        ₺{customer.balance?.toLocaleString("tr-TR") || 0}
+                    </Text>
+                    <Text style={styles.balanceLabel}>BORÇ</Text>
+                </View>
+            </View>
+        </View>
+    );
+
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
             <View style={styles.header}>
@@ -99,6 +165,25 @@ export default function AdminCustomers() {
                     <Text style={styles.subtitle}>Kayıtlı Tüm Kullanıcılar</Text>
                 </View>
                 <ThemeSwitcher />
+            </View>
+
+            <View style={styles.tabContainer}>
+                <TouchableOpacity
+                    style={[styles.tab, mainTab === "KURUMSAL" && styles.activeTab]}
+                    onPress={() => setMainTab("KURUMSAL")}
+                >
+                    <Text style={[styles.tabText, mainTab === "KURUMSAL" && styles.activeTabText]}>
+                        KURUMSAL FİRMALAR
+                    </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.tab, mainTab === "BIREYSEL" && styles.activeTab]}
+                    onPress={() => setMainTab("BIREYSEL")}
+                >
+                    <Text style={[styles.tabText, mainTab === "BIREYSEL" && styles.activeTabText]}>
+                        BİREYSEL HESAPLAR
+                    </Text>
+                </TouchableOpacity>
             </View>
 
             <View style={styles.searchContainer}>
@@ -113,43 +198,62 @@ export default function AdminCustomers() {
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                {filteredCustomers.length > 0 ? (
-                    filteredCustomers.map((customer) => (
-                        <View key={customer.id} style={styles.customerCard}>
-                            <View style={styles.cardContent}>
-                                <View style={styles.avatar}>
-                                    <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.muted }}>
-                                        {customer.name.charAt(0)}
-                                    </Text>
-                                </View>
+                {mainTab === "BIREYSEL" && (
+                    bireyselCustomers.length > 0 ? (
+                        bireyselCustomers.map(customer => renderCustomerCard(customer, false))
+                    ) : (
+                        <View style={styles.emptyState}>
+                            <MaterialIcons name="person-off" size={64} color={colors.surfaceBorder} />
+                            <Text style={styles.emptyText}>Bireysel müşteri bulunamadı.</Text>
+                        </View>
+                    )
+                )}
 
-                                <View style={styles.customerInfo}>
-                                    <Text style={styles.customerName} numberOfLines={1}>
-                                        {customer.name}
-                                    </Text>
-                                    <Text style={styles.customerPhone}>{customer.phone}</Text>
-                                    {customer.company && customer.company !== "Bireysel Üyelik" && (
-                                        <View style={styles.companyTag}>
-                                            <MaterialIcons name="verified" size={12} color={colors.primary} />
-                                            <Text style={styles.companyText}>{customer.company}</Text>
+                {mainTab === "KURUMSAL" && (
+                    groupedKurumsal.length > 0 ? (
+                        groupedKurumsal.map(group => {
+                            const isExpanded = expandedCompanies[group.companyName];
+                            return (
+                                <View key={group.companyName} style={styles.companyAccordion}>
+                                    <TouchableOpacity
+                                        style={styles.companyAccordionHeader}
+                                        onPress={() => toggleCompany(group.companyName)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <View style={styles.accordionTitleContainer}>
+                                            <Text style={styles.companyAccordionTitle}>{group.companyName}</Text>
+                                            <Text style={styles.companyAccordionSubtitle}>{group.customers.length} Kayıtlı Çalışan</Text>
+                                        </View>
+                                        <View style={styles.accordionRightContainer}>
+                                            <View style={styles.balanceContainer}>
+                                                <Text style={[styles.balanceAmount, { color: group.totalDebt > 0 ? colors.text : colors.muted }]}>
+                                                    ₺{group.totalDebt.toLocaleString("tr-TR")}
+                                                </Text>
+                                                <Text style={styles.balanceLabel}>TOPLAM BORÇ</Text>
+                                            </View>
+                                            <MaterialIcons
+                                                name={isExpanded ? "expand-less" : "expand-more"}
+                                                size={24}
+                                                color={colors.text}
+                                                style={{ marginLeft: 12 }}
+                                            />
+                                        </View>
+                                    </TouchableOpacity>
+
+                                    {isExpanded && (
+                                        <View style={styles.companyAccordionContent}>
+                                            {group.customers.map(customer => renderCustomerCard(customer, true))}
                                         </View>
                                     )}
                                 </View>
-
-                                <View style={styles.balanceContainer}>
-                                    <Text style={styles.balanceAmount}>
-                                        ₺{customer.balance?.toLocaleString("tr-TR") || 0}
-                                    </Text>
-                                    <Text style={styles.balanceLabel}>BAKİYE</Text>
-                                </View>
-                            </View>
+                            );
+                        })
+                    ) : (
+                        <View style={styles.emptyState}>
+                            <MaterialIcons name="domain-disabled" size={64} color={colors.surfaceBorder} />
+                            <Text style={styles.emptyText}>Kurumsal firma bulunamadı.</Text>
                         </View>
-                    ))
-                ) : (
-                    <View style={styles.emptyState}>
-                        <MaterialIcons name="person-off" size={64} color={colors.surfaceBorder} />
-                        <Text style={styles.emptyText}>Müşteri bulunamadı.</Text>
-                    </View>
+                    )
                 )}
             </ScrollView>
         </View>
@@ -188,6 +292,31 @@ const getStyles = (colors: any) => StyleSheet.create({
         letterSpacing: 1,
         marginTop: 2,
     },
+    tabContainer: {
+        flexDirection: "row",
+        paddingHorizontal: 24,
+        marginBottom: 20,
+        gap: 12,
+    },
+    tab: {
+        flex: 1,
+        borderBottomWidth: 2,
+        borderBottomColor: "transparent",
+        paddingVertical: 12,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    activeTab: {
+        borderBottomColor: colors.primary,
+    },
+    tabText: {
+        fontSize: 14,
+        fontWeight: "bold",
+        color: colors.muted,
+    },
+    activeTabText: {
+        color: colors.primary,
+    },
     searchContainer: {
         marginHorizontal: 24,
         marginBottom: 24,
@@ -215,10 +344,59 @@ const getStyles = (colors: any) => StyleSheet.create({
         paddingHorizontal: 24,
         paddingBottom: 40,
     },
+    companyAccordion: {
+        marginBottom: 16,
+        backgroundColor: colors.surface,
+        borderRadius: 16,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    companyAccordionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 16,
+        backgroundColor: colors.surface,
+    },
+    accordionTitleContainer: {
+        flex: 1,
+        paddingRight: 16,
+    },
+    companyAccordionTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: colors.text,
+    },
+    companyAccordionSubtitle: {
+        fontSize: 12,
+        color: colors.primary,
+        fontWeight: 'bold',
+        marginTop: 4,
+    },
+    accordionRightContainer: {
+        alignItems: 'center',
+        flexDirection: 'row',
+    },
+    companyAccordionContent: {
+        paddingHorizontal: 16,
+        paddingBottom: 8,
+        backgroundColor: colors.background,
+    },
     customerCard: {
         paddingVertical: 16,
         borderBottomWidth: 1,
         borderBottomColor: colors.surfaceBorder,
+    },
+    nestedCustomerCard: {
+        borderBottomWidth: 1,
+        borderBottomColor: colors.surfaceBorder,
+        paddingVertical: 12,
     },
     cardContent: {
         flexDirection: "row",
@@ -232,6 +410,12 @@ const getStyles = (colors: any) => StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         marginRight: 16,
+    },
+    nestedAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        marginRight: 12,
     },
     customerInfo: {
         flex: 1,
@@ -264,6 +448,7 @@ const getStyles = (colors: any) => StyleSheet.create({
         fontSize: 10,
         color: colors.muted,
         marginTop: 4,
+        fontWeight: 'bold',
     },
     balanceAmount: {
         fontSize: 16,

@@ -28,6 +28,7 @@ export default function HomeScreen() {
   const cartItems = useCartStore((state) => state.items);
 
   const [modalVisible, setModalVisible] = React.useState(false);
+  const [timeFilter, setTimeFilter] = React.useState<"ALL" | "DAILY" | "WEEKLY" | "MONTHLY">("ALL");
   const hasAlertedMenuRef = useRef(false);
 
   const dailyMenu = useMemo(() => {
@@ -73,13 +74,31 @@ export default function HomeScreen() {
 
   const cartItemCount = cartItems.reduce((acc, curr) => acc + curr.quantity, 0);
 
+  const filteredUnpaidOrders = useMemo(() => {
+    if (!orders) return [];
+
+    const unpaid = orders.filter((o) => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status));
+
+    const now = new Date();
+    return unpaid.filter(order => {
+      if (timeFilter === "ALL") return true;
+
+      const orderDate = new Date(order.created_at || order.date);
+      const diffTime = Math.abs(now.getTime() - orderDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (timeFilter === "DAILY") {
+        return orderDate.getDate() === now.getDate() && orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
+      }
+      if (timeFilter === "WEEKLY") return diffDays <= 7;
+      if (timeFilter === "MONTHLY") return diffDays <= 30;
+      return true;
+    }).sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime());
+  }, [orders, timeFilter]);
+
   const currentDebt = useMemo(() => {
-    if (!orders) return 0;
-    // PENDING, Bekliyor ve Hazırlanıyor gibi onaysız durumlardaki borçları kapsar.
-    // Admin dashboard üzerinden "Tahsil Et" denildiğinde status COMPLETED veya PAID olur, onlar borçtan düşer.
-    const activeOrders = orders.filter((o) => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status));
-    return activeOrders.reduce((acc, curr) => acc + (curr.total_amount || 0), 0);
-  }, [orders]);
+    return filteredUnpaidOrders.reduce((acc, curr) => acc + (curr.total_amount || 0), 0);
+  }, [filteredUnpaidOrders]);
 
   // Last order based on date
   const lastOrder = useMemo(() => {
@@ -102,24 +121,28 @@ export default function HomeScreen() {
 
   const generatePdf = async () => {
     if (!orders) return;
-    const unpaidOrders = orders.filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status));
+    const unpaidOrders = filteredUnpaidOrders;
 
     if (unpaidOrders.length === 0) {
-      Alert.alert("Bilgi", "Ödenmemiş borcunuz bulunmuyor.");
+      Alert.alert("Bilgi", "Seçili tarihte ödenmemiş borcunuz bulunmuyor.");
       return;
     }
 
     const dateStr = new Date().toLocaleDateString('tr-TR');
 
-    const tableRows = unpaidOrders.map((o: any) => `
+    const tableRows = unpaidOrders.map((o: any) => {
+      const d = new Date(o.created_at || o.date);
+      const dateFormatted = `${d.toLocaleDateString('tr-TR')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      return `
         <tr>
-            <td style="padding: 12px; border-bottom: 1px solid #ddd;">${new Date(o.created_at || o.date).toLocaleDateString()}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #ddd;">${dateFormatted}</td>
             <td style="padding: 12px; border-bottom: 1px solid #ddd;">
               ${o.adisyon_items?.map((item: any) => `${item.quantity}x ${item.menu_items?.name || 'Yemek'}`).join('<br>') || 'Detay yok'}
             </td>
             <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right;">₺${o.total_amount?.toLocaleString("tr-TR")}</td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 
     const html = `
         <html>
@@ -301,37 +324,48 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {orders && orders.filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)).length > 0 ? (
-                orders
-                  .filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status))
-                  .sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime())
-                  .map(order => {
-                    const date = new Date(order.created_at || order.date);
-                    return (
-                      <View key={order.id} style={[styles.modalOrderCard, { borderColor: colors.surfaceBorder, backgroundColor: colors.surface }]}>
-                        <View style={styles.modalOrderHeader}>
-                          <Text style={[styles.modalOrderDate, { color: colors.text }]}>
-                            {date.toLocaleDateString('tr-TR')} {date.getHours().toString().padStart(2, '0')}:{date.getMinutes().toString().padStart(2, '0')}
-                          </Text>
-                          <Text style={[styles.modalOrderTotal, { color: colors.primary }]}>₺{order.total_amount || 0}</Text>
-                        </View>
+            <View style={styles.filterContainer}>
+              {(['ALL', 'DAILY', 'WEEKLY', 'MONTHLY'] as const).map((filter) => (
+                <TouchableOpacity
+                  key={filter}
+                  style={[styles.filterBtn, timeFilter === filter && styles.filterBtnActive]}
+                  onPress={() => setTimeFilter(filter)}
+                >
+                  <Text style={[styles.filterBtnText, timeFilter === filter && styles.filterBtnTextActive]}>
+                    {filter === 'ALL' ? 'Tümü' : filter === 'DAILY' ? 'Günlük' : filter === 'WEEKLY' ? 'Haftalık' : 'Aylık'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-                        {order.adisyon_items && order.adisyon_items.length > 0 ? (
-                          order.adisyon_items.map((item: any) => (
-                            <View key={item.id} style={styles.modalItemRow}>
-                              <Text style={[styles.modalItemCount, { color: colors.text }]}>{item.quantity}x </Text>
-                              <Text style={[styles.modalItemName, { color: colors.muted }]}>{item.menu_items?.name || 'Yemek'}</Text>
-                              <Text style={[styles.modalItemPrice, { color: colors.text }]}>₺{item.line_total}</Text>
-                            </View>
-                          ))
-                        ) : (
-                          <Text style={{ fontSize: 12, color: colors.muted, fontStyle: 'italic' }}>Paket içeriği gösterilemiyor.</Text>
-                        )}
-                        {order.note && <Text style={{ fontSize: 11, color: colors.info, marginTop: 8, fontStyle: 'italic' }}>Not: {order.note}</Text>}
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {filteredUnpaidOrders.length > 0 ? (
+                filteredUnpaidOrders.map(order => {
+                  const date = new Date(order.created_at || order.date);
+                  return (
+                    <View key={order.id} style={[styles.modalOrderCard, { borderColor: colors.surfaceBorder, backgroundColor: colors.surface }]}>
+                      <View style={styles.modalOrderHeader}>
+                        <Text style={[styles.modalOrderDate, { color: colors.text }]}>
+                          {date.toLocaleDateString('tr-TR')} {date.getHours().toString().padStart(2, '0')}:{date.getMinutes().toString().padStart(2, '0')}
+                        </Text>
+                        <Text style={[styles.modalOrderTotal, { color: colors.primary }]}>₺{order.total_amount || 0}</Text>
                       </View>
-                    );
-                  })
+
+                      {order.adisyon_items && order.adisyon_items.length > 0 ? (
+                        order.adisyon_items.map((item: any) => (
+                          <View key={item.id} style={styles.modalItemRow}>
+                            <Text style={[styles.modalItemCount, { color: colors.text }]}>{item.quantity}x </Text>
+                            <Text style={[styles.modalItemName, { color: colors.muted }]}>{item.menu_items?.name || 'Yemek'}</Text>
+                            <Text style={[styles.modalItemPrice, { color: colors.text }]}>₺{item.line_total}</Text>
+                          </View>
+                        ))
+                      ) : (
+                        <Text style={{ fontSize: 12, color: colors.muted, fontStyle: 'italic' }}>Paket içeriği gösterilemiyor.</Text>
+                      )}
+                      {order.note && <Text style={{ fontSize: 11, color: colors.info, marginTop: 8, fontStyle: 'italic' }}>Not: {order.note}</Text>}
+                    </View>
+                  );
+                })
               ) : (
                 <View style={{ padding: 40, alignItems: 'center' }}>
                   <MaterialIcons name="done-all" size={48} color={colors.primary} />
@@ -519,6 +553,22 @@ const getStyles = (colors: any) => StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
+  },
+  filterContainer: {
+    flexDirection: 'row', marginBottom: 16, gap: 8, justifyContent: 'space-between'
+  },
+  filterBtn: {
+    flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 12,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.surfaceBorder,
+  },
+  filterBtnActive: {
+    backgroundColor: colors.primary, borderColor: colors.primary,
+  },
+  filterBtnText: {
+    fontSize: 10, fontWeight: 'bold', color: colors.muted
+  },
+  filterBtnTextActive: {
+    color: '#fff'
   },
   modalContent: {
     height: '85%',

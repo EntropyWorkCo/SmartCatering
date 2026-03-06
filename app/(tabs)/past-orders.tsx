@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -17,12 +17,31 @@ export default function PastOrdersScreen() {
 
     const { user } = useAuth();
     const { orders, loading } = useAdisyon(user?.id);
+    const [timeFilter, setTimeFilter] = useState<"ALL" | "DAILY" | "WEEKLY" | "MONTHLY">("ALL");
 
     // Sort orders descending by date
     const sortedOrders = useMemo(() => {
         if (!orders) return [];
-        return [...orders].sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime());
-    }, [orders]);
+        const now = new Date();
+
+        const filtered = orders.filter((order: any) => {
+            if (timeFilter === "ALL") return true;
+
+            const orderDate = new Date(order.created_at || order.date);
+            const diffTime = Math.abs(now.getTime() - orderDate.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (timeFilter === "DAILY") {
+                // Same day logic
+                return orderDate.getDate() === now.getDate() && orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
+            }
+            if (timeFilter === "WEEKLY") return diffDays <= 7;
+            if (timeFilter === "MONTHLY") return diffDays <= 30;
+            return true;
+        });
+
+        return filtered.sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime());
+    }, [orders, timeFilter]);
 
     if (loading) {
         return (
@@ -39,6 +58,20 @@ export default function PastOrdersScreen() {
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <Text style={styles.title}>Geçmiş Siparişlerim</Text>
+            </View>
+
+            <View style={styles.filterContainer}>
+                {(['ALL', 'DAILY', 'WEEKLY', 'MONTHLY'] as const).map((filter) => (
+                    <TouchableOpacity
+                        key={filter}
+                        style={[styles.filterBtn, timeFilter === filter && styles.filterBtnActive]}
+                        onPress={() => setTimeFilter(filter)}
+                    >
+                        <Text style={[styles.filterBtnText, timeFilter === filter && styles.filterBtnTextActive]}>
+                            {filter === 'ALL' ? 'Tümü' : filter === 'DAILY' ? 'Günlük' : filter === 'WEEKLY' ? 'Haftalık' : 'Aylık'}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -119,7 +152,24 @@ const getStyles = (colors: any) => StyleSheet.create({
     },
     title: { fontSize: 24, fontWeight: '900', color: colors.text },
 
-    scrollContent: { padding: 24, paddingBottom: 60, flexGrow: 1 },
+    filterContainer: {
+        flexDirection: 'row', paddingHorizontal: 24, marginBottom: 16, gap: 12, justifyContent: 'space-between'
+    },
+    filterBtn: {
+        flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 12,
+        backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.surfaceBorder,
+    },
+    filterBtnActive: {
+        backgroundColor: colors.primary, borderColor: colors.primary,
+    },
+    filterBtnText: {
+        fontSize: 12, fontWeight: 'bold', color: colors.muted
+    },
+    filterBtnTextActive: {
+        color: '#fff'
+    },
+
+    scrollContent: { padding: 24, paddingTop: 8, paddingBottom: 60, flexGrow: 1 },
 
     emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 16 },
     emptyText: { fontSize: 16, color: colors.muted, fontWeight: '600' },

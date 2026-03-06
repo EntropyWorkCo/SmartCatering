@@ -47,13 +47,7 @@ export default function AdminSettings() {
                 </View>
 
                 <View style={styles.settingsMenu}>
-                    <SettingsBtn
-                        icon="payments"
-                        label="Birim Fiyat Yönetimi"
-                        onPress={() => router.push("/(admin)/unit-price")}
-                        colors={colors}
-                        styles={styles}
-                    />
+
                     <SettingsBtn
                         icon="bar-chart"
                         label="Raporlar ve İstatistikler"
