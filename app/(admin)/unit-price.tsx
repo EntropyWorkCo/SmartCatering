@@ -3,7 +3,6 @@ import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -39,12 +38,28 @@ export default function UnitPriceFormScreen() {
         useCallback(() => {
             const loadPrices = async () => {
                 try {
-                    const stored = await AsyncStorage.getItem("unit_prices");
-                    if (stored) {
-                        setPrices(JSON.parse(stored));
+                    setLoading(true);
+                    const { data, error } = await supabase
+                        .from("menu_items")
+                        .select("*")
+                        .eq("status", "sistem_fiyati");
+
+                    if (error) throw error;
+
+                    if (data && data.length > 0) {
+                        const newPrices = { ...prices };
+                        data.forEach((item: any) => {
+                            if (item.category === "ÇORBA") newPrices.CORBA = item.price.toString();
+                            if (item.category === "ANA YEMEK") newPrices.ANAYEMEK = item.price.toString();
+                            if (item.category === "YARDIMCI") newPrices.YARDIMCI = item.price.toString();
+                            if (item.category === "İÇECEK") newPrices.ICECEKLER = item.price.toString();
+                        });
+                        setPrices(newPrices);
                     }
                 } catch (e) {
                     console.error("Fiyatlar yüklenirken hata:", e);
+                } finally {
+                    setLoading(false);
                 }
             };
             loadPrices();
@@ -54,43 +69,51 @@ export default function UnitPriceFormScreen() {
     const handleSave = async () => {
         setLoading(true);
         try {
-            await AsyncStorage.setItem("unit_prices", JSON.stringify(prices));
+            // Update default category prices in Supabase
+            const categories = [
+                { category: "ÇORBA", price: Number(prices.CORBA) },
+                { category: "ANA YEMEK", price: Number(prices.ANAYEMEK) },
+                { category: "YARDIMCI", price: Number(prices.YARDIMCI) },
+                { category: "İÇECEK", price: Number(prices.ICECEKLER) },
+            ];
+
+            for (const item of categories) {
+                if (!isNaN(item.price) && item.price > 0) {
+                    await supabase
+                        .from("menu_items")
+                        .update({ price: item.price })
+                        .eq("status", "sistem_fiyati")
+                        .eq("category", item.category);
+                }
+            }
 
             Alert.alert(
                 "Fiyatları Güncelle",
-                "Bu fiyatları sadece Kategori varsayılanı olarak mı kaydedelim, yoksa Sistemdeki TÜM mevcut ürünlerin fiyatlarını da bu kategorilere göre ezelim mi?",
+                "Sabit liste (Tabela) fiyatları başarıyla güncellendi. Sistemdeki TÜM mevcut ürünlerin fiyatlarını da bu yeni fiyatlara göre ezmek ister misiniz?",
                 [
                     {
-                        text: "Sadece Varsayılanları Güncelle",
+                        text: "Hayır, Sadece Tabelayı Güncelle",
                         onPress: () => {
-                            Alert.alert("Başarılı", "Yeni kategori taban fiyatları güncellendi.");
                             router.back();
                         }
                     },
                     {
-                        text: "Tüm Eski Ürünleri De Güncelle (Ez)",
+                        text: "Evet, Eski Ürünleri De Güncelle",
                         style: "destructive",
                         onPress: async () => {
                             setLoading(true);
                             try {
-                                const updates = [
-                                    { category: "ÇORBA", price: Number(prices.CORBA) },
-                                    { category: "ANA YEMEK", price: Number(prices.ANAYEMEK) },
-                                    { category: "YARDIMCI", price: Number(prices.YARDIMCI) },
-                                    { category: "İÇECEK", price: Number(prices.ICECEKLER) },
-                                ];
-
-                                for (const update of updates) {
+                                for (const update of categories) {
                                     if (!isNaN(update.price) && update.price > 0) {
                                         const { error } = await supabase
                                             .from("menu_items")
                                             .update({ price: update.price })
-                                            .eq("category", update.category)
-                                            .select();
+                                            .neq("status", "sistem_fiyati")
+                                            .eq("category", update.category);
                                         if (error) throw error;
                                     }
                                 }
-                                Alert.alert("Başarılı", "Tüm eski ürünlerin fiyatları da güncellendi.");
+                                Alert.alert("Başarılı", "Tüm mevcut ürünlerin fiyatları güncellendi.");
                                 router.back();
                             } catch (e: any) {
                                 Alert.alert("Hata", e.message);
@@ -249,21 +272,18 @@ const getStyles = (colors: any) => StyleSheet.create({
     },
     infoBox: {
         flexDirection: 'row',
-        backgroundColor: colors.infoBg,
-        padding: 16,
-        borderRadius: 12,
+        backgroundColor: colors.surfaceBorder,
+        padding: 12,
+        borderRadius: 8,
         marginBottom: 24,
-        borderWidth: 1,
-        borderColor: colors.info
     },
     infoText: {
-        color: colors.info,
-        fontSize: 14,
-        lineHeight: 20
+        color: colors.text,
+        fontSize: 12,
     },
     formContainer: {
         backgroundColor: colors.surface,
-        borderRadius: 16,
+        borderRadius: 12,
         padding: 24,
         borderWidth: 1,
         borderColor: colors.surfaceBorder,
@@ -279,8 +299,8 @@ const getStyles = (colors: any) => StyleSheet.create({
         gap: 6,
     },
     inputLabel: {
-        fontSize: 14,
-        fontWeight: "900",
+        fontSize: 12,
+        fontWeight: "bold",
         color: colors.muted,
     },
     inputContainer: {
@@ -294,15 +314,14 @@ const getStyles = (colors: any) => StyleSheet.create({
         paddingVertical: 12,
     },
     currencySymbol: {
-        fontSize: 20,
+        fontSize: 16,
         fontWeight: 'bold',
-        color: colors.text,
+        color: colors.muted,
         marginRight: 8,
     },
     input: {
         flex: 1,
-        fontSize: 18,
-        fontWeight: 'bold',
+        fontSize: 16,
         color: colors.text,
     },
     saveBtn: {

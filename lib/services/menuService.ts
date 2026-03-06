@@ -92,10 +92,48 @@ export const menuService = {
     }
   },
 
-  async updateMenuItem(id: string, data: { name: string; price: number; category: string }) {
+  async updateMenuItem(id: string, data: { name: string; price: number; category: string; image_url?: string; image_base64?: string }) {
+    let finalImageUrl = data.image_url;
+
+    if (data.image_base64) {
+      try {
+        const ext = data.image_url ? data.image_url.substring(data.image_url.lastIndexOf(".") + 1) : "jpg";
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+
+        const uploadData = Buffer.from(data.image_base64, "base64");
+
+        const { error: uploadError } = await supabase.storage
+          .from("menu-images")
+          .upload(fileName, uploadData, {
+            contentType: `image/${ext}`,
+          });
+
+        if (uploadError) {
+          console.warn("Resim yükleme hatası:", uploadError);
+        } else {
+          const { data: publicData } = supabase.storage
+            .from("menu-images")
+            .getPublicUrl(fileName);
+          finalImageUrl = publicData.publicUrl;
+        }
+      } catch (err) {
+        console.warn("Resim decode/upload hatası:", err);
+      }
+    }
+
+    const updatePayload: any = {
+      name: data.name,
+      price: data.price,
+      category: data.category
+    };
+
+    if (finalImageUrl !== undefined) {
+      updatePayload.image_url = finalImageUrl;
+    }
+
     const { error } = await supabase
       .from("menu_items")
-      .update({ name: data.name, price: data.price, category: data.category })
+      .update(updatePayload)
       .eq("id", id);
     if (error) throw error;
   },

@@ -1,8 +1,10 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Print from 'expo-print';
 import { useRouter } from "expo-router";
+import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useRef } from "react";
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/Colors";
@@ -25,6 +27,7 @@ export default function HomeScreen() {
   const { menu } = useMenu(true);
   const cartItems = useCartStore((state) => state.items);
 
+  const [modalVisible, setModalVisible] = React.useState(false);
   const hasAlertedMenuRef = useRef(false);
 
   const dailyMenu = useMemo(() => {
@@ -84,8 +87,82 @@ export default function HomeScreen() {
     return [...orders].sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime())[0];
   }, [orders]);
 
+  const [localPhoto, setLocalPhoto] = React.useState<string | null>(null);
+
+  useEffect(() => {
+    if (user?.id) {
+      AsyncStorage.getItem(`profile_photo_${user.id}`).then(photo => {
+        if (photo) setLocalPhoto(photo);
+      });
+    }
+  }, [user?.id]);
+
   const firstName = profile?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || "Misafir";
-  const profileImage = profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/png?seed=${firstName}`;
+  const profileImage = localPhoto || profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/png?seed=${firstName}`;
+
+  const generatePdf = async () => {
+    if (!orders) return;
+    const unpaidOrders = orders.filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status));
+
+    if (unpaidOrders.length === 0) {
+      Alert.alert("Bilgi", "Ödenmemiş borcunuz bulunmuyor.");
+      return;
+    }
+
+    const dateStr = new Date().toLocaleDateString('tr-TR');
+
+    const tableRows = unpaidOrders.map((o: any) => `
+        <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #ddd;">${new Date(o.created_at || o.date).toLocaleDateString()}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+              ${o.adisyon_items?.map((item: any) => `${item.quantity}x ${item.menu_items?.name || 'Yemek'}`).join('<br>') || 'Detay yok'}
+            </td>
+            <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right;">₺${o.total_amount?.toLocaleString("tr-TR")}</td>
+        </tr>
+    `).join('');
+
+    const html = `
+        <html>
+            <body style="font-family: Helvetica, Arial, sans-serif; padding: 40px; color: #333;">
+                <h1 style="color: ${colors.primary}; margin-bottom: 5px;">Smart Catering</h1>
+                <h2 style="color: #666; font-weight: normal; margin-top: 0;">Güncel Borç Dökümü</h2>
+                <p style="color: #888; font-size: 12px;">Müşteri: ${profile?.full_name || 'Misafir'}</p>
+                <p style="color: #888; font-size: 12px;">Tarih: ${dateStr}</p>
+                
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 30px 0;">
+                    <p style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase;">Toplam Ödenmemiş Borç</p>
+                    <h2 style="margin: 10px 0 0 0; color: #e11d48;">₺${currentDebt.toLocaleString("tr-TR")}</h2>
+                </div>
+
+                <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                    <thead>
+                        <tr style="background-color: #f8f9fa; text-align: left;">
+                            <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">TARIH</th>
+                            <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">URUNLER</th>
+                            <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666; text-align: right;">TUTAR</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </body>
+        </html>
+    `;
+
+    try {
+      const { uri } = await Print.printToFileAsync({ html });
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri);
+      } else {
+        Alert.alert("Bilgi", "PDF oluşturuldu ancak bu cihazda paylaşım desteklenmiyor.");
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Hata", "PDF oluşturulurken bir sorun oluştu.");
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -117,29 +194,32 @@ export default function HomeScreen() {
         </View>
 
         {/* Balance Card */}
-        <View style={styles.balanceCard}>
-          <MaterialIcons name="account-balance-wallet" size={140} color={theme === 'dark' ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)"} style={styles.balanceBgIcon} />
+        <TouchableOpacity activeOpacity={0.9} onPress={() => setModalVisible(true)}>
+          <View style={styles.balanceCard}>
+            <MaterialIcons name="account-balance-wallet" size={140} color={theme === 'dark' ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)"} style={styles.balanceBgIcon} />
 
-          <Text style={styles.balanceLabel}>GÜNCEL BORÇ BAKİYESİ</Text>
-          <View style={styles.balanceRow}>
-            <Text style={styles.balanceValue}>₺{currentDebt.toLocaleString('tr-TR')}</Text>
-            <Text style={styles.balanceCurrency}>TL</Text>
-          </View>
-
-          <View style={styles.balanceDivider} />
-
-          <View style={styles.balanceFooter}>
-            <View style={styles.avatarStack}>
-              {[1, 2, 3].map(i => (
-                <Image key={i} source={{ uri: `https://api.dicebear.com/7.x/avataaars/png?seed=${i + 10}` }} style={[styles.stackAvatar, { zIndex: 4 - i, marginLeft: i === 1 ? 0 : -10 }]} />
-              ))}
-              <View style={[styles.stackMore, { zIndex: 0 }]}>
-                <Text style={styles.stackMoreText}>+12</Text>
-              </View>
+            <Text style={styles.balanceLabel}>GÜNCEL BORÇ BAKİYESİ</Text>
+            <View style={styles.balanceRow}>
+              <Text style={styles.balanceValue}>₺{currentDebt.toLocaleString('tr-TR')}</Text>
+              <Text style={styles.balanceCurrency}>TL</Text>
             </View>
-            <Text style={styles.lastPaymentText}>BEKLEYEN: ₺{currentDebt.toLocaleString('tr-TR')}</Text>
+
+            <View style={styles.balanceDivider} />
+
+            <View style={styles.balanceFooter}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {orders && orders.filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)).length > 0 ? (
+                  <Text style={{ fontSize: 11, color: colors.text === '#f8fafc' ? '#064e3b' : '#cbd5e1', fontWeight: 'bold' }}>
+                    {orders.filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)).length} Ödenmemiş Adisyon
+                  </Text>
+                ) : (
+                  <Text style={{ fontSize: 11, color: colors.text === '#f8fafc' ? '#064e3b' : '#cbd5e1', fontWeight: 'bold' }}>Borcunuz bulunmuyor</Text>
+                )}
+              </View>
+              <Text style={styles.lastPaymentText}>TOPLAM BEKLEYEN: ₺{currentDebt.toLocaleString('tr-TR')}</Text>
+            </View>
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Quick Actions Grid */}
         <View style={styles.gridContainer}>
@@ -200,6 +280,69 @@ export default function HomeScreen() {
 
 
       </ScrollView>
+
+      {/* Borç Detayı Modalı */}
+      <Modal visible={modalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Ödenmemiş Adisyonlar</Text>
+                <Text style={{ fontSize: 12, color: colors.muted, marginTop: 4 }}>Toplam Borcunuz: <Text style={{ fontWeight: 'bold', color: colors.primary }}>₺{currentDebt.toLocaleString('tr-TR')}</Text></Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                <TouchableOpacity onPress={generatePdf} style={styles.modalPdfBtn}>
+                  <MaterialIcons name="picture-as-pdf" size={18} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>İNDİR</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.modalCloseBtn}>
+                  <MaterialIcons name="close" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {orders && orders.filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)).length > 0 ? (
+                orders
+                  .filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status))
+                  .sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime())
+                  .map(order => {
+                    const date = new Date(order.created_at || order.date);
+                    return (
+                      <View key={order.id} style={[styles.modalOrderCard, { borderColor: colors.surfaceBorder, backgroundColor: colors.surface }]}>
+                        <View style={styles.modalOrderHeader}>
+                          <Text style={[styles.modalOrderDate, { color: colors.text }]}>
+                            {date.toLocaleDateString('tr-TR')} {date.getHours().toString().padStart(2, '0')}:{date.getMinutes().toString().padStart(2, '0')}
+                          </Text>
+                          <Text style={[styles.modalOrderTotal, { color: colors.primary }]}>₺{order.total_amount || 0}</Text>
+                        </View>
+
+                        {order.adisyon_items && order.adisyon_items.length > 0 ? (
+                          order.adisyon_items.map((item: any) => (
+                            <View key={item.id} style={styles.modalItemRow}>
+                              <Text style={[styles.modalItemCount, { color: colors.text }]}>{item.quantity}x </Text>
+                              <Text style={[styles.modalItemName, { color: colors.muted }]}>{item.menu_items?.name || 'Yemek'}</Text>
+                              <Text style={[styles.modalItemPrice, { color: colors.text }]}>₺{item.line_total}</Text>
+                            </View>
+                          ))
+                        ) : (
+                          <Text style={{ fontSize: 12, color: colors.muted, fontStyle: 'italic' }}>Paket içeriği gösterilemiyor.</Text>
+                        )}
+                        {order.note && <Text style={{ fontSize: 11, color: colors.info, marginTop: 8, fontStyle: 'italic' }}>Not: {order.note}</Text>}
+                      </View>
+                    );
+                  })
+              ) : (
+                <View style={{ padding: 40, alignItems: 'center' }}>
+                  <MaterialIcons name="done-all" size={48} color={colors.primary} />
+                  <Text style={{ marginTop: 12, fontSize: 16, fontWeight: 'bold', color: colors.text }}>Harika!</Text>
+                  <Text style={{ marginTop: 4, color: colors.muted, textAlign: 'center' }}>Ödenmemiş veya bekleyen borcunuz bulunmuyor.</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -371,5 +514,92 @@ const getStyles = (colors: any) => StyleSheet.create({
     backgroundColor: colors.text, width: 40, height: 40, borderRadius: 12,
     alignItems: "center", justifyContent: "center",
   },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    height: '85%',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150,150,150,0.1)',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  modalCloseBtn: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(150,150,150,0.1)',
+  },
+  modalPdfBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  modalOrderCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  modalOrderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(150,150,150,0.1)',
+  },
+  modalOrderDate: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalOrderTotal: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  modalItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  modalItemCount: {
+    fontSize: 13,
+    fontWeight: '900',
+    width: 24,
+  },
+  modalItemName: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  modalItemPrice: {
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
 });
+
 

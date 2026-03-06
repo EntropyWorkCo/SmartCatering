@@ -5,21 +5,18 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
-import Constants from "expo-constants";
-import * as Device from "expo-device";
 import { useFonts } from "expo-font";
-import * as Notifications from "expo-notifications";
+// import * as Notifications from "expo-notifications";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
-import { Platform } from "react-native";
 import "react-native-reanimated";
 
 import { useAuth } from "@/lib/hooks/useAuth";
-import { userService } from "@/lib/services/userService";
 
 export { ErrorBoundary } from "expo-router";
 
+/*
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -29,6 +26,7 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
+*/
 
 // initialRouteName kaldırıldı veya "welcome" yapıldı
 // unstable_settings iOS'ta kaydırma (swipe) ile welcome'a dönme sorununa yol açabileceği için kaldırıldı.
@@ -61,6 +59,8 @@ function RootLayoutNav() {
   const { user } = useAuth();
   const router = useRouter();
 
+  // Push notification kodları Expo Go ortamında (SDK 53+) hata verdiği için geçici olarak devre dışı bırakıldı.
+  /*
   useEffect(() => {
     async function setupNotifications() {
       if (!Device.isDevice) return;
@@ -127,6 +127,7 @@ function RootLayoutNav() {
       responseListener.remove();
     };
   }, []);
+  */
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>

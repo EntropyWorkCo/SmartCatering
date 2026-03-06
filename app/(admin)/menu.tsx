@@ -62,7 +62,7 @@ export default function AdminMenuAdd() {
     });
 
     const [editModalVisible, setEditModalVisible] = useState(false);
-    const [editingItem, setEditingItem] = useState<{ id: string, name: string, category: string, price: string } | null>(null);
+    const [editingItem, setEditingItem] = useState<{ id: string, name: string, category: string, price: string, image_url?: string, image_base64?: string } | null>(null);
 
     const handleCategorySelect = (categoryId: string) => {
         let defaultPrice = "";
@@ -103,7 +103,8 @@ export default function AdminMenuAdd() {
             id: item.id,
             name: item.name,
             category: item.category,
-            price: item.price.toString()
+            price: item.price.toString(),
+            image_url: item.image_url || ""
         });
         setEditModalVisible(true);
     };
@@ -117,7 +118,9 @@ export default function AdminMenuAdd() {
             await menuService.updateMenuItem(editingItem.id, {
                 name: editingItem.name,
                 category: editingItem.category,
-                price: Number(editingItem.price)
+                price: Number(editingItem.price),
+                image_url: editingItem.image_url,
+                image_base64: editingItem.image_base64
             });
             Alert.alert("Başarılı", "Düzenleme kaydedildi.");
             setEditModalVisible(false);
@@ -139,6 +142,20 @@ export default function AdminMenuAdd() {
 
         if (!result.canceled) {
             setNewItem({ ...newItem, image_url: result.assets[0].uri, image_base64: result.assets[0].base64 || "" });
+        }
+    };
+
+    const handlePickEditImage = async () => {
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 0.5,
+            base64: true,
+        });
+
+        if (!result.canceled && editingItem) {
+            setEditingItem({ ...editingItem, image_url: result.assets[0].uri, image_base64: result.assets[0].base64 || "" });
         }
     };
 
@@ -218,7 +235,7 @@ export default function AdminMenuAdd() {
                     onPress={() => setMainTab("GUNUN_MENUSU")}
                 >
                     <Text style={[styles.toggleBtnText, mainTab === "GUNUN_MENUSU" && styles.activeToggleBtnText]}>
-                        GÜNÜN MENÜSÜ AĞI
+                        GÜNLÜK YEMEK AĞI
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -226,7 +243,7 @@ export default function AdminMenuAdd() {
                     onPress={() => setMainTab("SABIT_LISTE")}
                 >
                     <Text style={[styles.toggleBtnText, mainTab === "SABIT_LISTE" && styles.activeToggleBtnText]}>
-                        SABİT FİYAT TABELASI
+                        SİSTEM FİYAT REFERANSI
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -283,8 +300,7 @@ export default function AdminMenuAdd() {
                 {mainTab === "GUNUN_MENUSU" && (
                     <View>
                         <TouchableOpacity style={styles.publishBtnBox} onPress={handlePublishMenu}>
-                            <MaterialIcons name="notifications-active" size={28} color="#fff" />
-                            <Text style={styles.publishBtnBoxText}>YAYINLA VE YENİ BİLDİRİM GÖNDER</Text>
+                            <Text style={styles.publishBtnBoxText}>YAYINLA VE MÜŞTERİLERE BİLDİRİM GÖNDER</Text>
                         </TouchableOpacity>
 
                         <View style={styles.formContainer}>
@@ -397,20 +413,40 @@ export default function AdminMenuAdd() {
 
                             {/* Sistem fiyatları için kategori değiştirmeye gerek yok */}
                             {mainTab !== 'SABIT_LISTE' && (
-                                <View style={styles.categoryContainer}>
-                                    <Text style={styles.inputLabel}>KATEGORİ *</Text>
-                                    <View style={styles.categoryGrid}>
-                                        {CATEGORIES.map(cat => (
-                                            <TouchableOpacity
-                                                key={cat.id}
-                                                style={[styles.catBtn, editingItem.category === cat.id && styles.activeCatBtn]}
-                                                onPress={() => setEditingItem(prev => prev ? { ...prev, category: cat.id } : null)}
-                                            >
-                                                <Text style={[styles.catText, editingItem.category === cat.id && styles.activeCatText]}>{cat.label}</Text>
-                                            </TouchableOpacity>
-                                        ))}
+                                <>
+                                    <View style={styles.categoryContainer}>
+                                        <Text style={styles.inputLabel}>KATEGORİ *</Text>
+                                        <View style={styles.categoryGrid}>
+                                            {CATEGORIES.map(cat => (
+                                                <TouchableOpacity
+                                                    key={cat.id}
+                                                    style={[styles.catBtn, editingItem.category === cat.id && styles.activeCatBtn]}
+                                                    onPress={() => setEditingItem(prev => prev ? { ...prev, category: cat.id } : null)}
+                                                >
+                                                    <Text style={[styles.catText, editingItem.category === cat.id && styles.activeCatText]}>{cat.label}</Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
                                     </View>
-                                </View>
+                                    <View style={styles.imagePickerContainer}>
+                                        <Text style={styles.inputLabel}>FOTOĞRAF (İsteğe Bağlı)</Text>
+                                        <TouchableOpacity style={styles.imagePickerBtn} onPress={handlePickEditImage}>
+                                            {editingItem.image_url ? (
+                                                <Image source={{ uri: editingItem.image_url }} style={styles.previewImage} />
+                                            ) : (
+                                                <>
+                                                    <MaterialIcons name="add-a-photo" size={24} color={colors.muted} />
+                                                    <Text style={styles.imagePickerText}>Fotoğraf Seç / Değiştir</Text>
+                                                </>
+                                            )}
+                                        </TouchableOpacity>
+                                        {editingItem.image_url ? (
+                                            <TouchableOpacity style={{ marginTop: 8 }} onPress={() => setEditingItem(prev => prev ? { ...prev, image_url: "" } : null)}>
+                                                <Text style={{ color: colors.danger, fontSize: 13, textAlign: "center" }}>Fotoğrafı Kaldır</Text>
+                                            </TouchableOpacity>
+                                        ) : null}
+                                    </View>
+                                </>
                             )}
 
                             <InputField
@@ -459,37 +495,31 @@ const ItemCard = ({ item, handleToggleStatus, handleEditItem, handleDeleteItem, 
                     <Text style={styles.menuItemDetails}>₺{item.price}</Text>
                 </View>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 6, marginTop: 12 }}>
+            <View style={styles.menuItemActions}>
                 <TouchableOpacity
-                    style={[styles.toggleActiveBtn, isSoldOut && styles.inactiveBtn, { flex: 1, justifyContent: 'center' }]}
+                    style={[styles.simpleActionBtn, isSoldOut ? styles.activeActionBtn : null, { flex: 1.5 }]}
                     onPress={() => handleToggleStatus(item.id, isSoldOut ? 'active' : 'sold_out')}
                 >
-                    <MaterialIcons name={isSoldOut ? "event-available" : "not-interested"} size={16} color={isSoldOut ? colors.primary : colors.danger} />
-                    <Text style={[styles.toggleActiveText, isSoldOut && styles.inactiveText]}>
-                        {isSoldOut ? 'TEKRAR AKTİF ET' : 'TÜKENDİ İŞARETLE'}
+                    <Text style={[styles.simpleActionText, isSoldOut ? styles.activeActionText : null]}>
+                        {isSoldOut ? 'Tekrar Satışta' : 'Tükendi Yap'}
                     </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.editBtn} onPress={() => handleEditItem(item)}>
-                    <MaterialIcons name="edit" size={18} color={colors.info} />
-                    <Text style={{ fontSize: 9, fontWeight: "bold", color: colors.info, marginLeft: 4 }}>DÜZENLE</Text>
+                <TouchableOpacity style={[styles.simpleActionBtn, { flex: 1 }]} onPress={() => handleEditItem(item)}>
+                    <Text style={styles.simpleActionText}>Düzenle</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteItem(item.id)}>
-                    <MaterialIcons name="delete" size={18} color={colors.danger} />
-                    <Text style={{ fontSize: 9, fontWeight: "bold", color: colors.danger, marginLeft: 4 }}>SİL</Text>
+                <TouchableOpacity style={[styles.simpleActionBtn, styles.dangerActionBtn, { flex: 1 }]} onPress={() => handleDeleteItem(item.id)}>
+                    <Text style={[styles.simpleActionText, styles.dangerActionText]}>Sil</Text>
                 </TouchableOpacity>
             </View>
         </View>
     );
 }
 
-const InputField = ({ label, icon, value, onChangeText, keyboardType = "default", colors, styles }: any) => (
+const InputField = ({ label, value, onChangeText, keyboardType = "default", colors, styles }: any) => (
     <View style={styles.inputWrapper}>
-        <View style={styles.inputIconRow}>
-            <MaterialIcons name={icon} size={16} color={colors.muted} />
-            <Text style={styles.inputLabel}>{label}</Text>
-        </View>
+        <Text style={styles.inputLabel}>{label}</Text>
         <TextInput
             style={styles.input}
             placeholder="Giriş yapınız..."
@@ -506,56 +536,56 @@ const getStyles = (colors: any) => StyleSheet.create({
     center: { flex: 1, justifyContent: "center", alignItems: "center" },
     header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 24, paddingBottom: 16 },
     title: { fontSize: 24, fontWeight: "900", color: colors.text },
-    subtitle: { fontSize: 10, fontWeight: "900", color: colors.muted, textTransform: "uppercase", letterSpacing: 1.5, marginTop: 4 },
-    tabToggleContainer: { flexDirection: "row", backgroundColor: colors.surfaceBorder, padding: 6, borderRadius: 20, marginHorizontal: 24, marginBottom: 20 },
-    toggleBtn: { flex: 1, paddingVertical: 14, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-    activeToggleBtn: { backgroundColor: colors.surface, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
-    toggleBtnText: { fontSize: 10, fontWeight: "900", color: colors.muted, letterSpacing: 1 },
+    subtitle: { fontSize: 10, color: colors.muted, marginTop: 4 },
+    tabToggleContainer: { flexDirection: "row", paddingHorizontal: 24, marginBottom: 20 },
+    toggleBtn: { flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: "transparent", alignItems: "center" },
+    activeToggleBtn: { borderBottomColor: colors.primary },
+    toggleBtnText: { fontSize: 12, fontWeight: "bold", color: colors.muted },
     activeToggleBtnText: { color: colors.primary },
     scrollContent: { paddingHorizontal: 24, paddingBottom: 60 },
-    infoBox: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.infoBg, padding: 16, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: colors.surfaceBorder },
-    infoText: { flex: 1, fontSize: 11, color: colors.info, lineHeight: 18 },
-    sectionHeader: { fontSize: 12, fontWeight: "900", color: colors.muted, letterSpacing: 1.5, marginBottom: 16 },
-    formContainer: { backgroundColor: colors.surface, padding: 20, borderRadius: 24, borderWidth: 1, borderColor: colors.surfaceBorder, marginBottom: 20 },
+    infoBox: { backgroundColor: colors.surfaceBorder, padding: 12, borderRadius: 8, marginBottom: 20 },
+    infoText: { fontSize: 12, color: colors.text },
+    sectionHeader: { fontSize: 14, fontWeight: "bold", color: colors.text, marginBottom: 16 },
+    formContainer: { backgroundColor: colors.surface, padding: 20, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder, marginBottom: 24 },
     formContainerInner: { paddingHorizontal: 24, paddingBottom: 40 },
     inputWrapper: { marginBottom: 16 },
-    inputIconRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8, marginLeft: 4 },
-    inputLabel: { fontSize: 9, fontWeight: "900", color: colors.muted, textTransform: "uppercase", letterSpacing: 1.5 },
-    input: { backgroundColor: colors.background, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 14, fontWeight: "bold", color: colors.text, borderWidth: 1, borderColor: colors.surfaceBorder },
+    inputLabel: { fontSize: 11, fontWeight: "bold", color: colors.muted, marginBottom: 8 },
+    input: { backgroundColor: colors.background, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: colors.text, borderWidth: 1, borderColor: colors.surfaceBorder },
     categoryContainer: { marginBottom: 16 },
-    categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+    categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
     catBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.surfaceBorder },
     activeCatBtn: { backgroundColor: colors.primary, borderColor: colors.primary },
-    catText: { fontSize: 9, fontWeight: 'bold', color: colors.muted },
+    catText: { fontSize: 11, fontWeight: 'bold', color: colors.muted },
     activeCatText: { color: '#fff' },
-    addBtn: { backgroundColor: colors.primary, paddingVertical: 16, borderRadius: 16, alignItems: "center", marginTop: 8 },
-    addBtnText: { color: "#fff", fontSize: 12, fontWeight: "900", letterSpacing: 1 },
-    publishBtnBox: { backgroundColor: colors.info, paddingVertical: 16, paddingHorizontal: 16, borderRadius: 20, flexDirection: 'row', alignItems: "center", justifyContent: 'center', gap: 10, marginBottom: 24, shadowColor: colors.info, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
-    publishBtnBoxText: { color: "#fff", fontSize: 12, fontWeight: "900", letterSpacing: 1 },
+    addBtn: { backgroundColor: colors.primary, paddingVertical: 14, borderRadius: 8, alignItems: "center", marginTop: 8 },
+    addBtnText: { color: "#fff", fontSize: 14, fontWeight: "bold" },
+    publishBtnBox: { backgroundColor: colors.primary, paddingVertical: 14, borderRadius: 8, alignItems: "center", justifyContent: 'center', marginBottom: 24 },
+    publishBtnBoxText: { color: "#fff", fontSize: 14, fontWeight: "bold" },
     listContainer: { marginTop: 8 },
-    menuItemCard: { backgroundColor: colors.surface, padding: 16, borderRadius: 20, borderWidth: 1, borderColor: colors.surfaceBorder, marginBottom: 12 },
+    menuItemCard: { backgroundColor: colors.surface, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder, marginBottom: 12 },
     menuItemContent: { flexDirection: "row", alignItems: "center", gap: 16 },
-    menuItemImagePlaceholder: { width: 50, height: 50, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+    menuItemImagePlaceholder: { width: 48, height: 48, borderRadius: 8, alignItems: "center", justifyContent: "center" },
     menuItemTextCont: { flex: 1 },
     menuItemName: { fontSize: 15, fontWeight: "bold", color: colors.text, marginBottom: 4 },
-    menuItemDetails: { fontSize: 12, fontWeight: "900", color: colors.primary },
-    deleteBtn: { flexDirection: 'row', paddingHorizontal: 8, borderRadius: 10, backgroundColor: colors.dangerBg, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.surfaceBorder },
-    toggleActiveBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 8, borderRadius: 10, backgroundColor: colors.cardHighlight, borderWidth: 1, borderColor: colors.surfaceBorder },
-    inactiveBtn: { backgroundColor: colors.dangerBg, borderColor: colors.surfaceBorder },
-    toggleActiveText: { fontSize: 9, fontWeight: 'bold', color: colors.primary },
-    inactiveText: { color: colors.danger },
+    menuItemDetails: { fontSize: 14, color: colors.muted },
+    menuItemActions: { flexDirection: 'row', gap: 8, marginTop: 16 },
+    simpleActionBtn: { paddingVertical: 8, borderRadius: 6, backgroundColor: colors.background, alignItems: "center", borderWidth: 1, borderColor: colors.surfaceBorder },
+    activeActionBtn: { backgroundColor: colors.surfaceBorder },
+    dangerActionBtn: { borderColor: colors.danger, backgroundColor: colors.background },
+    simpleActionText: { fontSize: 11, fontWeight: 'bold', color: colors.text },
+    activeActionText: { color: colors.muted },
+    dangerActionText: { color: colors.danger },
     imagePickerContainer: { marginBottom: 16 },
-    imagePickerBtn: { height: 100, backgroundColor: colors.background, borderWidth: 1, borderStyle: "dashed", borderColor: colors.surfaceBorder, borderRadius: 12, justifyContent: "center", alignItems: "center", marginTop: 8, overflow: "hidden" },
-    imagePickerText: { marginTop: 8, color: colors.muted, fontSize: 12, fontWeight: "500" },
-    previewImage: { width: "100%", height: "100%", borderRadius: 12 },
+    imagePickerBtn: { height: 100, backgroundColor: colors.background, borderWidth: 1, borderStyle: "dashed", borderColor: colors.surfaceBorder, borderRadius: 8, justifyContent: "center", alignItems: "center", marginTop: 4, overflow: "hidden" },
+    imagePickerText: { marginTop: 4, color: colors.muted, fontSize: 12 },
+    previewImage: { width: "100%", height: "100%", borderRadius: 8 },
     categoryTitleBox: { flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 },
-    categoryTitleText: { fontSize: 13, fontWeight: "bold", color: colors.text, letterSpacing: 1 },
+    categoryTitleText: { fontSize: 14, fontWeight: "bold", color: colors.muted },
     categoryTitleLine: { flex: 1, height: 1, backgroundColor: colors.surfaceBorder },
     modalContainer: { flex: 1, backgroundColor: colors.background },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderColor: colors.surfaceBorder, marginBottom: 24 },
     modalTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text },
-    editBtn: { flexDirection: 'row', paddingHorizontal: 8, borderRadius: 10, backgroundColor: colors.infoBg, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.surfaceBorder },
-    systemItemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: 16, borderRadius: 16, marginBottom: 8, borderWidth: 1, borderColor: colors.surfaceBorder },
-    systemItemName: { fontSize: 14, fontWeight: 'bold', color: colors.text },
-    systemItemPrice: { fontSize: 15, fontWeight: '900', color: colors.primary }
+    systemItemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: 16, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: colors.surfaceBorder },
+    systemItemName: { fontSize: 14, fontWeight: '500', color: colors.text },
+    systemItemPrice: { fontSize: 14, fontWeight: 'bold', color: colors.text }
 });

@@ -22,8 +22,6 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
-import Constants from "expo-constants";
-import * as Notifications from "expo-notifications";
 
 export default function ProfileScreen() {
     const router = useRouter();
@@ -44,8 +42,16 @@ export default function ProfileScreen() {
         const init = async () => {
             if (profile) {
                 setFullName(profile.full_name || "");
-                setPhotoUrl(profile.avatar_url || null);
             }
+
+            // Profil fotoğrafını önce yerel bellekten, yoksa veritabanından al
+            const storedPhoto = await AsyncStorage.getItem(`profile_photo_${user?.id}`);
+            if (storedPhoto) {
+                setPhotoUrl(storedPhoto);
+            } else if (profile?.avatar_url) {
+                setPhotoUrl(profile.avatar_url);
+            }
+
             const storedVal = await AsyncStorage.getItem("notifications_enabled");
             if (storedVal !== null) {
                 setNotificationsEnabled(storedVal === "true");
@@ -68,8 +74,11 @@ export default function ProfileScreen() {
         });
 
         if (!result.canceled) {
-            setPhotoUrl(result.assets[0].uri);
-            // Actual Supabase upload logic would go here
+            const uri = result.assets[0].uri;
+            setPhotoUrl(uri);
+            if (user?.id) {
+                await AsyncStorage.setItem(`profile_photo_${user.id}`, uri);
+            }
         }
     };
 
@@ -153,33 +162,6 @@ export default function ProfileScreen() {
                         ) : (
                             <Text style={styles.saveBtnText}>Profili Güncelle</Text>
                         )}
-                    </TouchableOpacity>
-
-                    {/* DEBUG BUTTON */}
-                    <TouchableOpacity style={[styles.saveBtn, { backgroundColor: colors.info, marginTop: 12 }]} onPress={async () => {
-                        try {
-                            const { status } = await Notifications.requestPermissionsAsync();
-                            if (status !== 'granted') {
-                                Alert.alert("HATA", "İzin verilmedi!");
-                                return;
-                            }
-
-                            const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
-
-                            let token;
-                            if (projectId) {
-                                token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-                            } else {
-                                Alert.alert("BİLGİ", "Expo Go'da Push Token alabilmek için EAS (app.json) yapılandırması gereklidir.\n\nAncak Kodunuz %100 Doğru! Canlıya (AAB/APK) çıkınca sorunsuz çalışacak.");
-                                return;
-                            }
-
-                            Alert.alert("TOKEN ALINDI!", `Token: ${token}`);
-                        } catch (e: any) {
-                            Alert.alert("TOKEN HATASI", e?.message || "Token alınamadı");
-                        }
-                    }}>
-                        <Text style={styles.saveBtnText}>Test: Push Token Al</Text>
                     </TouchableOpacity>
                 </View>
 

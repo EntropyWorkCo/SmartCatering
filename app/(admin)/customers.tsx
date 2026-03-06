@@ -117,27 +117,10 @@ export default function AdminCustomers() {
                     filteredCustomers.map((customer) => (
                         <View key={customer.id} style={styles.customerCard}>
                             <View style={styles.cardContent}>
-                                <View
-                                    style={[
-                                        styles.avatar,
-                                        customer.company && customer.company !== "Bireysel Üyelik"
-                                            ? { backgroundColor: colors.cardHighlight }
-                                            : { backgroundColor: colors.infoBg },
-                                    ]}
-                                >
-                                    <MaterialIcons
-                                        name={
-                                            customer.company && customer.company !== "Bireysel Üyelik"
-                                                ? "business"
-                                                : "person"
-                                        }
-                                        size={28}
-                                        color={
-                                            customer.company && customer.company !== "Bireysel Üyelik"
-                                                ? colors.primary
-                                                : colors.info
-                                        }
-                                    />
+                                <View style={styles.avatar}>
+                                    <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.muted }}>
+                                        {customer.name.charAt(0)}
+                                    </Text>
                                 </View>
 
                                 <View style={styles.customerInfo}>
@@ -154,10 +137,10 @@ export default function AdminCustomers() {
                                 </View>
 
                                 <View style={styles.balanceContainer}>
-                                    <Text style={styles.balanceLabel}>BAKİYE</Text>
                                     <Text style={styles.balanceAmount}>
                                         ₺{customer.balance?.toLocaleString("tr-TR") || 0}
                                     </Text>
+                                    <Text style={styles.balanceLabel}>BAKİYE</Text>
                                 </View>
                             </View>
                         </View>
@@ -233,21 +216,19 @@ const getStyles = (colors: any) => StyleSheet.create({
         paddingBottom: 40,
     },
     customerCard: {
-        backgroundColor: colors.surface,
-        borderRadius: 24,
-        padding: 20,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: colors.surfaceBorder,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.surfaceBorder,
     },
     cardContent: {
         flexDirection: "row",
         alignItems: "center",
     },
     avatar: {
-        width: 56,
-        height: 56,
-        borderRadius: 20,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: colors.surfaceBorder,
         alignItems: "center",
         justifyContent: "center",
         marginRight: 16,
@@ -257,15 +238,14 @@ const getStyles = (colors: any) => StyleSheet.create({
     },
     customerName: {
         fontSize: 16,
-        fontWeight: "900",
+        fontWeight: "bold",
         color: colors.text,
         marginBottom: 4,
     },
     customerPhone: {
         fontSize: 12,
-        fontWeight: "bold",
         color: colors.muted,
-        marginBottom: 6,
+        marginBottom: 4,
     },
     companyTag: {
         flexDirection: "row",
@@ -274,31 +254,20 @@ const getStyles = (colors: any) => StyleSheet.create({
     },
     companyText: {
         fontSize: 10,
-        fontWeight: "900",
+        fontWeight: "bold",
         color: colors.primary,
-        textTransform: "uppercase",
-        letterSpacing: 0.5,
     },
     balanceContainer: {
-        backgroundColor: colors.background,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 12,
         alignItems: "flex-end",
-        borderWidth: 1,
-        borderColor: colors.surfaceBorder,
     },
     balanceLabel: {
-        fontSize: 9,
-        fontWeight: "900",
+        fontSize: 10,
         color: colors.muted,
-        textTransform: "uppercase",
-        letterSpacing: 1,
-        marginBottom: 2,
+        marginTop: 4,
     },
     balanceAmount: {
-        fontSize: 14,
-        fontWeight: "900",
+        fontSize: 16,
+        fontWeight: "bold",
         color: colors.text,
     },
     emptyState: {

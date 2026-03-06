@@ -4,9 +4,12 @@ import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as Print from 'expo-print';
 import { router, useFocusEffect } from "expo-router";
+import * as Sharing from 'expo-sharing';
 import React, { useMemo, useState } from "react";
 import {
+    Alert,
     ScrollView,
     StyleSheet,
     Text,
@@ -92,7 +95,7 @@ export default function AdminReports() {
                     <ReportMenuItem
                         icon="star"
                         label="Müşteri Geri Bildirimleri"
-                        subtitle={`Ortalama: ${ratings.length > 0 ? (ratings.reduce((acc, r) => acc + (r.generalStars || 0), 0) / ratings.length).toFixed(1) : "5.0"} | ${ratings.length} Yorum`}
+                        subtitle={`Ortalama: ${ratings.filter(r => r.generalStars > 0).length > 0 ? (ratings.filter(r => r.generalStars > 0).reduce((acc, r) => acc + (r.generalStars || 0), 0) / ratings.filter(r => r.generalStars > 0).length).toFixed(1) : "5.0"} | ${ratings.length} Yorum`}
                         onClick={() => setView("FEEDBACK")}
                         colors={colors}
                         styles={styles}
@@ -133,13 +136,99 @@ const ReportMenuItem = ({ icon, label, subtitle, onClick, isLast, colors, styles
 
 const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
     const insets = useSafeAreaInsets();
+    const [filterPeriod, setFilterPeriod] = useState<"DAILY" | "WEEKLY" | "MONTHLY">("DAILY");
 
     const stats = useMemo(() => {
         const validOrders = orders.filter((o: any) => !["CANCELLED", "İptal"].includes(o.status));
-        const revenue = validOrders.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
-        const count = validOrders.length;
-        return { revenue, count, orders: validOrders };
-    }, [orders]);
+
+        const now = new Date();
+        const filtered = validOrders.filter((o: any) => {
+            const orderDate = new Date(o.created_at);
+
+            if (filterPeriod === "DAILY") {
+                return orderDate.toDateString() === now.toDateString();
+            } else if (filterPeriod === "WEEKLY") {
+                const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                return orderDate >= weekAgo;
+            } else if (filterPeriod === "MONTHLY") {
+                return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
+            }
+            return true;
+        });
+
+        const revenue = filtered.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
+        const count = filtered.length;
+        return { revenue, count, orders: filtered };
+    }, [orders, filterPeriod]);
+
+    const generatePdf = async () => {
+        if (stats.orders.length === 0) {
+            Alert.alert("Hata", "PDF oluşturulacak veri bulunamadı.");
+            return;
+        }
+
+        const dateStr = new Date().toLocaleDateString('tr-TR');
+        const periodName = filterPeriod === "DAILY" ? "Günlük" : filterPeriod === "WEEKLY" ? "Haftalık" : "Aylık";
+
+        const tableRows = stats.orders.map((o: any) => `
+            <tr>
+                <td style="padding: 12px; border-bottom: 1px solid #ddd;">${o.id.toString().substring(0, 8)}</td>
+                <td style="padding: 12px; border-bottom: 1px solid #ddd;">${o.userName || 'Müşteri'}</td>
+                <td style="padding: 12px; border-bottom: 1px solid #ddd;">${new Date(o.created_at).toLocaleDateString()}</td>
+                <td style="padding: 12px; border-bottom: 1px solid #ddd;">₺${o.total_amount?.toLocaleString("tr-TR")}</td>
+                <td style="padding: 12px; border-bottom: 1px solid #ddd;">${o.status}</td>
+            </tr>
+        `).join('');
+
+        const html = `
+            <html>
+                <body style="font-family: Helvetica, Arial, sans-serif; padding: 40px; color: #333;">
+                    <h1 style="color: ${colors.primary}; margin-bottom: 5px;">Smart Catering</h1>
+                    <h2 style="color: #666; font-weight: normal; margin-top: 0;">${periodName} Satış Raporu</h2>
+                    <p style="color: #888; font-size: 12px;">Oluşturulma Tarihi: ${dateStr}</p>
+                    
+                    <div style="display: flex; gap: 20px; margin: 30px 0;">
+                        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; flex: 1;">
+                            <p style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase;">Toplam Ciro</p>
+                            <h2 style="margin: 10px 0 0 0; color: #333;">₺${stats.revenue.toLocaleString("tr-TR")}</h2>
+                        </div>
+                        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; flex: 1;">
+                            <p style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase;">Toplam Öğün</p>
+                            <h2 style="margin: 10px 0 0 0; color: #333;">${stats.count} Adet</h2>
+                        </div>
+                    </div>
+
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                        <thead>
+                            <tr style="background-color: #f8f9fa; text-align: left;">
+                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">SIPARIS NO</th>
+                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">MUSTERI</th>
+                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">TARIH</th>
+                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">TUTAR</th>
+                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">DURUM</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRows}
+                        </tbody>
+                    </table>
+                </body>
+            </html>
+        `;
+
+        try {
+            const { uri } = await Print.printToFileAsync({ html });
+            const canShare = await Sharing.isAvailableAsync();
+            if (canShare) {
+                await Sharing.shareAsync(uri);
+            } else {
+                Alert.alert("Bilgi", "PDF oluşturuldu ancak bu cihazda paylaşım desteklenmiyor.");
+            }
+        } catch (error) {
+            console.error(error);
+            Alert.alert("Hata", "PDF oluşturulurken bir sorun oluştu.");
+        }
+    };
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -147,13 +236,40 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                 <TouchableOpacity onPress={onBack} style={styles.backButton}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.title}>Günlük Satış Özeti</Text>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.title}>Satış Özeti</Text>
+                </View>
+                <TouchableOpacity onPress={generatePdf} style={styles.exportPdfButton}>
+                    <MaterialIcons name="picture-as-pdf" size={20} color="#fff" />
+                    <Text style={styles.exportPdfText}>İNDİR</Text>
+                </TouchableOpacity>
+            </View>
+
+            <View style={styles.filterTabsContainer}>
+                <TouchableOpacity
+                    style={[styles.filterTab, filterPeriod === "DAILY" && styles.filterTabActive]}
+                    onPress={() => setFilterPeriod("DAILY")}
+                >
+                    <Text style={[styles.filterTabText, filterPeriod === "DAILY" && styles.filterTabTextActive]}>Günlük</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.filterTab, filterPeriod === "WEEKLY" && styles.filterTabActive]}
+                    onPress={() => setFilterPeriod("WEEKLY")}
+                >
+                    <Text style={[styles.filterTabText, filterPeriod === "WEEKLY" && styles.filterTabTextActive]}>Haftalık</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.filterTab, filterPeriod === "MONTHLY" && styles.filterTabActive]}
+                    onPress={() => setFilterPeriod("MONTHLY")}
+                >
+                    <Text style={[styles.filterTabText, filterPeriod === "MONTHLY" && styles.filterTabTextActive]}>Aylık</Text>
+                </TouchableOpacity>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.statsGrid}>
                     <View style={[styles.statBox, { backgroundColor: colors.infoBg, borderColor: colors.info }]}>
-                        <Text style={[styles.statBoxLabel, { color: colors.info }]}>GÜNLÜK GELİR</Text>
+                        <Text style={[styles.statBoxLabel, { color: colors.info }]}>TOPLAM GELİR</Text>
                         <Text style={styles.statBoxValue}>₺{stats.revenue.toLocaleString("tr-TR")}</Text>
                     </View>
                     <View style={[styles.statBox, { backgroundColor: colors.cardHighlight, borderColor: colors.primary }]}>
@@ -162,7 +278,7 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                     </View>
                 </View>
 
-                <Text style={styles.sectionHeader}>BUGÜNKÜ İŞLEMLER</Text>
+                <Text style={styles.sectionHeader}>BU DÖNEMKİ İŞLEMLER</Text>
 
                 {stats.orders.length > 0 ? (
                     stats.orders.map((o: any) => (
@@ -180,7 +296,7 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                 ) : (
                     <View style={styles.emptyState}>
                         <MaterialIcons name="trending-flat" size={48} color={colors.surfaceBorder} />
-                        <Text style={styles.emptyText}>Veri bulunmuyor</Text>
+                        <Text style={styles.emptyText}>Bu dönemde satış bulunmuyor</Text>
                     </View>
                 )}
             </ScrollView>
@@ -191,10 +307,11 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
 const PerformanceDashboard = ({ onBack, ratings, colors, styles }: any) => {
     const insets = useSafeAreaInsets();
 
-    const count = ratings.length;
-    const calcAvg = (key: string) => count
-        ? (ratings.reduce((acc: number, r: any) => acc + (r[key] || 0), 0) / count).toFixed(1)
-        : "5.0";
+    const calcAvg = (key: string) => {
+        const valid = ratings.filter((r: any) => r[key] && r[key] > 0);
+        if (valid.length === 0) return "5.0";
+        return (valid.reduce((acc: number, r: any) => acc + r[key], 0) / valid.length).toFixed(1);
+    };
 
     const stats = {
         general: calcAvg('generalStars'),
@@ -214,19 +331,15 @@ const PerformanceDashboard = ({ onBack, ratings, colors, styles }: any) => {
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                <View style={styles.perfHeroCard}>
-                    <MaterialIcons name="analytics" size={100} color="rgba(255,255,255,0.05)" style={styles.perfHeroIcon} />
+                <View style={[styles.perfHeroCard, { borderColor: colors.primary }]}>
                     <View style={styles.perfHeroContent}>
                         <View>
                             <Text style={styles.perfHeroLabel}>GENEL PUAN ORTALAMASI</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                                <Text style={styles.perfHeroScore}>{stats.general}</Text>
+                                <Text style={[styles.perfHeroScore, { color: colors.primary }]}>{stats.general}</Text>
                                 <Text style={styles.perfHeroScoreMax}>/ 5.0</Text>
                             </View>
-                            <Text style={styles.perfHeroDesc}>Sistemdeki tüm oyların ortalamasıdır</Text>
-                        </View>
-                        <View style={styles.perfHeroBadge}>
-                            <MaterialIcons name="verified" size={40} color={colors.primary} />
+                            <Text style={[styles.perfHeroDesc, { color: colors.muted }]}>Sistemdeki tüm oyların ortalamasıdır</Text>
                         </View>
                     </View>
                 </View>
@@ -314,15 +427,22 @@ const getStyles = (colors: any) => StyleSheet.create({
     title: { fontSize: 24, fontWeight: "900", color: colors.text },
     sectionHeader: { fontSize: 10, fontWeight: "900", color: colors.muted, textTransform: "uppercase", letterSpacing: 1.5, marginLeft: 24, marginBottom: 12, marginTop: 8 },
     scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
-    menuContainer: { backgroundColor: colors.surface, borderRadius: 32, borderWidth: 1, borderColor: colors.surfaceBorder, overflow: "hidden" },
-    menuItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 24 },
+    menuContainer: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.surfaceBorder, overflow: "hidden" },
+    menuItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 20 },
     menuItemBorder: { borderBottomWidth: 1, borderBottomColor: colors.surfaceBorder },
     menuItemLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
-    menuItemIcon: { width: 48, height: 48, borderRadius: 16, backgroundColor: colors.cardHighlight, alignItems: "center", justifyContent: "center", marginRight: 16 },
-    menuItemLabel: { fontSize: 16, fontWeight: "900", color: colors.text, marginBottom: 4 },
-    menuItemSubtitle: { fontSize: 11, fontWeight: "bold", color: colors.muted },
+    menuItemIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.surfaceBorder, alignItems: "center", justifyContent: "center", marginRight: 16 },
+    menuItemLabel: { fontSize: 16, fontWeight: "bold", color: colors.text, marginBottom: 4 },
+    menuItemSubtitle: { fontSize: 12, color: colors.muted },
 
     // Sales View
+    exportPdfButton: { flexDirection: "row", alignItems: "center", backgroundColor: '#ef4444', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 4 },
+    exportPdfText: { color: "#fff", fontSize: 12, fontWeight: "bold" },
+    filterTabsContainer: { flexDirection: "row", marginHorizontal: 24, marginBottom: 20, backgroundColor: colors.surfaceBorder, padding: 4, borderRadius: 8 },
+    filterTab: { flex: 1, paddingVertical: 10, alignItems: "center", borderRadius: 6 },
+    filterTabActive: { backgroundColor: colors.surface },
+    filterTabText: { fontSize: 12, fontWeight: "bold", color: colors.muted },
+    filterTabTextActive: { color: colors.text },
     statsGrid: { flexDirection: "row", justifyContent: "space-between", marginBottom: 24, gap: 16, flexWrap: 'wrap' },
     statBox: { flex: 1, padding: 20, borderRadius: 24, borderWidth: 1 },
     statBoxLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 1, marginBottom: 8 },
@@ -336,14 +456,12 @@ const getStyles = (colors: any) => StyleSheet.create({
     emptyText: { marginTop: 16, fontSize: 12, fontWeight: "900", color: colors.muted, textTransform: 'uppercase', letterSpacing: 1 },
 
     // Perf View
-    perfHeroCard: { backgroundColor: colors.text, borderRadius: 32, padding: 28, marginBottom: 24, overflow: "hidden", position: "relative" },
-    perfHeroIcon: { position: "absolute", right: 10, top: 10 },
-    perfHeroContent: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", zIndex: 10 },
-    perfHeroLabel: { color: colors.primary, fontSize: 10, fontWeight: "900", letterSpacing: 2, marginBottom: 8 },
-    perfHeroScore: { color: colors.background, fontSize: 40, fontWeight: "900" },
-    perfHeroScoreMax: { color: colors.muted, fontSize: 14, fontWeight: "bold", marginLeft: 4 },
-    perfHeroDesc: { color: colors.background, fontSize: 10, fontWeight: "bold", textTransform: "uppercase", letterSpacing: 1, marginTop: 8 },
-    perfHeroBadge: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.cardHighlight, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.primary },
+    perfHeroCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 24, marginBottom: 24, borderWidth: 1 },
+    perfHeroContent: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+    perfHeroLabel: { color: colors.muted, fontSize: 12, fontWeight: "bold", marginBottom: 8 },
+    perfHeroScore: { fontSize: 48, fontWeight: "bold" },
+    perfHeroScoreMax: { color: colors.muted, fontSize: 16, fontWeight: "bold", marginLeft: 8 },
+    perfHeroDesc: { fontSize: 12, marginTop: 8 },
 
     smallStatCard: { width: "47%", backgroundColor: colors.surface, padding: 20, borderRadius: 24, borderWidth: 1, borderColor: colors.surfaceBorder, marginBottom: 16 },
     smallStatIconCont: { width: 44, height: 44, borderRadius: 16, alignItems: "center", justifyContent: "center", marginBottom: 12 },
@@ -354,13 +472,13 @@ const getStyles = (colors: any) => StyleSheet.create({
     smallStatTrend: { fontSize: 10, fontWeight: "900" },
 
     // Feedback View
-    feedbackCard: { backgroundColor: colors.surface, padding: 24, borderRadius: 32, borderWidth: 1, borderColor: colors.surfaceBorder, marginBottom: 16 },
+    feedbackCard: { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.surfaceBorder, marginBottom: 16 },
     feedbackTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
     feedbackUser: { flexDirection: "row", alignItems: "center", gap: 12 },
-    feedbackAvatar: { width: 40, height: 40, borderRadius: 16, backgroundColor: colors.background, alignItems: "center", justifyContent: "center" },
-    feedbackName: { fontSize: 14, fontWeight: "900", color: colors.text, marginBottom: 2 },
-    feedbackCompany: { fontSize: 10, fontWeight: "900", color: colors.muted, textTransform: "uppercase", letterSpacing: 1 },
+    feedbackAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceBorder, alignItems: "center", justifyContent: "center" },
+    feedbackName: { fontSize: 14, fontWeight: "bold", color: colors.text, marginBottom: 2 },
+    feedbackCompany: { fontSize: 12, color: colors.muted },
     starsCont: { flexDirection: "row", gap: 2 },
-    feedbackNote: { fontSize: 14, color: colors.text, fontWeight: "500", fontStyle: "italic", lineHeight: 22, marginBottom: 16 },
+    feedbackNote: { fontSize: 14, color: colors.text, fontStyle: "italic", lineHeight: 22, marginBottom: 16 },
     feedbackDate: { fontSize: 10, fontWeight: "900", color: colors.muted, textTransform: "uppercase", letterSpacing: 1, textAlign: "right" }
 });

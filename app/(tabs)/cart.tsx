@@ -10,6 +10,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -28,6 +29,7 @@ export default function CartScreen() {
     const styles = getStyles(colors);
 
     const [orderType, setOrderType] = useState<"Şimdi Ye" | "Sonra Ye (Gel-Al)">("Şimdi Ye");
+    const [orderNote, setOrderNote] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleCheckout = async () => {
@@ -52,7 +54,7 @@ export default function CartScreen() {
                     onPress: async () => {
                         setIsSubmitting(true);
                         try {
-                            const note = `Sipariş Türü: ${orderType}`;
+                            const note = `Sipariş Türü: ${orderType}${orderNote ? ` - Not: ${orderNote}` : ""}`;
                             await adisyonService.createOrder(
                                 user.id,
                                 getTotal(),
@@ -136,6 +138,18 @@ export default function CartScreen() {
 
             {items.length > 0 && (
                 <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
+                    <View style={styles.noteContainer}>
+                        <Text style={styles.orderTypeLabel}>Sipariş Notu (Opsiyonel):</Text>
+                        <TextInput
+                            style={styles.noteInput}
+                            placeholder="Örn: Bol acılı olsun..."
+                            placeholderTextColor={colors.muted}
+                            value={orderNote}
+                            onChangeText={setOrderNote}
+                            multiline
+                        />
+                    </View>
+
                     <Text style={styles.orderTypeLabel}>Sipariş Türü Seçiniz:</Text>
                     <View style={styles.orderTypeContainer}>
                         <TouchableOpacity
@@ -286,6 +300,19 @@ const getStyles = (colors: any) => StyleSheet.create({
         fontWeight: 'bold',
         color: colors.muted,
         marginBottom: 12,
+    },
+    noteContainer: {
+        marginBottom: 20,
+    },
+    noteInput: {
+        backgroundColor: colors.background,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+        borderRadius: 12,
+        padding: 12,
+        color: colors.text,
+        minHeight: 80,
+        textAlignVertical: 'top',
     },
     orderTypeContainer: {
         flexDirection: 'row',
