@@ -5,7 +5,7 @@ import { menuService } from "@/lib/services/menuService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { router, useFocusEffect, useNavigation } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
@@ -39,13 +39,15 @@ const SYS_CATEGORIES = [
 export default function AdminMenuAdd() {
     const { menu, systemPrices, loading, refetch } = useMenu(false);
     const insets = useSafeAreaInsets();
-    const navigation = useNavigation();
+    const router = useRouter();
+
+    const [isSaving, setIsSaving] = useState(false);
 
     const theme = useResolvedTheme();
     const colors = Colors[theme];
     const styles = getStyles(colors);
 
-    const [mainTab, setMainTab] = useState<"GUNUN_MENUSU" | "SABIT_LISTE">("GUNUN_MENUSU");
+    const [mainTab, setMainTab] = useState<"ADD_MEAL" | "POOL" | "TODAY" | "FIXED">("TODAY");
 
     useFocusEffect(
         React.useCallback(() => {
@@ -53,25 +55,45 @@ export default function AdminMenuAdd() {
         }, [])
     );
 
-    const [newItem, setNewItem] = useState({
+    const [bulkItems, setBulkItems] = useState([{
+        id: Date.now().toString(),
         name: "",
         category: "ANA YEMEK",
         price: "180",
         image_url: "",
-        image_base64: "",
-    });
+        image_base64: ""
+    }]);
 
-    const [editModalVisible, setEditModalVisible] = useState(false);
-    const [editingItem, setEditingItem] = useState<{ id: string, name: string, category: string, price: string, image_url?: string, image_base64?: string } | null>(null);
+    const handleAddBulkRow = () => {
+        setBulkItems(prev => {
+            const lastItem = prev[prev.length - 1];
+            return [...prev, {
+                id: Date.now().toString() + Math.random().toString(),
+                name: "",
+                category: lastItem ? lastItem.category : "ANA YEMEK",
+                price: lastItem ? lastItem.price : "180",
+                image_url: "",
+                image_base64: ""
+            }];
+        });
+    };
 
-    const handleCategorySelect = (categoryId: string) => {
+    const handleRemoveBulkRow = (id: string) => {
+        if (bulkItems.length === 1) return;
+        setBulkItems(prev => prev.filter(item => item.id !== id));
+    };
+
+    const handleBulkCategorySelect = (id: string, categoryId: string) => {
         let defaultPrice = "";
         if (systemPrices && systemPrices.length > 0) {
             const matchedSys = systemPrices.find(s => s.category === "TEK ÇEŞİT" && s.name.includes(categoryId));
             if (matchedSys) defaultPrice = matchedSys.price.toString();
         }
-        setNewItem(prev => ({ ...prev, category: categoryId, price: defaultPrice || prev.price }));
+        setBulkItems(prev => prev.map(item => item.id === id ? { ...item, category: categoryId, price: defaultPrice || item.price } : item));
     };
+
+    const [editModalVisible, setEditModalVisible] = useState(false);
+    const [editingItem, setEditingItem] = useState<{ id: string, name: string, category: string, price: string, image_url?: string, image_base64?: string } | null>(null);
 
     const handleToggleStatus = async (id: string, newStatus: string) => {
         try {
@@ -82,19 +104,32 @@ export default function AdminMenuAdd() {
         }
     };
 
-    const handleAddIndividual = async () => {
-        if (!newItem.name || !newItem.price) {
-            Alert.alert("Uyarı", "Lütfen isim ve fiyat giriniz.");
+    const handleSaveBulk = async () => {
+        const invalidItems = bulkItems.filter(item => item.name.trim() === "" || item.price === "");
+        if (invalidItems.length > 0) {
+            Alert.alert("Uyarı", "Lütfen tüm yemeklerin adını ve fiyatını eksiksiz giriniz veya boş bıraktığınız satırları (X) butonundan siliniz.");
             return;
         }
 
         try {
-            await menuService.addMenuItem(newItem.name, newItem.category, Number(newItem.price), newItem.image_url, newItem.image_base64);
-            Alert.alert("Başarılı", `${newItem.name} listeye eklendi! (Henüz yayınlanmadı)`);
-            setNewItem({ name: "", category: newItem.category, price: "", image_url: "", image_base64: "" });
+            setIsSaving(true);
+            for (const item of bulkItems) {
+                await menuService.addMenuItem(
+                    item.name.trim(),
+                    item.category,
+                    Number(item.price),
+                    item.image_url,
+                    item.image_base64
+                );
+            }
+            Alert.alert("Başarılı", `${bulkItems.length} adet yemek Havuza eklendi!`);
+            setBulkItems([{ id: Date.now().toString(), name: "", category: "ANA YEMEK", price: "180", image_url: "", image_base64: "" }]);
             refetch();
+            setMainTab("POOL");
         } catch (error: any) {
-            Alert.alert("Hata", "Yemek eklenirken bir sorun oluştu: " + error.message);
+            Alert.alert("Hata", "Yemekler eklenirken bir sorun oluştu: " + error.message);
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -131,7 +166,7 @@ export default function AdminMenuAdd() {
         }
     };
 
-    const handlePickImage = async () => {
+    const handlePickImageForBulk = async (id: string) => {
         let result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             allowsEditing: true,
@@ -140,8 +175,8 @@ export default function AdminMenuAdd() {
             base64: true,
         });
 
-        if (!result.canceled) {
-            setNewItem({ ...newItem, image_url: result.assets[0].uri, image_base64: result.assets[0].base64 || "" });
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+            setBulkItems(prev => prev.map(item => item.id === id ? { ...item, image_url: result.assets[0].uri, image_base64: result.assets[0].base64 || "" } : item));
         }
     };
 
@@ -203,7 +238,9 @@ export default function AdminMenuAdd() {
         );
     };
 
-    const combinedMenu = (menu || []).filter((item: any) => item.status !== 'passive');
+    const allMenuItems = menu || [];
+    const todayMenu = allMenuItems.filter((item: any) => ['draft', 'active', 'sold_out'].includes(item.status));
+    const poolMenu = allMenuItems;
     const sysMenu = systemPrices || [];
 
     if (loading) {
@@ -229,30 +266,220 @@ export default function AdminMenuAdd() {
                 <ThemeSwitcher />
             </View>
 
-            <View style={styles.tabToggleContainer}>
-                <TouchableOpacity
-                    style={[styles.toggleBtn, mainTab === "GUNUN_MENUSU" && styles.activeToggleBtn]}
-                    onPress={() => setMainTab("GUNUN_MENUSU")}
-                >
-                    <Text style={[styles.toggleBtnText, mainTab === "GUNUN_MENUSU" && styles.activeToggleBtnText]}>
-                        GÜNLÜK YEMEK AĞI
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.toggleBtn, mainTab === "SABIT_LISTE" && styles.activeToggleBtn]}
-                    onPress={() => setMainTab("SABIT_LISTE")}
-                >
-                    <Text style={[styles.toggleBtnText, mainTab === "SABIT_LISTE" && styles.activeToggleBtnText]}>
-                        SİSTEM FİYAT REFERANSI
-                    </Text>
-                </TouchableOpacity>
+            <View style={{ marginBottom: 20 }}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabToggleContainer}>
+                    <TouchableOpacity
+                        style={[styles.toggleBtn, mainTab === "ADD_MEAL" && styles.activeToggleBtn]}
+                        onPress={() => setMainTab("ADD_MEAL")}
+                    >
+                        <Text style={[styles.toggleBtnText, mainTab === "ADD_MEAL" && styles.activeToggleBtnText]}>
+                            YENİ YEMEK EKLE
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.toggleBtn, mainTab === "POOL" && styles.activeToggleBtn]}
+                        onPress={() => setMainTab("POOL")}
+                    >
+                        <Text style={[styles.toggleBtnText, mainTab === "POOL" && styles.activeToggleBtnText]}>
+                            YEMEK HAVUZU
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.toggleBtn, mainTab === "TODAY" && styles.activeToggleBtn]}
+                        onPress={() => setMainTab("TODAY")}
+                    >
+                        <Text style={[styles.toggleBtnText, mainTab === "TODAY" && styles.activeToggleBtnText]}>
+                            GÜNÜN MENÜSÜ
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.toggleBtn, mainTab === "FIXED" && styles.activeToggleBtn]}
+                        onPress={() => setMainTab("FIXED")}
+                    >
+                        <Text style={[styles.toggleBtnText, mainTab === "FIXED" && styles.activeToggleBtnText]}>
+                            SABİT FİYAT LİSTESİ
+                        </Text>
+                    </TouchableOpacity>
+                </ScrollView>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-                {/* ------------------ SABİT LİSTE TAB (TABELA) ------------------ */}
-                {mainTab === "SABIT_LISTE" && (
-                    <View>
+                {/* 1. YENİ YEMEK EKLE TAB */}
+                {mainTab === "ADD_MEAL" && (
+                    <View style={[styles.formContainer, { marginTop: 10, paddingHorizontal: 0, paddingBottom: 0, backgroundColor: 'transparent', borderColor: 'transparent' }]}>
+                        <View style={{ backgroundColor: colors.surface, padding: 16, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                            <Text style={[styles.sectionHeader, { fontSize: 16 }]}>➕ TOPLU YEMEK EKLE</Text>
+                            <Text style={{ fontSize: 12, color: colors.muted }}>Sıfırdan oluşturacağınız yemekleri listeye girip tek seferde "Yemek Havuzu"na kaydedebilirsiniz.</Text>
+                        </View>
+
+                        {bulkItems.map((bItem, index) => (
+                            <View key={bItem.id} style={{ backgroundColor: colors.surface, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder, marginBottom: 16 }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                    <Text style={{ fontWeight: 'bold', color: colors.primary }}>Yemek #{index + 1}</Text>
+                                    {bulkItems.length > 1 && (
+                                        <TouchableOpacity onPress={() => handleRemoveBulkRow(bItem.id)}>
+                                            <MaterialIcons name="close" size={20} color={colors.danger} />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+
+                                <InputField
+                                    label="YEMEK ADI *"
+                                    icon="restaurant"
+                                    value={bItem.name}
+                                    onChangeText={(t: string) => setBulkItems(prev => prev.map(item => item.id === bItem.id ? { ...item, name: t } : item))}
+                                    colors={colors}
+                                    styles={styles}
+                                />
+
+                                <View style={styles.categoryContainer}>
+                                    <Text style={styles.inputLabel}>KATEGORİ *</Text>
+                                    <View style={styles.categoryGrid}>
+                                        {CATEGORIES.map(cat => (
+                                            <TouchableOpacity
+                                                key={cat.id}
+                                                style={[styles.catBtn, bItem.category === cat.id && styles.activeCatBtn]}
+                                                onPress={() => handleBulkCategorySelect(bItem.id, cat.id)}
+                                            >
+                                                <Text style={[styles.catText, bItem.category === cat.id && styles.activeCatText]}>{cat.label}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                <View style={{ flexDirection: 'row', gap: 12 }}>
+                                    <View style={{ flex: 1 }}>
+                                        <InputField
+                                            label="FİYATI (₺) *"
+                                            icon="payments"
+                                            keyboardType="numeric"
+                                            value={bItem.price}
+                                            onChangeText={(t: string) => setBulkItems(prev => prev.map(item => item.id === bItem.id ? { ...item, price: t } : item))}
+                                            colors={colors}
+                                            styles={styles}
+                                        />
+                                    </View>
+                                    <View style={{ width: 80, alignItems: 'center' }}>
+                                        <Text style={styles.inputLabel}>FOTO</Text>
+                                        <TouchableOpacity style={[styles.imagePickerBtn, { width: '100%', height: 48, marginTop: 0, borderWidth: bItem.image_url ? 0 : 1 }]} onPress={() => handlePickImageForBulk(bItem.id)}>
+                                            {bItem.image_url ? (
+                                                <Image source={{ uri: bItem.image_url }} style={{ width: '100%', height: '100%', borderRadius: 8 }} />
+                                            ) : (
+                                                <MaterialIcons name="add-a-photo" size={20} color={colors.muted} />
+                                            )}
+                                        </TouchableOpacity>
+                                        {bItem.image_url ? (
+                                            <TouchableOpacity style={{ marginTop: 4 }} onPress={() => setBulkItems(prev => prev.map(item => item.id === bItem.id ? { ...item, image_url: "", image_base64: "" } : item))}>
+                                                <Text style={{ color: colors.danger, fontSize: 10 }}>Kaldır</Text>
+                                            </TouchableOpacity>
+                                        ) : null}
+                                    </View>
+                                </View>
+                            </View>
+                        ))}
+
+                        <TouchableOpacity style={{ padding: 16, alignItems: 'center', borderColor: colors.primary, borderWidth: 1, borderStyle: 'dashed', borderRadius: 12, marginBottom: 16, backgroundColor: colors.surface }} onPress={handleAddBulkRow}>
+                            <Text style={{ color: colors.primary, fontWeight: 'bold' }}>+ Yeni Yemek Satırı Ekle</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.addBtn} onPress={handleSaveBulk}>
+                            <Text style={styles.addBtnText}>TÜM LİSTEYİ HAVUZA KAYDET</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {/* 2. YEMEK HAVUZU TAB */}
+                {mainTab === "POOL" && (
+                    <View style={[styles.formContainer, { marginTop: 10, backgroundColor: 'transparent', borderColor: 'transparent', padding: 0 }]}>
+                        <View style={{ backgroundColor: colors.surface, padding: 16, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                            <Text style={[styles.sectionHeader, { fontSize: 16 }]}>🥘 TÜM YEMEKLER (KATALOG)</Text>
+                            <Text style={{ fontSize: 12, color: colors.muted }}>Sisteme daha önceden kaydedilen tüm yemekleriniz burada. "Günün Menüsüne Al" dediğiniz yemek yukarıdaki Günün Menüsü sekmesine geçer.</Text>
+                        </View>
+
+                        {CATEGORIES.map(cat => {
+                            const items = poolMenu.filter((item: any) => item.category === cat.id);
+                            if (items.length === 0) return null;
+                            return (
+                                <View key={cat.id} style={{ marginBottom: 12 }}>
+                                    <View style={styles.categoryTitleBox}>
+                                        <Text style={styles.categoryTitleText}>{cat.label}</Text>
+                                        <View style={styles.categoryTitleLine} />
+                                    </View>
+                                    {items.map((item: any) => (
+                                        <ItemCard
+                                            key={item.id}
+                                            item={item}
+                                            isPoolTab={true}
+                                            handleToggleStatus={handleToggleStatus}
+                                            handleEditItem={handleEditItem}
+                                            handleDeleteItem={handleDeleteItem}
+                                            colors={colors}
+                                            styles={styles}
+                                        />
+                                    ))}
+                                </View>
+                            );
+                        })}
+                        {poolMenu.length === 0 && (
+                            <Text style={{ textAlign: 'center', color: colors.muted, marginTop: 40 }}>Havuzda bekleyen yemek yok.</Text>
+                        )}
+                    </View>
+                )}
+
+                {/* 3. GÜNÜN MENÜSÜ TAB */}
+                {mainTab === "TODAY" && (
+                    <View style={{ marginTop: 10 }}>
+                        {todayMenu.some((item: any) => item.status === 'draft') && (
+                            <TouchableOpacity style={styles.publishBtnBox} onPress={handlePublishMenu}>
+                                <Text style={styles.publishBtnBoxText}>YAYINLA VE MÜŞTERİYE BİLDİRİM GÖNDER</Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {todayMenu.length > 0 ? (
+                            <View style={[styles.formContainer, { backgroundColor: 'transparent', borderColor: 'transparent', padding: 0 }]}>
+                                <View style={{ backgroundColor: colors.surface, padding: 16, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                                    <Text style={[styles.sectionHeader, { color: colors.primary, fontSize: 16 }]}>✅ BUGÜN ÇIKACAK YEMEKLER</Text>
+                                    <Text style={{ fontSize: 12, color: colors.muted }}>Havuzdan seçilen yemekler buraya toplanır. Son kontrolü yaptıktan sonra YAYINLA butonunu kullanabilirsiniz.</Text>
+                                </View>
+
+                                {CATEGORIES.map(cat => {
+                                    const items = todayMenu.filter((item: any) => item.category === cat.id);
+                                    if (items.length === 0) return null;
+                                    return (
+                                        <View key={cat.id} style={{ marginBottom: 12 }}>
+                                            <View style={styles.categoryTitleBox}>
+                                                <Text style={styles.categoryTitleText}>{cat.label}</Text>
+                                                <View style={styles.categoryTitleLine} />
+                                            </View>
+                                            {items.map((item: any) => (
+                                                <ItemCard
+                                                    key={item.id}
+                                                    item={item}
+                                                    isPoolTab={false}
+                                                    handleToggleStatus={handleToggleStatus}
+                                                    handleEditItem={handleEditItem}
+                                                    handleDeleteItem={handleDeleteItem}
+                                                    colors={colors}
+                                                    styles={styles}
+                                                />
+                                            ))}
+                                        </View>
+                                    );
+                                })}
+                            </View>
+                        ) : (
+                            <View style={[styles.formContainer, { alignItems: 'center', paddingVertical: 40, marginTop: 20 }]}>
+                                <Text style={{ fontWeight: 'bold', color: colors.text, marginBottom: 8, fontSize: 16 }}>Günün Menüsü Boş</Text>
+                                <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'center' }}>Yan sekmedeki "Yemek Havuzu"ndan o gün çıkacak yemekleri seçerek bugünün menüsünü oluşturabilirsiniz.</Text>
+                            </View>
+                        )}
+                    </View>
+                )}
+
+                {/* 4. SABİT FİYAT LİSTESİ TAB */}
+                {mainTab === "FIXED" && (
+                    <View style={{ marginTop: 10 }}>
                         <View style={styles.infoBox}>
                             <MaterialIcons name="info-outline" size={24} color={colors.info} />
                             <Text style={styles.infoText}>Bu alandaki fiyatlar doğrudan işletmenizin fiziki tabelasındaki fiyatları simgeler. Müşteri fiyatları buradan beslenir.</Text>
@@ -296,98 +523,6 @@ export default function AdminMenuAdd() {
                     </View>
                 )}
 
-                {/* ------------------ GÜNÜN MENÜSÜ TAB ------------------ */}
-                {mainTab === "GUNUN_MENUSU" && (
-                    <View>
-                        <TouchableOpacity style={styles.publishBtnBox} onPress={handlePublishMenu}>
-                            <Text style={styles.publishBtnBoxText}>YAYINLA VE MÜŞTERİLERE BİLDİRİM GÖNDER</Text>
-                        </TouchableOpacity>
-
-                        <View style={styles.formContainer}>
-                            <Text style={styles.sectionHeader}>YENİ YEMEK OLUŞTUR / EKLE</Text>
-                            <InputField
-                                label="YEMEK ADI"
-                                icon="restaurant"
-                                value={newItem.name}
-                                onChangeText={(t: string) => setNewItem({ ...newItem, name: t })}
-                                colors={colors}
-                                styles={styles}
-                            />
-                            <View style={styles.categoryContainer}>
-                                <Text style={styles.inputLabel}>KATEGORİ *</Text>
-                                <View style={styles.categoryGrid}>
-                                    {CATEGORIES.map(cat => (
-                                        <TouchableOpacity
-                                            key={cat.id}
-                                            style={[styles.catBtn, newItem.category === cat.id && styles.activeCatBtn]}
-                                            onPress={() => handleCategorySelect(cat.id)}
-                                        >
-                                            <Text style={[styles.catText, newItem.category === cat.id && styles.activeCatText]}>{cat.label}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
-                            <View style={styles.imagePickerContainer}>
-                                <Text style={styles.inputLabel}>FOTOĞRAF (İsteğe Bağlı)</Text>
-                                <TouchableOpacity style={styles.imagePickerBtn} onPress={handlePickImage}>
-                                    {newItem.image_url ? (
-                                        <Image source={{ uri: newItem.image_url }} style={styles.previewImage} />
-                                    ) : (
-                                        <>
-                                            <MaterialIcons name="add-a-photo" size={24} color={colors.muted} />
-                                            <Text style={styles.imagePickerText}>Fotoğraf Seç</Text>
-                                        </>
-                                    )}
-                                </TouchableOpacity>
-                                {newItem.image_url ? (
-                                    <TouchableOpacity style={{ marginTop: 8 }} onPress={() => setNewItem({ ...newItem, image_url: "" })}>
-                                        <Text style={{ color: colors.danger, fontSize: 13, textAlign: "center" }}>Fotoğrafı Kaldır</Text>
-                                    </TouchableOpacity>
-                                ) : null}
-                            </View>
-                            <InputField
-                                label="FİYATI (₺)"
-                                icon="payments"
-                                keyboardType="numeric"
-                                value={newItem.price}
-                                onChangeText={(t: string) => setNewItem({ ...newItem, price: t })}
-                                colors={colors}
-                                styles={styles}
-                            />
-                            <TouchableOpacity style={styles.addBtn} onPress={handleAddIndividual}>
-                                <Text style={styles.addBtnText}>DOĞRUDAN LİSTEYE EKLE</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.listContainer}>
-                            <Text style={[styles.sectionHeader, { marginTop: 20 }]}>GÜNÜN YEMEKLERİ LİSTESİ</Text>
-                            {CATEGORIES.map(cat => {
-                                const items = combinedMenu.filter((item: any) => item.category === cat.id);
-                                if (items.length === 0) return null;
-                                return (
-                                    <View key={cat.id} style={{ marginBottom: 12 }}>
-                                        <View style={styles.categoryTitleBox}>
-                                            <Text style={styles.categoryTitleText}>{cat.label}</Text>
-                                            <View style={styles.categoryTitleLine} />
-                                        </View>
-                                        {items.map((item: any) => (
-                                            <ItemCard
-                                                key={item.id}
-                                                item={item}
-                                                handleToggleStatus={handleToggleStatus}
-                                                handleEditItem={handleEditItem}
-                                                handleDeleteItem={handleDeleteItem}
-                                                colors={colors}
-                                                styles={styles}
-                                            />
-                                        ))}
-                                    </View>
-                                );
-                            })}
-                        </View>
-                    </View>
-                )}
-
             </ScrollView>
 
             {/* Edit Modal (Ortak Kullanım) */}
@@ -395,7 +530,7 @@ export default function AdminMenuAdd() {
                 <Modal visible={editModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditModalVisible(false)}>
                     <View style={[styles.modalContainer, { paddingTop: insets.top + 20 }]}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>{mainTab === 'SABIT_LISTE' ? "Tabela Fiyatını Düzenle" : "Yemeği Düzenle"}</Text>
+                            <Text style={styles.modalTitle}>{mainTab === 'FIXED' ? "Tabela Fiyatını Düzenle" : "Yemeği Düzenle"}</Text>
                             <TouchableOpacity onPress={() => setEditModalVisible(false)}>
                                 <MaterialIcons name="close" size={28} color={colors.muted} />
                             </TouchableOpacity>
@@ -403,7 +538,7 @@ export default function AdminMenuAdd() {
 
                         <View style={styles.formContainerInner}>
                             <InputField
-                                label={mainTab === 'SABIT_LISTE' ? "BAŞLIK İSMİ" : "ÖĞE ADI"}
+                                label={mainTab === 'FIXED' ? "BAŞLIK İSMİ" : "ÖĞE ADI"}
                                 icon="edit"
                                 value={editingItem.name}
                                 onChangeText={(t: string) => setEditingItem(prev => prev ? { ...prev, name: t } : null)}
@@ -412,7 +547,7 @@ export default function AdminMenuAdd() {
                             />
 
                             {/* Sistem fiyatları için kategori değiştirmeye gerek yok */}
-                            {mainTab !== 'SABIT_LISTE' && (
+                            {mainTab !== 'FIXED' && (
                                 <>
                                     <View style={styles.categoryContainer}>
                                         <Text style={styles.inputLabel}>KATEGORİ *</Text>
@@ -470,9 +605,11 @@ export default function AdminMenuAdd() {
     );
 }
 
-const ItemCard = ({ item, handleToggleStatus, handleEditItem, handleDeleteItem, colors, styles }: any) => {
+const ItemCard = ({ item, isPoolTab, handleToggleStatus, handleEditItem, handleDeleteItem, colors, styles }: any) => {
     const isSoldOut = item.status === 'sold_out';
     const isDraft = item.status === 'draft';
+    const isActive = item.status === 'active';
+    const isPassive = item.status === 'passive';
 
     return (
         <View style={[styles.menuItemCard, isSoldOut && { opacity: 0.6 }]}>
@@ -490,28 +627,73 @@ const ItemCard = ({ item, handleToggleStatus, handleEditItem, handleDeleteItem, 
                 <View style={styles.menuItemTextCont}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <Text style={styles.menuItemName}>{item.name}</Text>
-                        {isDraft && <Text style={{ fontSize: 9, color: colors.warning, fontWeight: 'bold' }}>(YAYINLANMADI)</Text>}
                     </View>
-                    <Text style={styles.menuItemDetails}>₺{item.price}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        <Text style={styles.menuItemDetails}>₺{item.price}</Text>
+                        {isDraft && <Text style={{ fontSize: 9, color: '#f59e0b', fontWeight: 'bold' }}>(YAYIN BEKLİYOR)</Text>}
+                        {isActive && <Text style={{ fontSize: 9, color: '#10b981', fontWeight: 'bold' }}>(AKTİF)</Text>}
+                        {isPassive && <Text style={{ fontSize: 9, color: colors.muted, fontWeight: 'bold' }}>(HAVUZDA)</Text>}
+                    </View>
                 </View>
             </View>
-            <View style={styles.menuItemActions}>
-                <TouchableOpacity
-                    style={[styles.simpleActionBtn, isSoldOut ? styles.activeActionBtn : null, { flex: 1.5 }]}
-                    onPress={() => handleToggleStatus(item.id, isSoldOut ? 'active' : 'sold_out')}
-                >
-                    <Text style={[styles.simpleActionText, isSoldOut ? styles.activeActionText : null]}>
-                        {isSoldOut ? 'Tekrar Satışta' : 'Tükendi Yap'}
-                    </Text>
-                </TouchableOpacity>
+            <View style={[styles.menuItemActions, { flexWrap: 'wrap', gap: 8 }]}>
+                {isPoolTab ? (
+                    <>
+                        {isPassive ? (
+                            <TouchableOpacity
+                                style={[styles.simpleActionBtn, { flex: 1, minWidth: '40%', backgroundColor: colors.primary, borderColor: colors.primary }]}
+                                onPress={() => handleToggleStatus(item.id, 'draft')}
+                            >
+                                <Text style={[styles.simpleActionText, { color: '#fff' }]}>Günün Menüsüne Al</Text>
+                            </TouchableOpacity>
+                        ) : (
+                            <View style={[styles.simpleActionBtn, { flex: 1, minWidth: '40%', backgroundColor: colors.surfaceBorder, borderColor: colors.surfaceBorder, opacity: 0.6 }]}>
+                                <Text style={[styles.simpleActionText, { color: colors.muted }]}>Günün Menüsünde</Text>
+                            </View>
+                        )}
 
-                <TouchableOpacity style={[styles.simpleActionBtn, { flex: 1 }]} onPress={() => handleEditItem(item)}>
-                    <Text style={styles.simpleActionText}>Düzenle</Text>
-                </TouchableOpacity>
+                        <TouchableOpacity style={[styles.simpleActionBtn, { flex: 1, minWidth: '20%' }]} onPress={() => handleEditItem(item)}>
+                            <Text style={styles.simpleActionText}>Düzenle</Text>
+                        </TouchableOpacity>
 
-                <TouchableOpacity style={[styles.simpleActionBtn, styles.dangerActionBtn, { flex: 1 }]} onPress={() => handleDeleteItem(item.id)}>
-                    <Text style={[styles.simpleActionText, styles.dangerActionText]}>Sil</Text>
-                </TouchableOpacity>
+                        <TouchableOpacity style={[styles.simpleActionBtn, styles.dangerActionBtn, { flex: 0.5, minWidth: 40, alignItems: 'center', justifyContent: 'center' }]} onPress={() => handleDeleteItem(item.id)}>
+                            <MaterialIcons name="delete" size={16} color={colors.danger} />
+                        </TouchableOpacity>
+                    </>
+                ) : (
+                    <>
+                        {!isPassive && (
+                            <TouchableOpacity
+                                style={[styles.simpleActionBtn, { flex: 1, minWidth: '40%', borderColor: '#f59e0b', backgroundColor: colors.surface }]}
+                                onPress={() => handleToggleStatus(item.id, 'passive')}
+                            >
+                                <Text style={[styles.simpleActionText, { color: '#f59e0b' }]}>Menüden Kaldır</Text>
+                            </TouchableOpacity>
+                        )}
+                        {(isActive || isDraft) && (
+                            <TouchableOpacity
+                                style={[styles.simpleActionBtn, { flex: 1, minWidth: '40%', backgroundColor: colors.danger, borderColor: colors.danger }]}
+                                onPress={() => handleToggleStatus(item.id, 'sold_out')}
+                            >
+                                <Text style={[styles.simpleActionText, { color: '#fff' }]}>Tükendi Olarak İşaretle</Text>
+                            </TouchableOpacity>
+                        )}
+                        {isSoldOut && (
+                            <TouchableOpacity
+                                style={[styles.simpleActionBtn, { flex: 1, minWidth: '40%', backgroundColor: '#10b981', borderColor: '#10b981' }]}
+                                onPress={() => handleToggleStatus(item.id, 'active')}
+                            >
+                                <Text style={[styles.simpleActionText, { color: '#fff' }]}>Tekrar Satışa Aç</Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {(isDraft || isSoldOut || isActive) && (
+                            <TouchableOpacity style={[styles.simpleActionBtn, { flex: 1, minWidth: '20%' }]} onPress={() => handleEditItem(item)}>
+                                <Text style={styles.simpleActionText}>Düzenle</Text>
+                            </TouchableOpacity>
+                        )}
+                    </>
+                )}
             </View>
         </View>
     );
@@ -537,14 +719,20 @@ const getStyles = (colors: any) => StyleSheet.create({
     header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 24, paddingBottom: 16 },
     title: { fontSize: 24, fontWeight: "900", color: colors.text },
     subtitle: { fontSize: 10, color: colors.muted, marginTop: 4 },
-    tabToggleContainer: { flexDirection: "row", paddingHorizontal: 24, marginBottom: 20 },
-    toggleBtn: { flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: "transparent", alignItems: "center" },
+    modalContainer: { flex: 1, backgroundColor: colors.background },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderColor: colors.surfaceBorder, marginBottom: 24 },
+    modalTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text },
+    systemItemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: 16, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: colors.surfaceBorder },
+    systemItemName: { fontSize: 14, fontWeight: '500', color: colors.text },
+    systemItemPrice: { fontSize: 14, fontWeight: 'bold', color: colors.text },
+    tabToggleContainer: { flexDirection: "row", paddingHorizontal: 24 },
+    toggleBtn: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 2, borderBottomColor: "transparent", alignItems: "center" },
     activeToggleBtn: { borderBottomColor: colors.primary },
     toggleBtnText: { fontSize: 12, fontWeight: "bold", color: colors.muted },
     activeToggleBtnText: { color: colors.primary },
-    scrollContent: { paddingHorizontal: 24, paddingBottom: 60 },
     infoBox: { backgroundColor: colors.surfaceBorder, padding: 12, borderRadius: 8, marginBottom: 20 },
     infoText: { fontSize: 12, color: colors.text },
+    scrollContent: { paddingHorizontal: 24, paddingBottom: 60 },
     sectionHeader: { fontSize: 14, fontWeight: "bold", color: colors.text, marginBottom: 16 },
     formContainer: { backgroundColor: colors.surface, padding: 20, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder, marginBottom: 24 },
     formContainerInner: { paddingHorizontal: 24, paddingBottom: 40 },
@@ -581,11 +769,5 @@ const getStyles = (colors: any) => StyleSheet.create({
     previewImage: { width: "100%", height: "100%", borderRadius: 8 },
     categoryTitleBox: { flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 },
     categoryTitleText: { fontSize: 14, fontWeight: "bold", color: colors.muted },
-    categoryTitleLine: { flex: 1, height: 1, backgroundColor: colors.surfaceBorder },
-    modalContainer: { flex: 1, backgroundColor: colors.background },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderColor: colors.surfaceBorder, marginBottom: 24 },
-    modalTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text },
-    systemItemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: 16, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: colors.surfaceBorder },
-    systemItemName: { fontSize: 14, fontWeight: '500', color: colors.text },
-    systemItemPrice: { fontSize: 14, fontWeight: 'bold', color: colors.text }
+    categoryTitleLine: { flex: 1, height: 1, backgroundColor: colors.surfaceBorder }
 });

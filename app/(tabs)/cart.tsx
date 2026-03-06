@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../lib/hooks/useAuth";
 import { adisyonService } from "../../lib/services/adisyonService";
+import { notificationService } from "../../lib/services/notificationService";
 
 export default function CartScreen() {
     const { items, removeItem, clearCart, getTotal } = useCartStore();
@@ -64,6 +65,9 @@ export default function CartScreen() {
                             );
 
                             clearCart();
+                            // Schedule rating notification for 15 minutes later
+                            await notificationService.scheduleRatingNotification(15);
+
                             Alert.alert("Başarılı", "Siparişiniz başarıyla alındı!", [
                                 { text: "Tamam", onPress: () => router.push("/(tabs)/home") }
                             ]);

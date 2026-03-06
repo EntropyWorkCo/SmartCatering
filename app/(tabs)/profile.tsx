@@ -20,6 +20,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
+import { notificationService } from "@/lib/services/notificationService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 
@@ -203,6 +204,18 @@ export default function ProfileScreen() {
                             thumbColor="#fff"
                         />
                     </View>
+
+                    <TouchableOpacity
+                        style={[styles.linkItem, { borderColor: colors.primary + '80', backgroundColor: colors.primary + '10' }]}
+                        onPress={() => {
+                            Alert.alert("Test Başladı", "5 saniye sonra değerlendirme bildirimi (simülasyon) gelecek.");
+                            notificationService.scheduleRatingNotification(0.083); // ~5 seconds
+                        }}
+                    >
+                        <MaterialIcons name="timer" size={24} color={colors.primary} />
+                        <Text style={[styles.linkText, { color: colors.primary }]}>Bildirimi Test Et (5 sn sonra)</Text>
+                        <MaterialIcons name="play-arrow" size={24} color={colors.primary} />
+                    </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>

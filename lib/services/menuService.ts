@@ -47,7 +47,7 @@ export const menuService = {
     const { data, error } = await supabase
       .from("menu_items")
       .insert([
-        { name, category, price, image_url: finalImageUrl || null, is_active: false, status: 'draft' }
+        { name, category, price, image_url: finalImageUrl || null, is_active: false, status: 'passive' }
       ])
       .select();
     if (error) throw error;
