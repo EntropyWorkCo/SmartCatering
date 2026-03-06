@@ -46,6 +46,11 @@ export default function RatingScreen() {
         setSubmitting(true);
         try {
             if (user) {
+                const finalNote = [
+                    selectedTags.length > 0 ? selectedTags.join(", ") : "",
+                    comment
+                ].filter(Boolean).join(" - ");
+
                 await supabase.from("feedbacks").insert({
                     user_id: user.id,
                     rating,
@@ -53,7 +58,7 @@ export default function RatingScreen() {
                     rating_corba: ratingCorba || rating,
                     rating_yan: ratingYan || rating,
                     rating_tatli: ratingTatli || rating,
-                    note: comment,
+                    note: finalNote,
                 });
             }
 
