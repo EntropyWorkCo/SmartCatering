@@ -87,9 +87,14 @@ export const adisyonService = {
   },
 
   async updateOrderStatus(orderId: string, status: string) {
+    const updateData: any = { status };
+    if (status === 'PAID') {
+      updateData.paid_at = new Date().toISOString();
+    }
+
     const { data, error } = await supabase
       .from("adisyon")
-      .update({ status })
+      .update(updateData)
       .eq("id", orderId)
       .select()
       .single();

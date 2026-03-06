@@ -5,7 +5,9 @@ import { notificationService } from "@/lib/services/notificationService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as Print from 'expo-print';
 import { router, useFocusEffect } from "expo-router";
+import * as Sharing from 'expo-sharing';
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,7 +17,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -150,6 +152,110 @@ export default function AdminDashboard() {
         },
       ]
     );
+  };
+
+  const handleExportPDF = async (account: any) => {
+    try {
+      const activeOrders = account.orders.filter((o: any) => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status));
+      const paidOrders = account.orders.filter((o: any) => ["PAID", "Ödendi"].includes(o.status));
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+            <style>
+              body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 20px; color: #333; }
+              .header { text-align: center; border-bottom: 2px solid #ed1c24; padding-bottom: 10px; margin-bottom: 20px; }
+              .title { font-size: 24px; font-weight: bold; color: #ed1c24; margin: 0; }
+              .meta { margin-bottom: 30px; }
+              .meta-item { margin-bottom: 5px; font-size: 14px; }
+              .section-title { font-size: 16px; font-weight: bold; background: #f8f8f8; padding: 8px; margin: 20px 0 10px 0; border-left: 4px solid #ed1c24; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+              th { text-align: left; font-size: 12px; color: #666; padding: 8px; border-bottom: 1px solid #eee; }
+              td { padding: 10px 8px; border-bottom: 1px solid #eee; font-size: 13px; }
+              .total-row { background: #fff; font-weight: bold; font-size: 18px; }
+              .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; }
+              .paid-status { color: #4CAF50; font-weight: bold; font-size: 11px; }
+              .pending-status { color: #f39c12; font-weight: bold; font-size: 11px; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <p class="title">SMART CATERING</p>
+              <p style="margin:5px 0; font-size:14px; color:#666;">Tahsilat & Ekstre Dökümü</p>
+            </div>
+
+            <div class="meta">
+              <div class="meta-item"><strong>Müşteri:</strong> ${account.displayName}</div>
+              <div class="meta-item"><strong>Tarih:</strong> ${new Date().toLocaleDateString('tr-TR')}</div>
+            </div>
+
+            ${activeOrders.length > 0 ? `
+              <div class="section-title">BEKLEYEN BORÇLAR</div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tarih</th>
+                    <th>Detay</th>
+                    <th style="text-align:right">Tutar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${activeOrders.map((o: any) => `
+                    <tr>
+                      <td>${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
+                      <td>
+                        ${o.adisyon_items?.map((i: any) => `${i.quantity}x ${i.menu_items?.name || 'Ürün'}`).join(', ')}
+                        ${o.note ? `<br/><small style="color:#888 italic">Not: ${o.note}</small>` : ''}
+                      </td>
+                      <td style="text-align:right">₺${o.total_amount?.toLocaleString('tr-TR')}</td>
+                    </tr>
+                  `).join('')}
+                  <tr class="total-row">
+                    <td colspan="2" style="border:none; padding-top:20px">TOPLAM BORÇ</td>
+                    <td style="text-align:right; color:#ed1c24; border:none; padding-top:20px">₺${account.total.toLocaleString('tr-TR')}</td>
+                  </tr>
+                </tbody>
+              </table>
+            ` : '<p style="font-size:14px; color:#666;">Bekleyen borç bulunmamaktadır.</p>'}
+
+            ${paidOrders.length > 0 ? `
+              <div class="section-title">GEÇMİŞ ÖDEMELER (TAHSİLATLAR)</div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Sipariş Tarihi</th>
+                    <th>Ödeme Tarihi</th>
+                    <th style="text-align:right">Tutar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${paidOrders.map((o: any) => `
+                    <tr>
+                      <td>${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
+                      <td class="paid-status">${o.paid_at ? new Date(o.paid_at).toLocaleDateString('tr-TR') : 'Ödendi'}</td>
+                      <td style="text-align:right">₺${o.total_amount?.toLocaleString('tr-TR')}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            ` : ''}
+
+            <div class="footer">
+              <p>Bu belge sistem tarafından otomatik oluşturulmuştur.</p>
+              <p><strong>Smart Catering İşletme Yönetimi</strong></p>
+            </div>
+          </body>
+        </html>
+      `;
+
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Hata", "PDF oluşturulurken bir sorun oluştu.");
+    }
   };
 
   if (loading) {
@@ -296,8 +402,21 @@ export default function AdminDashboard() {
             <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
 
               <View style={styles.invoiceMetaGroup}>
-                <Text style={[styles.invoiceMetaLabel, { color: colors.muted }]}>MÜŞTERİ / FİRMA ÜNVANI</Text>
-                <Text style={[styles.invoiceMetaValue, { color: colors.text }]}>{previewAccount.displayName}</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View>
+                    <Text style={[styles.invoiceMetaLabel, { color: colors.muted }]}>MÜŞTERİ / FİRMA ÜNVANI</Text>
+                    <Text style={[styles.invoiceMetaValue, { color: colors.text }]}>{previewAccount.displayName}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.outlineBtn, { paddingHorizontal: 16, flex: 0, height: 40, justifyContent: 'center' }]}
+                    onPress={() => handleExportPDF(previewAccount)}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <MaterialIcons name="picture-as-pdf" size={18} color={colors.primary} />
+                      <Text style={[styles.outlineBtnText, { color: colors.primary }]}>PDF Yap</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={styles.invoiceDivider} />
@@ -329,6 +448,36 @@ export default function AdminDashboard() {
                     ) : null}
                   </View>
                 ))}
+
+              {previewAccount.orders.some((o: any) => ["PAID", "Ödendi"].includes(o.status)) && (
+                <>
+                  <View style={styles.invoiceDivider} />
+                  <Text style={[styles.modalSectionTitle, { color: colors.primary }]}>
+                    GEÇMİŞ TAHSİLATLAR (KAPALI BORÇLAR)
+                  </Text>
+                  {previewAccount.orders
+                    .filter((o: any) => ["PAID", "Ödendi"].includes(o.status))
+                    .sort((a: any, b: any) => new Date(b.paid_at || b.created_at).getTime() - new Date(a.paid_at || a.created_at).getTime())
+                    .map((order: any) => (
+                      <View key={order.id} style={[styles.simpleOrderRow, { opacity: 0.7 }]}>
+                        <View style={styles.simpleOrderRowHeader}>
+                          <View>
+                            <Text style={[styles.simpleOrderDate, { color: colors.text }]}>
+                              {new Date(order.created_at).toLocaleDateString("tr-TR")}
+                            </Text>
+                            {order.paid_at && (
+                              <Text style={{ fontSize: 10, color: '#4CAF50', fontWeight: 'bold' }}>
+                                Ödeme: {new Date(order.paid_at).toLocaleDateString("tr-TR")}
+                              </Text>
+                            )}
+                          </View>
+                          <Text style={[styles.simpleOrderTotal, { color: colors.text }]}>₺{order.total_amount?.toLocaleString("tr-TR")}</Text>
+                        </View>
+                        <Text style={{ fontSize: 11, color: colors.muted }}>{order.userName} - Tahsil Edildi</Text>
+                      </View>
+                    ))}
+                </>
+              )}
 
               <View style={styles.invoiceDivider} />
 
