@@ -29,7 +29,14 @@ export default function HomeScreen() {
 
   const [modalVisible, setModalVisible] = React.useState(false);
   const [timeFilter, setTimeFilter] = React.useState<"ALL" | "DAILY" | "WEEKLY" | "MONTHLY">("ALL");
+  const [quantities, setQuantities] = React.useState<{ [key: string]: number }>({});
   const hasAlertedMenuRef = useRef(false);
+
+  const isCompany = profile?.is_company || false;
+  const getQuantity = (id: string) => quantities[id] || 1;
+  const setQuantity = (id: string, val: number) => {
+    setQuantities(prev => ({ ...prev, [id]: Math.max(1, val) }));
+  };
 
   const dailyMenu = useMemo(() => {
     return menu.filter(m => ["ÇORBA", "ANA YEMEK", "YARDIMCI"].includes(m.category));
@@ -61,15 +68,16 @@ export default function HomeScreen() {
   }, [dailyMenu]);
 
   const handleAddToCart = (item: any) => {
+    const quantity = getQuantity(item.id);
     useCartStore.getState().addItem({
       menu_item_id: item.id,
       name: item.name,
       price: item.price,
-      quantity: 1,
-      is_package: item.category === "PAKET",
+      quantity: quantity,
+      is_package: item.category === "PAKET" || item.category === "TABLDOT",
     });
-    // Can optionally show toast or alert, skipped for brevity or use minimal alert:
-    // Alert.alert("Eklendi", `${item.name} sepete eklendi.`);
+    Alert.alert("Eklendi", `${quantity} adet ${item.name} sepete eklendi.`);
+    setQuantities(prev => ({ ...prev, [item.id]: 1 }));
   };
 
   const cartItemCount = cartItems.reduce((acc, curr) => acc + curr.quantity, 0);
@@ -287,9 +295,24 @@ export default function HomeScreen() {
                           <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
                         </View>
                       ) : (
-                        <TouchableOpacity style={styles.addBtn} onPress={() => handleAddToCart(item)}>
-                          <MaterialIcons name="add-shopping-cart" size={20} color="#fff" />
-                        </TouchableOpacity>
+                        isCompany ? (
+                          <View style={[styles.quantityContainer, { marginTop: 8 }]}>
+                            <TouchableOpacity onPress={() => setQuantity(item.id, getQuantity(item.id) - 1)} style={styles.qtyBtn}>
+                              <MaterialIcons name="remove" size={14} color={colors.text} />
+                            </TouchableOpacity>
+                            <Text style={styles.qtyTextSmall}>{getQuantity(item.id)}</Text>
+                            <TouchableOpacity onPress={() => setQuantity(item.id, getQuantity(item.id) + 1)} style={styles.qtyBtn}>
+                              <MaterialIcons name="add" size={14} color={colors.text} />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.addBtn, { marginLeft: 8, width: 32, height: 32 }]} onPress={() => handleAddToCart(item)}>
+                              <MaterialIcons name="add-shopping-cart" size={16} color="#fff" />
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <TouchableOpacity style={styles.addBtn} onPress={() => handleAddToCart(item)}>
+                            <MaterialIcons name="add-shopping-cart" size={20} color="#fff" />
+                          </TouchableOpacity>
+                        )
                       )}
                     </View>
                   </View>
@@ -547,6 +570,16 @@ const getStyles = (colors: any) => StyleSheet.create({
   addBtn: {
     backgroundColor: colors.text, width: 40, height: 40, borderRadius: 12,
     alignItems: "center", justifyContent: "center",
+  },
+  quantityContainer: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: 12, padding: 4, borderWidth: 1, borderColor: colors.surfaceBorder,
+    marginTop: 6,
+  },
+  qtyBtn: {
+    width: 28, height: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderRadius: 8,
+  },
+  qtyTextSmall: {
+    fontSize: 14, fontWeight: 'bold', color: colors.text, marginHorizontal: 8, minWidth: 15, textAlign: 'center',
   },
 
   modalOverlay: {

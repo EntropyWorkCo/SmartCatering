@@ -29,17 +29,15 @@ export const useCartStore = create<CartState>((set, get) => ({
 
     addItem: (newItem) => {
         set((state) => {
-            // If it's not a package, and the exact same item was added, we can bump quantity.
-            // But if it's a package with sub-selections, it's safer to just push a new unique item.
-            if (!newItem.is_package) {
-                const existingItem = state.items.find(i => i.menu_item_id === newItem.menu_item_id && !i.is_package);
-                if (existingItem) {
-                    return {
-                        items: state.items.map(i =>
-                            i.id === existingItem.id ? { ...i, quantity: i.quantity + newItem.quantity } : i
-                        )
-                    };
-                }
+            // Since we are simplifying and removing sub-selections,
+            // we can merge quantity for all identical menu items.
+            const existingItem = state.items.find(i => i.menu_item_id === newItem.menu_item_id);
+            if (existingItem) {
+                return {
+                    items: state.items.map(i =>
+                        i.id === existingItem.id ? { ...i, quantity: i.quantity + newItem.quantity } : i
+                    )
+                };
             }
 
             // Add as completely new line item
@@ -51,6 +49,11 @@ export const useCartStore = create<CartState>((set, get) => ({
 
     removeItem: (id) => {
         set((state) => ({ items: state.items.filter(i => i.id !== id) }));
+    },
+
+    getItemQuantity: (menuItemId: string) => {
+        const item = get().items.find(i => i.menu_item_id === menuItemId);
+        return item ? item.quantity : 0;
     },
 
     clearCart: () => set({ items: [] }),

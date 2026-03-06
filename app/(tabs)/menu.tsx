@@ -9,15 +9,16 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAuth } from "../../lib/hooks/useAuth";
 import { useMenu } from "../../lib/hooks/useMenu";
+import { useProfile } from "../../lib/hooks/useProfile";
 
 export default function MenuScreen() {
   const { menu, systemPrices, loading } = useMenu(true);
@@ -26,9 +27,20 @@ export default function MenuScreen() {
   const [selectedCategory, setSelectedCategory] = useState("TÜMÜ");
   const cartItems = useCartStore(state => state.items);
 
+  const { user } = useAuth();
+  const { profile } = useProfile(user?.id);
+  const isCompany = profile?.is_company || false;
+
+  const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
+
   const theme = useResolvedTheme();
   const colors = Colors[theme];
   const styles = getStyles(colors);
+
+  const getQuantity = (id: string) => quantities[id] || 1;
+  const setQuantity = (id: string, val: number) => {
+    setQuantities(prev => ({ ...prev, [id]: Math.max(1, val) }));
+  };
 
   const TABLDOT_PACKAGES = systemPrices
     .filter(p => p.category === "TABLDOT")
@@ -83,20 +95,17 @@ export default function MenuScreen() {
   }
 
   const handleAddToCart = (item: any) => {
-    if (item.category === "PAKET") {
-      setSelectedPackage(item);
-      setPackageSelections([]);
-      setPackageModalVisible(true);
-    } else {
-      useCartStore.getState().addItem({
-        menu_item_id: item.id,
-        name: item.name,
-        price: item.price,
-        quantity: 1,
-        is_package: item.category === "PAKET",
-      });
-      Alert.alert("Eklendi", `${item.name} sepete eklendi.`);
-    }
+    const quantity = getQuantity(item.id);
+    useCartStore.getState().addItem({
+      menu_item_id: item.id,
+      name: item.name,
+      price: item.price,
+      quantity: quantity,
+      is_package: item.category === "PAKET" || item.category === "TABLDOT",
+    });
+    Alert.alert("Eklendi", `${quantity} adet ${item.name} sepete eklendi.`);
+    // Reset local quantity after adding
+    setQuantities(prev => ({ ...prev, [item.id]: 1 }));
   };
 
   const handleConfirmPackage = () => {
@@ -183,9 +192,25 @@ export default function MenuScreen() {
                 </View>
                 <View style={{ alignItems: 'flex-end', marginLeft: 12 }}>
                   <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary }}>₺{pkg.price}</Text>
-                  <View style={{ backgroundColor: colors.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 6 }}>
-                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>SEÇ</Text>
-                  </View>
+
+                  {isCompany ? (
+                    <View style={styles.quantityContainer}>
+                      <TouchableOpacity onPress={() => setQuantity(pkg.id, getQuantity(pkg.id) - 1)} style={styles.qtyBtn}>
+                        <MaterialIcons name="remove" size={16} color={colors.text} />
+                      </TouchableOpacity>
+                      <Text style={styles.qtyText}>{getQuantity(pkg.id)}</Text>
+                      <TouchableOpacity onPress={() => setQuantity(pkg.id, getQuantity(pkg.id) + 1)} style={styles.qtyBtn}>
+                        <MaterialIcons name="add" size={16} color={colors.text} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.addBtn, { marginLeft: 8 }]} onPress={() => handleAddToCart(pkg)}>
+                        <MaterialIcons name="add-shopping-cart" size={18} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity style={styles.addBtnLarge} onPress={() => handleAddToCart(pkg)}>
+                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>SEÇ</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </TouchableOpacity>
             ))}
@@ -238,9 +263,24 @@ export default function MenuScreen() {
                           <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
                         </View>
                       ) : (
-                        <TouchableOpacity style={styles.addBtn} onPress={() => handleAddToCart(item)}>
-                          <MaterialIcons name="add-shopping-cart" size={20} color="#fff" />
-                        </TouchableOpacity>
+                        isCompany ? (
+                          <View style={[styles.quantityContainer, { marginTop: 8 }]}>
+                            <TouchableOpacity onPress={() => setQuantity(item.id, getQuantity(item.id) - 1)} style={styles.qtyBtn}>
+                              <MaterialIcons name="remove" size={14} color={colors.text} />
+                            </TouchableOpacity>
+                            <Text style={styles.qtyTextSmall}>{getQuantity(item.id)}</Text>
+                            <TouchableOpacity onPress={() => setQuantity(item.id, getQuantity(item.id) + 1)} style={styles.qtyBtn}>
+                              <MaterialIcons name="add" size={14} color={colors.text} />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.addBtn, { marginLeft: 8, width: 32, height: 32 }]} onPress={() => handleAddToCart(item)}>
+                              <MaterialIcons name="add-shopping-cart" size={16} color="#fff" />
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <TouchableOpacity style={styles.addBtn} onPress={() => handleAddToCart(item)}>
+                            <MaterialIcons name="add-shopping-cart" size={20} color="#fff" />
+                          </TouchableOpacity>
+                        )
                       )}
                     </View>
                   </View>
@@ -287,9 +327,24 @@ export default function MenuScreen() {
                         <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
                       </View>
                     ) : (
-                      <TouchableOpacity style={styles.addBtn} onPress={() => handleAddToCart(item)}>
-                        <MaterialIcons name="add-shopping-cart" size={20} color="#fff" />
-                      </TouchableOpacity>
+                      isCompany ? (
+                        <View style={[styles.quantityContainer, { marginTop: 8 }]}>
+                          <TouchableOpacity onPress={() => setQuantity(item.id, getQuantity(item.id) - 1)} style={styles.qtyBtn}>
+                            <MaterialIcons name="remove" size={14} color={colors.text} />
+                          </TouchableOpacity>
+                          <Text style={styles.qtyTextSmall}>{getQuantity(item.id)}</Text>
+                          <TouchableOpacity onPress={() => setQuantity(item.id, getQuantity(item.id) + 1)} style={styles.qtyBtn}>
+                            <MaterialIcons name="add" size={14} color={colors.text} />
+                          </TouchableOpacity>
+                          <TouchableOpacity style={[styles.addBtn, { marginLeft: 8, width: 32, height: 32 }]} onPress={() => handleAddToCart(item)}>
+                            <MaterialIcons name="add-shopping-cart" size={16} color="#fff" />
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity style={styles.addBtn} onPress={() => handleAddToCart(item)}>
+                          <MaterialIcons name="add-shopping-cart" size={20} color="#fff" />
+                        </TouchableOpacity>
+                      )
                     )}
                   </View>
                 </View>
@@ -299,48 +354,7 @@ export default function MenuScreen() {
         </View>
       </ScrollView>
 
-      {/* Package Selection Modal */}
-      <Modal visible={packageModalVisible} animationType="slide" presentationStyle="pageSheet">
-        <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{selectedPackage?.name} İçeriği</Text>
-            <TouchableOpacity onPress={() => setPackageModalVisible(false)}>
-              <MaterialIcons name="close" size={28} color={colors.muted} />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.modalSubtitle}>Bu pakete dahil olan yemeklerinizi günün menüsünden seçiniz:</Text>
-
-          <ScrollView style={styles.modalScroll}>
-            {["ÇORBA", "ANA YEMEK", "YARDIMCI"].map(catName => {
-              const availableMeals = menu.filter((m: any) => m.category === catName && m.status === 'active');
-              if (availableMeals.length === 0) return null;
-              return (
-                <View key={catName} style={{ marginBottom: 20 }}>
-                  <Text style={styles.modalCategoryTitle}>{catName}</Text>
-                  {availableMeals.map((meal: any) => {
-                    const isSelected = !!packageSelections.find(s => s.item_id === meal.id);
-                    return (
-                      <TouchableOpacity
-                        key={meal.id}
-                        style={[styles.modalMealCard, isSelected && styles.modalMealCardActive]}
-                        onPress={() => togglePackageSelection(meal)}
-                      >
-                        <Text style={[styles.modalMealName, isSelected && { color: colors.primary }]}>{meal.name}</Text>
-                        {isSelected && <MaterialIcons name="check-circle" size={20} color={colors.primary} />}
-                      </TouchableOpacity>
-                    )
-                  })}
-                </View>
-              )
-            })}
-          </ScrollView>
-
-          <TouchableOpacity style={styles.confirmPackageBtn} onPress={handleConfirmPackage}>
-            <Text style={styles.confirmPackageBtnText}>Seçimleri Onayla ve Sepete Ekle</Text>
-            <Text style={styles.confirmPackagePriceInfo}>{packageSelections.length} Seçim / {selectedPackage?.maxItems} Hak</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
+      {/* Package Selection Modal Removed */}
     </View>
   );
 }
@@ -483,12 +497,24 @@ const getStyles = (colors: any) => StyleSheet.create({
     color: colors.primary,
   },
   addBtn: {
-    backgroundColor: colors.text,
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: colors.text, width: 40, height: 40, borderRadius: 12,
+    alignItems: "center", justifyContent: "center",
+  },
+  addBtnLarge: {
+    backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, marginTop: 8,
+  },
+  quantityContainer: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: 12, padding: 4, borderWidth: 1, borderColor: colors.surfaceBorder,
+    marginTop: 6,
+  },
+  qtyBtn: {
+    width: 28, height: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderRadius: 8,
+  },
+  qtyText: {
+    fontSize: 16, fontWeight: 'bold', color: colors.text, marginHorizontal: 12, minWidth: 20, textAlign: 'center',
+  },
+  qtyTextSmall: {
+    fontSize: 14, fontWeight: 'bold', color: colors.text, marginHorizontal: 8, minWidth: 15, textAlign: 'center',
   },
   modalContainer: {
     flex: 1,
