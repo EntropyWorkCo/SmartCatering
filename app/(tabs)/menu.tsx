@@ -182,19 +182,23 @@ export default function MenuScreen() {
           <View style={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 }}>
             <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 12 }}>Avantajlı Tabldot Menü</Text>
             {TABLDOT_PACKAGES.map(pkg => (
-              <TouchableOpacity key={pkg.id} style={{ backgroundColor: colors.surface, borderColor: colors.surfaceBorder, borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 12, flexDirection: 'row', alignItems: 'center' }} onPress={() => handleAddToCart(pkg)}>
-                <View style={{ backgroundColor: colors.cardHighlight, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
-                  <MaterialIcons name="restaurant-menu" size={24} color={colors.primary} />
+              <TouchableOpacity key={pkg.id} style={{ backgroundColor: colors.surface, borderColor: colors.surfaceBorder, borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 12 }} onPress={() => handleAddToCart(pkg)}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                  <View style={{ backgroundColor: colors.cardHighlight, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
+                    <MaterialIcons name="restaurant-menu" size={24} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }}>{pkg.name}</Text>
+                    <Text style={{ fontSize: 12, color: colors.muted, lineHeight: 16 }}>{pkg.desc}</Text>
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>{pkg.name}</Text>
-                  <Text style={{ fontSize: 12, color: colors.muted, marginTop: 4 }}>{pkg.desc}</Text>
-                </View>
-                <View style={{ alignItems: 'flex-end', marginLeft: 12 }}>
-                  <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary }}>₺{pkg.price}</Text>
+
+                {/* Alt Kısım (Fiyat ve Butonlar) */}
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 12 }}>
+                  <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary, marginRight: 12 }}>₺{pkg.price}</Text>
 
                   {isCompany ? (
-                    <View style={styles.quantityContainer}>
+                    <View style={[styles.quantityContainer, { marginTop: 0 }]}>
                       <TouchableOpacity onPress={() => setQuantity(pkg.id, getQuantity(pkg.id) - 1)} style={styles.qtyBtn}>
                         <MaterialIcons name="remove" size={16} color={colors.text} />
                       </TouchableOpacity>
@@ -207,7 +211,7 @@ export default function MenuScreen() {
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    <TouchableOpacity style={styles.addBtnLarge} onPress={() => handleAddToCart(pkg)}>
+                    <TouchableOpacity style={[styles.addBtnLarge, { marginTop: 0 }]} onPress={() => handleAddToCart(pkg)}>
                       <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>SEÇ</Text>
                     </TouchableOpacity>
                   )}
