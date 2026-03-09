@@ -79,7 +79,7 @@ function RootLayoutNav() {
         }),
       });
 
-      const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      const responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
         const url = response.notification.request.content.data?.url;
         if (url && typeof url === 'string') {
           router.push(url as any);
