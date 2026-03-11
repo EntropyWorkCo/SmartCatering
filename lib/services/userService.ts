@@ -81,7 +81,7 @@ export const userService = {
       .from("users")
       .update({
         full_name: data.fullName,
-        phone: data.phone
+        phone: data.phone,
       })
       .eq("id", userId);
 

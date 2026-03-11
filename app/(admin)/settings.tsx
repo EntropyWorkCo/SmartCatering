@@ -1,7 +1,9 @@
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
+import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import React from "react";
 import {
@@ -20,9 +22,14 @@ export default function AdminSettings() {
     const colors = Colors[theme];
     const styles = getStyles(colors);
 
-    const handleLogout = () => {
-        // Supabase logout işlemleri vs. eklenecek
-        router.replace("/welcome");
+    const handleLogout = async () => {
+        try {
+            await supabase.auth.signOut();
+            await AsyncStorage.removeItem("isAdmin");
+            router.replace("/welcome");
+        } catch (error) {
+            console.error("Logout error:", error);
+        }
     };
 
     return (

@@ -16,6 +16,20 @@ export const adisyonService = {
       throw adisyonError;
     }
 
+    // Insert note into messages table if it exists and isn't just the default "Sipariş Türü: Şimdi Ye"
+    // The cart sends: `Sipariş Türü: ${orderType}${orderNote ? ` - Not: ${orderNote}` : ""}`
+    if (note && note.includes(" - Not: ")) {
+      const { error: messageError } = await supabase
+        .from("messages")
+        .insert([
+          { user_id: userId, content: note, is_from_admin: false, is_read: false }
+        ]);
+
+      if (messageError) {
+        console.error("Yorum/Not mesaja dönüştürülemedi:", messageError);
+      }
+    }
+
     // 2. Adisyon Kalemleri
     const orderItems = items.map((item) => ({
       adisyon_id: adisyon.id,

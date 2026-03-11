@@ -54,7 +54,20 @@ export default function RegisterScreen() {
     setLoading(true);
 
     try {
-      const formattedPhone = personalPhone.replace(/\D/g, "");
+      // Normalizasyon: Boşlukları temizle, baştaki 0'ı at
+      let formattedPhone = personalPhone.replace(/\D/g, "");
+      if (formattedPhone.startsWith("0")) {
+        formattedPhone = formattedPhone.substring(1);
+      }
+
+      if (formattedPhone.length !== 10 || !formattedPhone.startsWith("5")) {
+        setLoading(false);
+        return Alert.alert(
+          "Geçersiz Numara",
+          "Lütfen telefon numaranızı başında 0 olmadan, 5 ile başlayacak şekilde (10 hane) girin."
+        );
+      }
+
       const fakeEmail = `${formattedPhone}@meydan.com`;
 
       // 1. ADIM: Auth Kaydı ve Metadata Gönderimi
@@ -153,14 +166,23 @@ export default function RegisterScreen() {
             <Text style={styles.label}>TELEFON</Text>
             <View style={styles.inputWrapper}>
               <MaterialIcons name="call" size={20} color={colors.muted} />
-              <TextInput
-                style={styles.input}
-                placeholder="5XX XXX XX XX"
-                placeholderTextColor={colors.muted}
-                keyboardType="phone-pad"
-                value={personalPhone}
-                onChangeText={setPersonalPhone}
-              />
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginLeft: 10 }}>
+                <Text style={{ fontSize: 16, color: colors.muted, fontWeight: 'bold', marginRight: 5 }}>+90</Text>
+                <TextInput
+                  style={[styles.input, { marginLeft: 0 }]}
+                  placeholder="5XX XXX XX XX"
+                  placeholderTextColor={colors.muted}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  value={personalPhone}
+                  onChangeText={(text) => {
+                    // Sayı olmayanları temizle ve baştaki 0'ı anında sil
+                    let cleaned = text.replace(/\D/g, "");
+                    if (cleaned.startsWith("0")) cleaned = cleaned.substring(1);
+                    setPersonalPhone(cleaned);
+                  }}
+                />
+              </View>
             </View>
 
             <Text style={styles.label}>ŞİFRE</Text>

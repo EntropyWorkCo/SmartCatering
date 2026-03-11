@@ -8,7 +8,7 @@ import {
 import { useFonts } from "expo-font";
 // import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { Platform } from "react-native";
@@ -41,17 +41,49 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
+  const { user, loading: authLoading, isAdmin } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
   useEffect(() => {
     if (error) throw error;
   }, [error]);
 
   useEffect(() => {
-    if (loaded) {
+    if (loaded && !authLoading) {
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [loaded, authLoading]);
 
-  if (!loaded) return null;
+  // Auth Guard: Watch for changes in user / segment
+  useEffect(() => {
+    if (!loaded || authLoading) return;
+
+    const inAuthGroup = segments[0] === "auth" || segments[0] === "welcome";
+
+    // Eğer kullanıcı giriş yapmamışsa ve kayıt/giriş sayfalarında değilse
+    if (
+      !user &&
+      !inAuthGroup &&
+      segments[0] !== "order-selection" &&
+      segments[0] !== "modal" &&
+      segments[0] !== "rating"
+    ) {
+      router.replace("/welcome");
+    }
+    // Eğer kullanıcı zaten giriş yapmışsa ve kayıt/giriş sayfalarındaysa
+    else if (user && inAuthGroup) {
+      // Admin ise yönetici paneline yolla
+      if (isAdmin) {
+        router.replace("/(admin)/dashboard");
+      } else {
+        // Yoksa müşteri paneline yolla
+        router.replace("/(tabs)");
+      }
+    }
+  }, [user, isAdmin, segments, authLoading, loaded]);
+
+  if (!loaded || authLoading) return null;
 
   return <RootLayoutNav />;
 }

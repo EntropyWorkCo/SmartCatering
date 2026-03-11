@@ -30,8 +30,35 @@ export default function AccountInfoScreen() {
         }
     }, [profile]);
 
+    const handlePhoneChange = (text: string) => {
+        // Sadece rakamları al
+        let cleaned = text.replace(/[^0-9]/g, "");
+
+        // Başta 0 varsa sil
+        if (cleaned.startsWith("0")) {
+            cleaned = cleaned.substring(1);
+        }
+
+        // Maksimum 10 karakter (5XX XXX XX XX)
+        if (cleaned.length <= 10) {
+            setPhone(cleaned);
+        }
+    };
+
     const handleSave = async () => {
         if (!user?.id) return;
+
+        // Telefon numarası doğrulaması
+        if (phone.length !== 10 || !phone.startsWith('5')) {
+            Alert.alert("Hata", "Lütfen geçerli bir telefon numarası giriniz (5XX XXX XX XX).");
+            return;
+        }
+
+        if (!fullName.trim()) {
+            Alert.alert("Hata", "Lütfen adınızı ve soyadınızı giriniz.");
+            return;
+        }
+
         setSaving(true);
         try {
             await userService.updateProfile(user.id, {
@@ -99,68 +126,49 @@ export default function AccountInfoScreen() {
                 <View style={styles.roleBadgeContainer}>
                     <View style={styles.roleBadge}>
                         <MaterialIcons
-                            name={profile?.is_company ? 'business' : 'person'}
+                            name={profile?.is_company || profile?.corporate_info ? 'business' : 'person'}
                             size={20}
                             color={colors.primary}
                         />
                         <Text style={styles.roleText}>
-                            {profile?.is_company ? 'Kurumsal Üye' : 'Bireysel Üye'}
+                            {profile?.is_company || profile?.corporate_info ? 'Kurumsal Üye' : 'Bireysel Üye'}
                         </Text>
                     </View>
                 </View>
 
                 <View style={styles.formGroup}>
                     <Text style={styles.label}>Ad Soyad</Text>
-                    <View style={styles.inputContainer}>
+                    <View style={[styles.inputContainer, styles.readOnlyInput]}>
                         <MaterialIcons name="person" size={20} color={colors.muted} />
                         <TextInput
-                            style={styles.input}
-                            placeholder="Ad Soyad"
-                            placeholderTextColor={colors.muted}
+                            style={[styles.input, { color: colors.muted }]}
                             value={fullName}
-                            onChangeText={setFullName}
+                            editable={false}
                         />
                     </View>
                 </View>
 
                 <View style={styles.formGroup}>
                     <Text style={styles.label}>Telefon Numarası</Text>
-                    <View style={styles.inputContainer}>
+                    <View style={[styles.inputContainer, styles.readOnlyInput]}>
                         <MaterialIcons name="phone" size={20} color={colors.muted} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="0 (5XX) XXX XX XX"
-                            placeholderTextColor={colors.muted}
-                            value={phone}
-                            onChangeText={setPhone}
-                            keyboardType="phone-pad"
-                        />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                            <Text style={{ fontSize: 16, color: colors.muted, fontWeight: 'bold', marginRight: 8 }}>+90</Text>
+                            <TextInput
+                                style={[styles.input, { color: colors.muted }]}
+                                value={phone}
+                                editable={false}
+                            />
+                        </View>
                     </View>
                 </View>
 
-                <TouchableOpacity
-                    style={styles.saveBtn}
-                    onPress={handleSave}
-                    disabled={saving}
-                    activeOpacity={0.8}
-                >
-                    {saving ? (
-                        <ActivityIndicator color="#fff" />
-                    ) : (
-                        <Text style={styles.saveBtnText}>Değişiklikleri Kaydet</Text>
-                    )}
-                </TouchableOpacity>
-
-                {profile?.is_company && (
-                    <TouchableOpacity
-                        style={styles.downgradeBtn}
-                        onPress={handleDowngrade}
-                        disabled={saving}
-                    >
-                        <MaterialIcons name="person-remove" size={20} color={colors.danger} />
-                        <Text style={styles.downgradeBtnText}>Hesabı Bireysel Hesaba Döndür</Text>
-                    </TouchableOpacity>
-                )}
+                <View style={styles.infoBox}>
+                    <MaterialIcons name="info-outline" size={20} color={colors.muted} />
+                    <Text style={styles.infoText}>
+                        Hesap bilgileriniz güvenlik ve giriş tutarlılığı için değiştirilemez. Değişiklik talepleriniz için lütfen yönetici ile iletişime geçin.
+                    </Text>
+                </View>
             </ScrollView>
         </SafeAreaView>
     );
@@ -194,6 +202,10 @@ const getStyles = (colors: any) => StyleSheet.create({
         paddingHorizontal: 16, height: 56
     },
     input: { flex: 1, fontSize: 16, color: colors.text, height: '100%' },
+    readOnlyInput: {
+        backgroundColor: colors.background,
+        borderColor: colors.surfaceBorder + '80',
+    },
 
     roleBadgeContainer: {
         alignItems: 'center', marginBottom: 8
@@ -204,6 +216,24 @@ const getStyles = (colors: any) => StyleSheet.create({
         borderRadius: 20, borderWidth: 1, borderColor: colors.primary + '40'
     },
     roleText: { color: colors.primary, fontWeight: 'bold', fontSize: 14 },
+
+    infoBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        backgroundColor: colors.surface,
+        padding: 16,
+        borderRadius: 16,
+        marginTop: 8,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+    },
+    infoText: {
+        flex: 1,
+        fontSize: 12,
+        color: colors.muted,
+        lineHeight: 18,
+    },
 
     saveBtn: {
         backgroundColor: colors.primary,

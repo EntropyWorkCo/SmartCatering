@@ -16,8 +16,10 @@ export default function AdisyonScreen() {
     const colors = Colors[theme];
     const styles = getStyles(colors);
 
-    const { user } = useAuth();
-    const { orders, loading } = useAdisyon(user?.id);
+    const { user, loading: authLoading } = useAuth();
+    // EĞER KULLANICI HENÜZ YÜKLENMEDİYSE null GÖNDER Kİ ADMİN MODU TETİKLENMESİN
+    // Supabase uuid beklediği için standart boş uuid gönderiyoruz
+    const { orders, loading } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
     const [timeFilter, setTimeFilter] = React.useState<"ALL" | "DAILY" | "WEEKLY" | "MONTHLY">("ALL");
 
     // Filter orders that are specifically unpaid / pending / added to bill
