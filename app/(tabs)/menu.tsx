@@ -68,7 +68,7 @@ export default function MenuScreen() {
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
   const [packageSelections, setPackageSelections] = useState<{ category: string, item_id: string, item_name: string }[]>([]);
 
-  const activeCategories = ["TÜMÜ", "TEK ÇEŞİTLER", "İÇECEKLER", "EKSTRALAR"];
+  const activeCategories = ["TÜMÜ", "GÜNÜN MENÜSÜ", "TABLDOT", "TEK ÇEŞİTLER", "İÇECEKLER", "EKSTRALAR"];
 
   let filteredMenu: any[] = [];
 
@@ -196,8 +196,8 @@ export default function MenuScreen() {
           </ScrollView>
         </View>
 
-        {/* Günün Menüsü (Always at top) */}
-        {(selectedCategory === "TÜMÜ" && dailyMenu.length > 0) && (
+        {/* Günün Menüsü (Always at top or dedicated tab) */}
+        {((selectedCategory === "TÜMÜ" || selectedCategory === "GÜNÜN MENÜSÜ") && dailyMenu.length > 0) && (
           <View style={{ paddingTop: 24, paddingHorizontal: 24 }}>
             <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 16 }}>Günün Menüsü</Text>
             <View style={{ gap: 16 }}>
@@ -253,68 +253,72 @@ export default function MenuScreen() {
         )}
 
         {/* Items List (Diğer Sabit Menü/Kategoriler) */}
-        <View style={styles.listContainer}>
-          {selectedCategory === "TÜMÜ" && (
-            <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 8 }}>Diğer Ürünler</Text>
-          )}
-          {filteredMenu.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <MaterialIcons name="fastfood" size={48} color={colors.surfaceBorder} />
-              <Text style={styles.emptyText}>Bu kategoride aktif ürün yok</Text>
-            </View>
-          ) : (
-            filteredMenu.map(item => (
-              <View key={item.id} style={[styles.foodCard, item.status === 'sold_out' && { opacity: 0.6 }]}>
-                <View style={styles.foodImageContainer}>
-                  {item.image_url ? (
-                    <Image source={{ uri: item.image_url }} style={styles.foodImage} />
-                  ) : (
-                    <MaterialIcons name={
-                      item.category === "İÇECEK" ? "local-drink" :
-                        item.category === "ÇORBA" ? "soup-kitchen" :
-                          item.category === "EKSTRA" ? "add-circle-outline" :
-                            "restaurant"
-                    } size={40} color={colors.muted} />
-                  )}
+        {(selectedCategory === "TÜMÜ" || (selectedCategory !== "TABLDOT" && selectedCategory !== "GÜNÜN MENÜSÜ")) && (
+          <View style={styles.listContainer}>
+            {selectedCategory === "TÜMÜ" && (
+              <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 8 }}>Diğer Ürünler</Text>
+            )}
+            {filteredMenu.length === 0 ? (
+              selectedCategory !== "TÜMÜ" && (
+                <View style={styles.emptyContainer}>
+                  <MaterialIcons name="fastfood" size={48} color={colors.surfaceBorder} />
+                  <Text style={styles.emptyText}>Bu kategoride aktif ürün yok</Text>
                 </View>
-                <View style={styles.foodDetails}>
-                  <View style={{ flex: 1, paddingRight: 8 }}>
-                    <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
-                    <Text style={styles.foodCategory}>{item.category === 'İÇECEK' || item.category === 'EKSTRA' ? 'Tabela Ürünü' : item.category}</Text>
-                  </View>
-                  <View style={styles.foodBottomColumn}>
-                    <Text style={styles.foodPrice}>₺{item.price}</Text>
-                    {item.status === 'sold_out' ? (
-                      <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
-                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
-                      </View>
+              )
+            ) : (
+              filteredMenu.map(item => (
+                <View key={item.id} style={[styles.foodCard, item.status === 'sold_out' && { opacity: 0.6 }]}>
+                  <View style={styles.foodImageContainer}>
+                    {item.image_url ? (
+                      <Image source={{ uri: item.image_url }} style={styles.foodImage} />
                     ) : (
-                      getCartQuantity(item.id) > 0 ? (
-                        <View style={[styles.activeQuantityContainer, { marginTop: 8 }]}>
-                          <TouchableOpacity onPress={() => handleDecrement(item.id)} style={styles.activeQtyBtn}>
-                            <MaterialIcons name="remove" size={16} color="#fff" />
-                          </TouchableOpacity>
-                          <Text style={styles.activeQtyText}>{getCartQuantity(item.id)}</Text>
-                          <TouchableOpacity onPress={() => handleAddToCart(item)} style={styles.activeQtyBtn}>
-                            <MaterialIcons name="add" size={16} color="#fff" />
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <TouchableOpacity style={[styles.addBtnLarge, { marginTop: 8 }]} onPress={() => handleAddToCart(item)}>
-                          <MaterialIcons name="add" size={16} color="#fff" style={{ marginRight: 4 }} />
-                          <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>EKLE</Text>
-                        </TouchableOpacity>
-                      )
+                      <MaterialIcons name={
+                        item.category === "İÇECEK" ? "local-drink" :
+                          item.category === "ÇORBA" ? "soup-kitchen" :
+                            item.category === "EKSTRA" ? "add-circle-outline" :
+                              "restaurant"
+                      } size={40} color={colors.muted} />
                     )}
                   </View>
+                  <View style={styles.foodDetails}>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
+                      <Text style={styles.foodCategory}>{item.category === 'İÇECEK' || item.category === 'EKSTRA' ? 'Tabela Ürünü' : item.category}</Text>
+                    </View>
+                    <View style={styles.foodBottomColumn}>
+                      <Text style={styles.foodPrice}>₺{item.price}</Text>
+                      {item.status === 'sold_out' ? (
+                        <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
+                          <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
+                        </View>
+                      ) : (
+                        getCartQuantity(item.id) > 0 ? (
+                          <View style={[styles.activeQuantityContainer, { marginTop: 8 }]}>
+                            <TouchableOpacity onPress={() => handleDecrement(item.id)} style={styles.activeQtyBtn}>
+                              <MaterialIcons name="remove" size={16} color="#fff" />
+                            </TouchableOpacity>
+                            <Text style={styles.activeQtyText}>{getCartQuantity(item.id)}</Text>
+                            <TouchableOpacity onPress={() => handleAddToCart(item)} style={styles.activeQtyBtn}>
+                              <MaterialIcons name="add" size={16} color="#fff" />
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <TouchableOpacity style={[styles.addBtnLarge, { marginTop: 8 }]} onPress={() => handleAddToCart(item)}>
+                            <MaterialIcons name="add" size={16} color="#fff" style={{ marginRight: 4 }} />
+                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>EKLE</Text>
+                          </TouchableOpacity>
+                        )
+                      )}
+                    </View>
+                  </View>
                 </View>
-              </View>
-            ))
-          )}
-        </View>
+              ))
+            )}
+          </View>
+        )}
 
         {/* Avantajlı Tabldot Menü Section */}
-        {TABLDOT_PACKAGES.length > 0 && selectedCategory === "TÜMÜ" && (
+        {TABLDOT_PACKAGES.length > 0 && (selectedCategory === "TÜMÜ" || selectedCategory === "TABLDOT") && (
           <View style={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 }}>
             <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 12 }}>Avantajlı Tabldot Menü</Text>
             {TABLDOT_PACKAGES.map(pkg => (
