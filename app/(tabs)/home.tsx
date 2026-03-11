@@ -21,9 +21,10 @@ export default function HomeScreen() {
   const colors = Colors[theme];
   const styles = getStyles(colors);
 
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { profile } = useProfile(user?.id);
-  const { orders } = useAdisyon(user?.id);
+  // Supabase uuid beklediği için standart boş uuid gönderiyoruz
+  const { orders } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
   const { menu } = useMenu(true);
   const cartItems = useCartStore((state) => state.items);
 

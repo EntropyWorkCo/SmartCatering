@@ -14,14 +14,12 @@ import {
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-// TODO: Replace with actual backend integration (e.g. useAdmin hook fetching users from Supabase profiles table)
-// For now, providing a mock matching the web code's structure
 interface User {
     id: string;
     name: string;
     phone: string;
     company?: string;
+    vkn?: string | null;
     balance?: number;
 }
 
@@ -78,6 +76,7 @@ export default function AdminCustomers() {
                                 name: profile.full_name || 'İsimsiz Müşteri',
                                 phone: profile.phone || 'Telefon Yok',
                                 company: userCompany ? userCompany.company_name : (profile.company_name || 'Bireysel Üyelik'),
+                                vkn: userCompany ? userCompany.tax_number : null,
                                 balance: balance
                             };
                         });
@@ -103,22 +102,22 @@ export default function AdminCustomers() {
     const kurumsalCustomers = filteredCustomers.filter(c => c.company && c.company !== 'Bireysel Üyelik');
 
     const groupedKurumsal = React.useMemo(() => {
-        const groups: Record<string, { companyName: string; totalDebt: number; customers: User[] }> = {};
+        const groups: Record<string, { companyName: string; vkn: string; totalDebt: number; customers: User[] }> = {};
         for (const c of kurumsalCustomers) {
-            if (!c.company) continue;
-            if (!groups[c.company]) {
-                groups[c.company] = { companyName: c.company, totalDebt: 0, customers: [] };
+            const key = c.vkn || c.company || 'Unknown';
+            if (!groups[key]) {
+                groups[key] = { companyName: c.company || 'İsimsiz Firma', vkn: c.vkn || '', totalDebt: 0, customers: [] };
             }
-            groups[c.company].customers.push(c);
-            groups[c.company].totalDebt += (c.balance || 0);
+            groups[key].customers.push(c);
+            groups[key].totalDebt += (c.balance || 0);
         }
         return Object.values(groups).sort((a, b) => b.totalDebt - a.totalDebt);
     }, [kurumsalCustomers]);
 
-    const toggleCompany = (companyName: string) => {
+    const toggleCompany = (vkn: string) => {
         setExpandedCompanies(prev => ({
             ...prev,
-            [companyName]: !prev[companyName]
+            [vkn]: !prev[vkn]
         }));
     };
 
@@ -212,12 +211,12 @@ export default function AdminCustomers() {
                 {mainTab === "KURUMSAL" && (
                     groupedKurumsal.length > 0 ? (
                         groupedKurumsal.map(group => {
-                            const isExpanded = expandedCompanies[group.companyName];
+                            const isExpanded = expandedCompanies[group.vkn];
                             return (
-                                <View key={group.companyName} style={styles.companyAccordion}>
+                                <View key={group.vkn} style={styles.companyAccordion}>
                                     <TouchableOpacity
                                         style={styles.companyAccordionHeader}
-                                        onPress={() => toggleCompany(group.companyName)}
+                                        onPress={() => toggleCompany(group.vkn)}
                                         activeOpacity={0.7}
                                     >
                                         <View style={styles.accordionTitleContainer}>

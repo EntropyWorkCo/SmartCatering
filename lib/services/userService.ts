@@ -69,7 +69,6 @@ export const userService = {
       .update({
         full_name: data.fullName,
         phone: data.phone,
-        updated_at: new Date().toISOString()
       })
       .eq("id", userId);
 

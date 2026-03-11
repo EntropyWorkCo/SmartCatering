@@ -77,34 +77,33 @@ export default function CorporateInfoScreen() {
                     <Text style={styles.infoText}>Fatura kesilebilmesi için kurumsal bilgilerinizi eksiksiz doldurunuz.</Text>
                 </View>
 
+                <View style={[styles.infoBanner, { backgroundColor: colors.surface, borderColor: colors.surfaceBorder, marginBottom: 20 }]}>
+                    <MaterialIcons name="info-outline" size={20} color={colors.muted} />
+                    <Text style={[styles.infoText, { color: colors.muted }]}>
+                        Firma adı ve VKN bilgileri güvenlik için kilitlidir. Değişiklik için yöneticiye başvurun.
+                    </Text>
+                </View>
+
                 <View style={styles.formGroup}>
                     <Text style={styles.label}>Firma / Şirket Adı</Text>
-                    <View style={styles.inputContainer}>
+                    <View style={[styles.inputContainer, styles.readOnlyInput]}>
                         <MaterialIcons name="business" size={20} color={colors.muted} />
                         <TextInput
-                            style={styles.input}
-                            placeholder="Firma Adı"
-                            placeholderTextColor={colors.muted}
+                            style={[styles.input, { color: colors.muted }]}
                             value={companyName}
-                            onChangeText={setCompanyName}
+                            editable={false}
                         />
                     </View>
                 </View>
 
-
-
                 <View style={styles.formGroup}>
                     <Text style={styles.label}>Vergi Numarası / TCKN</Text>
-                    <View style={styles.inputContainer}>
+                    <View style={[styles.inputContainer, styles.readOnlyInput]}>
                         <MaterialIcons name="tag" size={20} color={colors.muted} />
                         <TextInput
-                            style={styles.input}
-                            placeholder="VKN / TCKN"
-                            placeholderTextColor={colors.muted}
+                            style={[styles.input, { color: colors.muted }]}
                             value={taxNumber}
-                            onChangeText={setTaxNumber}
-                            keyboardType="number-pad"
-                            maxLength={11}
+                            editable={false}
                         />
                     </View>
                 </View>
@@ -196,6 +195,10 @@ const getStyles = (colors: any) => StyleSheet.create({
     },
     textAreaContainer: { alignItems: 'flex-start', paddingVertical: 4 },
     input: { flex: 1, fontSize: 15, color: colors.text, height: '100%' },
+    readOnlyInput: {
+        backgroundColor: colors.background,
+        borderColor: colors.surfaceBorder + '80',
+    },
     textArea: { minHeight: 90, paddingTop: 12, paddingBottom: 12 },
 
     saveBtn: {

@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 // Backend Servislerimiz
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { userService } from "../../lib/services/userService";
 import { supabase } from "../../lib/supabase";
 
@@ -63,6 +64,9 @@ export default function AdminLoginScreen() {
 
       if (isAdminCheck === true) {
         console.log("LOG: Yetki onaylandı! Dashboard'a yönlendiriliyor...");
+
+        // Cihaz hafızasına admin girişini kaydet
+        await AsyncStorage.setItem("isAdmin", "true");
 
         // ÖNEMLİ: Expo Router bazen parantezli klasörlerde hassas olabilir.
         // Eğer yönlenmezse burayı "/dashboard" olarak değiştirebiliriz.

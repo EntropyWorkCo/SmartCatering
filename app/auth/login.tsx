@@ -2,6 +2,7 @@ import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -44,8 +45,12 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      // Telefon numarasını kayıt formatına (email@meydan.com) çeviriyoruz
-      const formattedPhone = phone.replace(/\D/g, "");
+      // Normalizasyon: Boşlukları temizle, baştaki 0'ı at
+      let formattedPhone = phone.replace(/\D/g, "");
+      if (formattedPhone.startsWith("0")) {
+        formattedPhone = formattedPhone.substring(1);
+      }
+
       const loginEmail = `${formattedPhone}@meydan.com`;
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -56,6 +61,9 @@ export default function LoginScreen() {
       if (error) throw error;
 
       if (data.session) {
+        // Cihaz hafızasındaki admin yetkisini temizle (çakışmayı önlemek için)
+        await AsyncStorage.removeItem("isAdmin");
+
         // Başarılı giriş durumunda (tabs) ana sayfasına yönlendir
         router.replace("/(tabs)");
       }
@@ -114,14 +122,23 @@ export default function LoginScreen() {
           <View style={styles.form}>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>İLETİŞİM NUMARASI</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="5XX XXX XX XX"
-                keyboardType="phone-pad"
-                placeholderTextColor={colors.muted}
-                value={phone}
-                onChangeText={setPhone}
-              />
+              <View style={[styles.input, { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 }]}>
+                <Text style={{ fontSize: 16, color: colors.muted, fontWeight: 'bold', marginRight: 8 }}>+90</Text>
+                <TextInput
+                  style={{ flex: 1, height: '100%', fontSize: 16, color: colors.text }}
+                  placeholder="5XX XXX XX XX"
+                  keyboardType="phone-pad"
+                  placeholderTextColor={colors.muted}
+                  maxLength={10}
+                  value={phone}
+                  onChangeText={(text) => {
+                    // Sayı olmayanları temizle ve baştaki 0'ı anında sil
+                    let cleaned = text.replace(/\D/g, "");
+                    if (cleaned.startsWith("0")) cleaned = cleaned.substring(1);
+                    setPhone(cleaned);
+                  }}
+                />
+              </View>
             </View>
 
             <View style={styles.inputGroup}>
