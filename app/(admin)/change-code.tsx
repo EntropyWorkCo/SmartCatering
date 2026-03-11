@@ -69,7 +69,8 @@ export default function AdminChangeCode() {
             if (updateError) throw updateError;
 
             Alert.alert("Başarılı", "Erişim kodu (Parola) başarıyla değiştirildi.");
-            router.back();
+            if (router.canGoBack()) router.back();
+            else router.replace("/(admin)/dashboard");
         } catch (err: any) {  // hata kontrolü
             Alert.alert("Hata", "Kod güncellenirken bir hata oluştu: " + err.message);
         } finally {
@@ -80,7 +81,7 @@ export default function AdminChangeCode() {
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/(admin)/dashboard")} style={styles.backButton}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <View style={{ flex: 1 }}>

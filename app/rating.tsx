@@ -99,7 +99,7 @@ export default function RatingScreen() {
             }
 
             Alert.alert("Teşekkürler!", "Değerlendirmeniz başarıyla alındı.", [
-                { text: "Tamam", onPress: () => router.back() }
+                { text: "Tamam", onPress: () => router.canGoBack() ? router.back() : router.replace("/(tabs)/home") }
             ]);
         } catch (error: any) {
             Alert.alert("Hata", error.message || "Değerlendirme gönderilemedi.");
@@ -112,7 +112,7 @@ export default function RatingScreen() {
         <SafeAreaView style={styles.container} edges={['top']}>
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
                 <View style={styles.header}>
-                    <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                    <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)/home")}>
                         <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                     </TouchableOpacity>
                     <View style={{ flex: 1 }}>

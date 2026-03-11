@@ -94,7 +94,8 @@ export default function UnitPriceFormScreen() {
                     {
                         text: "Hayır, Sadece Tabelayı Güncelle",
                         onPress: () => {
-                            router.back();
+                            if (router.canGoBack()) router.back();
+                            else router.replace("/(admin)/dashboard");
                         }
                     },
                     {
@@ -114,7 +115,8 @@ export default function UnitPriceFormScreen() {
                                     }
                                 }
                                 Alert.alert("Başarılı", "Tüm mevcut ürünlerin fiyatları güncellendi.");
-                                router.back();
+                                if (router.canGoBack()) router.back();
+                                else router.replace("/(admin)/dashboard");
                             } catch (e: any) {
                                 Alert.alert("Hata", e.message);
                             } finally {
@@ -138,7 +140,7 @@ export default function UnitPriceFormScreen() {
             behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
             <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/(admin)/dashboard")} style={styles.backButton}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <View style={{ flex: 1 }}>

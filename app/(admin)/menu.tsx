@@ -30,10 +30,10 @@ const CATEGORIES = [
 ];
 
 const SYS_CATEGORIES = [
-    { id: "TABLDOT", label: "TABLDOT MENÜ" },
     { id: "TEK ÇEŞİT", label: "TEK ÇEŞİT" },
     { id: "EKSTRA", label: "EKSTRA FARKLARI" },
-    { id: "İÇECEK", label: "İÇECEKLER" }
+    { id: "İÇECEK", label: "İÇECEKLER" },
+    { id: "TABLDOT", label: "TABLDOT MENÜ" }
 ];
 
 export default function AdminMenuAdd() {
@@ -255,7 +255,7 @@ export default function AdminMenuAdd() {
         <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
             <View style={styles.header}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: colors.surface, padding: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                    <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/(admin)/dashboard")} style={{ backgroundColor: colors.surface, padding: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
                         <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                     </TouchableOpacity>
                     <View>
