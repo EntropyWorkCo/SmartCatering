@@ -37,7 +37,7 @@ export default function OrderRatingScreen() {
     useEffect(() => {
         const id = Array.isArray(orderId) ? orderId[0] : orderId;
         if (!id) {
-            Alert.alert("Hata", "Sipariş bulunamadı.", [{ text: "Tamam", onPress: () => router.back() }]);
+            Alert.alert("Hata", "Sipariş bulunamadı.", [{ text: "Tamam", onPress: () => router.canGoBack() ? router.back() : router.replace("/(tabs)/home") }]);
             return;
         }
 
@@ -60,7 +60,11 @@ export default function OrderRatingScreen() {
             } catch (error) {
                 console.error(error);
                 Alert.alert("Hata", "Sipariş detayları yüklenemedi.");
-                router.back();
+                if (router.canGoBack()) {
+                    router.back();
+                } else {
+                    router.replace("/(tabs)/past-orders");
+                }
             } finally {
                 setLoading(false);
             }
@@ -134,7 +138,13 @@ export default function OrderRatingScreen() {
                 behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
                 <View style={styles.header}>
-                    <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                    <TouchableOpacity style={styles.backBtn} onPress={() => {
+                        if (router.canGoBack()) {
+                            router.back();
+                        } else {
+                            router.replace("/(tabs)/past-orders");
+                        }
+                    }}>
                         <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                     </TouchableOpacity>
                     <View style={{ flex: 1 }}>

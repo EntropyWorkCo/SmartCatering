@@ -6,7 +6,7 @@ import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Print from 'expo-print';
-import { router, useFocusEffect } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -273,9 +273,7 @@ export default function AdminDashboard() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
+
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Borçlar</Text>
         </View>

@@ -65,7 +65,6 @@ export default function RootLayout() {
     if (
       !user &&
       !inAuthGroup &&
-      segments[0] !== "order-selection" &&
       segments[0] !== "modal" &&
       segments[0] !== "rating"
     ) {
