@@ -196,50 +196,6 @@ export default function MenuScreen() {
           </ScrollView>
         </View>
 
-        {/* Avantajlı Tabldot Menü Section */}
-        {TABLDOT_PACKAGES.length > 0 && (
-          <View style={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 }}>
-            <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 12 }}>Avantajlı Tabldot Menü</Text>
-            {TABLDOT_PACKAGES.map(pkg => (
-              <TouchableOpacity key={pkg.id} style={{ backgroundColor: colors.surface, borderColor: colors.surfaceBorder, borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 12 }} onPress={() => handleAddToCart(pkg)}>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                  <View style={{ backgroundColor: colors.cardHighlight, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
-                    <MaterialIcons name="restaurant-menu" size={24} color={colors.primary} />
-                  </View>
-                  <View style={{ flex: 1, paddingRight: 8 }}>
-                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }}>{pkg.name}</Text>
-                    <Text style={{ fontSize: 12, color: colors.muted, lineHeight: 16 }}>{pkg.desc}</Text>
-                  </View>
-                </View>
-
-                {/* Alt Kısım (Fiyat ve Butonlar) */}
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 12 }}>
-                  <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary, marginRight: 12 }}>₺{pkg.price}</Text>
-
-                  {getCartQuantity(pkg.id) > 0 ? (
-                    <View style={[styles.activeQuantityContainer, { marginTop: 0 }]}>
-                      <TouchableOpacity onPress={() => handleDecrement(pkg.id)} style={styles.activeQtyBtn}>
-                        <MaterialIcons name="remove" size={18} color="#fff" />
-                      </TouchableOpacity>
-                      <Text style={styles.activeQtyText}>{getCartQuantity(pkg.id)}</Text>
-                      <TouchableOpacity onPress={() => handleAddToCart(pkg)} style={styles.activeQtyBtn}>
-                        <MaterialIcons name="add" size={18} color="#fff" />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TouchableOpacity style={[styles.addBtnLarge, { marginTop: 0 }]} onPress={() => handleAddToCart(pkg)}>
-                      <MaterialIcons name="add" size={16} color="#fff" style={{ marginRight: 4 }} />
-                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>EKLE</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-
-
         {/* Günün Menüsü (Always at top) */}
         {(selectedCategory === "TÜMÜ" && dailyMenu.length > 0) && (
           <View style={{ paddingTop: 24, paddingHorizontal: 24 }}>
@@ -356,6 +312,48 @@ export default function MenuScreen() {
             ))
           )}
         </View>
+
+        {/* Avantajlı Tabldot Menü Section */}
+        {TABLDOT_PACKAGES.length > 0 && selectedCategory === "TÜMÜ" && (
+          <View style={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 }}>
+            <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 12 }}>Avantajlı Tabldot Menü</Text>
+            {TABLDOT_PACKAGES.map(pkg => (
+              <TouchableOpacity key={pkg.id} style={{ backgroundColor: colors.surface, borderColor: colors.surfaceBorder, borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 12 }} onPress={() => handleAddToCart(pkg)}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                  <View style={{ backgroundColor: colors.cardHighlight, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
+                    <MaterialIcons name="restaurant-menu" size={24} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }}>{pkg.name}</Text>
+                    <Text style={{ fontSize: 12, color: colors.muted, lineHeight: 16 }}>{pkg.desc}</Text>
+                  </View>
+                </View>
+
+                {/* Alt Kısım (Fiyat ve Butonlar) */}
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 12 }}>
+                  <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary, marginRight: 12 }}>₺{pkg.price}</Text>
+
+                  {getCartQuantity(pkg.id) > 0 ? (
+                    <View style={[styles.activeQuantityContainer, { marginTop: 0 }]}>
+                      <TouchableOpacity onPress={() => handleDecrement(pkg.id)} style={styles.activeQtyBtn}>
+                        <MaterialIcons name="remove" size={18} color="#fff" />
+                      </TouchableOpacity>
+                      <Text style={styles.activeQtyText}>{getCartQuantity(pkg.id)}</Text>
+                      <TouchableOpacity onPress={() => handleAddToCart(pkg)} style={styles.activeQtyBtn}>
+                        <MaterialIcons name="add" size={18} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity style={[styles.addBtnLarge, { marginTop: 0 }]} onPress={() => handleAddToCart(pkg)}>
+                      <MaterialIcons name="add" size={16} color="#fff" style={{ marginRight: 4 }} />
+                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>EKLE</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
 
