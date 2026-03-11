@@ -3,7 +3,7 @@ import Colors from "@/constants/Colors";
 import { useCartStore } from "@/lib/store/cartStore";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
-import { router, useNavigation } from "expo-router";
+import { router, useFocusEffect, useNavigation } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -28,7 +28,13 @@ export default function MenuScreen() {
   const cartItems = useCartStore(state => state.items);
 
   const { user } = useAuth();
-  const { profile } = useProfile(user?.id);
+  const { profile, refresh } = useProfile(user?.id);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refresh();
+    }, [user?.id])
+  );
   const isCompany = profile?.is_company || false;
 
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
@@ -501,7 +507,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     color: colors.primary,
   },
   addBtn: {
-    backgroundColor: colors.text, width: 40, height: 40, borderRadius: 12,
+    backgroundColor: colors.primary, width: 40, height: 40, borderRadius: 12,
     alignItems: "center", justifyContent: "center",
   },
   addBtnLarge: {

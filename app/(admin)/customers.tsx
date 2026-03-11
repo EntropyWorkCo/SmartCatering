@@ -1,10 +1,10 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
-import Colors from "@/constants/Colors";
-import { useResolvedTheme } from "@/lib/store/themeStore";
-import { supabase } from "@/lib/supabase";
-import { MaterialIcons } from "@expo/vector-icons";
-import { router, useFocusEffect } from "expo-router";
-import React, { useState } from "react";
+import ThemeSwitcher from "@/components/ThemeSwitcher"; // tema değiştirme butonu
+import Colors from "@/constants/Colors"; // renkler
+import { useResolvedTheme } from "@/lib/store/themeStore"; // aktif temayı döndürür. (light-dark)
+import { supabase } from "@/lib/supabase"; // supabase client. auth,database,storage işlemleri yapılır
+import { MaterialIcons } from "@expo/vector-icons"; // google material ikonları
+import { router, useFocusEffect } from "expo-router"; // expo router navigation system,geri gitmek için kullanılır. useFocusEffect sayfa açıldığında veya tekrar odaklandığıında çalışır.
+import React, { useState } from "react"; // react
 import {
     ScrollView,
     StyleSheet,
@@ -13,10 +13,11 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context"; //Telefonun notch / status bar alanına çarpmamak için kullanılır
 
 // TODO: Replace with actual backend integration (e.g. useAdmin hook fetching users from Supabase profiles table)
 // For now, providing a mock matching the web code's structure
+//bir User interface tanımlanmış. Her müşteri için şu bilgiler tutuluyor
 interface User {
     id: string;
     name: string;
@@ -26,17 +27,17 @@ interface User {
 }
 
 export default function AdminCustomers() {
-    const [customers, setCustomers] = useState<User[]>([]);
-    const [searchTerm, setSearchTerm] = useState("");
-    const [mainTab, setMainTab] = useState<"BIREYSEL" | "KURUMSAL">("KURUMSAL");
-    const [expandedCompanies, setExpandedCompanies] = useState<Record<string, boolean>>({});
+    const [customers, setCustomers] = useState<User[]>([]); //müşterileri tutar
+    const [searchTerm, setSearchTerm] = useState(""); //arama terimi
+    const [mainTab, setMainTab] = useState<"BIREYSEL" | "KURUMSAL">("KURUMSAL"); //ana sekmeleri tutar
+    const [expandedCompanies, setExpandedCompanies] = useState<Record<string, boolean>>({}); //şirketlerin açılıp kapandığı accordion durumu
 
     const insets = useSafeAreaInsets();
-    const theme = useResolvedTheme();
-    const colors = Colors[theme];
-    const styles = getStyles(colors);
+    const theme = useResolvedTheme(); //aktif temayı döndürür. (light-dark)
+    const colors = Colors[theme]; //renkleri döndürür
+    const styles = getStyles(colors); //stilleri döndürür
 
-    useFocusEffect(
+    useFocusEffect( //sayfa açıldığında veya tekrar odaklandığıında çalışır.    üç farklı tablodan veri çeker:users,adisyon,companies
         React.useCallback(() => {
             const fetchCustomers = async () => {
                 try {
@@ -67,14 +68,14 @@ export default function AdminCustomers() {
                             // Calculate balance
                             let balance = 0;
                             if (ordersData) {
-                                const userOrders = ordersData.filter((o: any) =>
+                                const userOrders = ordersData.filter((o: any) => 
                                     o.user_id === profile.id && !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)
                                 );
                                 balance = userOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0);
                             }
 
                             return {
-                                id: profile.id,
+                                id: profile.id,             
                                 name: profile.full_name || 'İsimsiz Müşteri',
                                 phone: profile.phone || 'Telefon Yok',
                                 company: userCompany ? userCompany.company_name : (profile.company_name || 'Bireysel Üyelik'),

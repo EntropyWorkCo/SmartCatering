@@ -29,7 +29,7 @@ export default function CartScreen() {
     const colors = Colors[theme];
     const styles = getStyles(colors);
 
-    const [orderType, setOrderType] = useState<"Şimdi Ye" | "Sonra Ye (Gel-Al)">("Şimdi Ye");
+    const orderType = "Şimdi Ye";
     const [orderNote, setOrderNote] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -55,8 +55,8 @@ export default function CartScreen() {
                     onPress: async () => {
                         setIsSubmitting(true);
                         try {
-                            const note = `Sipariş Türü: ${orderType}${orderNote ? ` - Not: ${orderNote}` : ""}`;
-                            await adisyonService.createOrder(
+                            const note = `${orderNote ? `Not: ${orderNote}` : ""}`;
+                            const adisyon = await adisyonService.createOrder(
                                 user.id,
                                 getTotal(),
                                 items,
@@ -65,8 +65,8 @@ export default function CartScreen() {
                             );
 
                             clearCart();
-                            // Schedule rating notification for 15 minutes later
-                            await notificationService.scheduleRatingNotification(15);
+                            // Schedule rating notification for 15 minutes later with the specific orderId
+                            await notificationService.scheduleRatingNotification(15, adisyon.id);
 
                             Alert.alert("Başarılı", "Siparişiniz başarıyla alındı!", [
                                 { text: "Tamam", onPress: () => router.push("/(tabs)/home") }
@@ -154,24 +154,7 @@ export default function CartScreen() {
                         />
                     </View>
 
-                    <Text style={styles.orderTypeLabel}>Sipariş Türü Seçiniz:</Text>
-                    <View style={styles.orderTypeContainer}>
-                        <TouchableOpacity
-                            style={[styles.orderTypeBtn, orderType === "Şimdi Ye" && styles.orderTypeBtnActive]}
-                            onPress={() => setOrderType("Şimdi Ye")}
-                        >
-                            <MaterialIcons name="restaurant" size={20} color={orderType === "Şimdi Ye" ? "#fff" : colors.muted} />
-                            <Text style={[styles.orderTypeBtnText, orderType === "Şimdi Ye" && { color: '#fff' }]}>Şimdi Ye</Text>
-                        </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={[styles.orderTypeBtn, orderType === "Sonra Ye (Gel-Al)" && styles.orderTypeBtnActive]}
-                            onPress={() => setOrderType("Sonra Ye (Gel-Al)")}
-                        >
-                            <MaterialIcons name="shopping-bag" size={20} color={orderType === "Sonra Ye (Gel-Al)" ? "#fff" : colors.muted} />
-                            <Text style={[styles.orderTypeBtnText, orderType === "Sonra Ye (Gel-Al)" && { color: '#fff' }]}>Gel-Al</Text>
-                        </TouchableOpacity>
-                    </View>
 
                     <View style={styles.totalContainer}>
                         <Text style={styles.totalText}>Toplam</Text>
@@ -336,8 +319,8 @@ const getStyles = (colors: any) => StyleSheet.create({
         borderColor: colors.surfaceBorder,
     },
     orderTypeBtnActive: {
-        backgroundColor: colors.text,
-        borderColor: colors.text,
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
     },
     orderTypeBtnText: {
         fontWeight: 'bold',

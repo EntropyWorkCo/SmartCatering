@@ -21,11 +21,11 @@ export default {
     cardHighlight: "#f0fdf4"  // Light green highlight
   },
   dark: {
-    text: "#f8fafc",          // White text
-    background: "#0f172a",    // Dark slate background
-    surface: "#1e293b",       // Darker cards
-    surfaceBorder: "#334155", // Dark borders
-    muted: "#94a3b8",         // Muted light gray text
+    text: "#ffffff",          // Pure white text
+    background: "#020617",    // Deep slate background (OLED friendly)
+    surface: "#0f172a",       // Darker cards
+    surfaceBorder: "#1e293b", // Dark borders
+    muted: "#94a3b8",         // Muted gray
     tint: tintColorDark,
     tabIconDefault: "#475569",
     tabIconSelected: tintColorDark,

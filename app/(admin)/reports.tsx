@@ -37,22 +37,42 @@ export default function AdminReports() {
             const fetchRatings = async () => {
                 const { data, error } = await supabase
                     .from("feedbacks")
-                    .select("*, users(full_name)")
+                    .select("*, users(full_name, companies(company_name))")
                     .order("created_at", { ascending: false });
 
+                if (error) {
+                    console.error("Error fetching ratings:", error);
+                }
+
                 if (data) {
-                    const formatted = data.map((r: any) => ({
-                        id: r.id,
-                        userName: r.users?.full_name || 'Müşteri',
-                        company: 'Bireysel',
-                        generalStars: r.rating,
-                        rating_ana: r.rating_ana || r.rating,
-                        rating_corba: r.rating_corba || r.rating,
-                        rating_yan: r.rating_yan || r.rating,
-                        rating_tatli: r.rating_tatli || r.rating,
-                        note: r.note || '',
-                        date: new Date(r.created_at).toLocaleDateString()
-                    }));
+                    const formatted = data.map((r: any) => {
+                        const user = r.users?.[0] || r.users;
+                        const company = user?.companies?.[0] || user?.companies;
+
+                        let parsedNote = r.note || '';
+                        let parsedDetails = r.rating_details;
+
+                        if (r.note && typeof r.note === 'string' && r.note.startsWith('{')) {
+                            try {
+                                const parsed = JSON.parse(r.note);
+                                if (parsed && typeof parsed.text !== 'undefined') {
+                                    parsedNote = parsed.text;
+                                    parsedDetails = parsed.details || r.rating_details;
+                                }
+                            } catch(e) {}
+                        }
+
+                        return {
+                            id: r.id,
+                            userName: user?.full_name || 'Müşteri',
+                            company: company?.company_name || 'Bireysel',
+                            generalStars: r.rating,
+                            rating_details: parsedDetails,
+                            note: parsedNote,
+                            date: new Date(r.created_at).toLocaleDateString('tr-TR'),
+                            adisyon_id: r.order_id
+                        };
+                    });
                     setRatings(formatted);
                 }
                 setLoadingRatings(false);
@@ -405,7 +425,35 @@ const FeedbackView = ({ onBack, ratings, colors, styles }: any) => {
                                     ))}
                                 </View>
                             </View>
-                            <Text style={styles.feedbackNote}>"{r.note}"</Text>
+                            {r.note ? <Text style={styles.feedbackNote}>"{r.note}"</Text> : null}
+                            
+                            {r.rating_details && ((Array.isArray(r.rating_details) && r.rating_details.length > 0) || (!Array.isArray(r.rating_details) && Object.keys(r.rating_details).length > 0)) && (
+                                <View style={styles.ratingDetailsBox}>
+                                    <Text style={styles.detailsTitle}>Yemek Puanları:</Text>
+                                    {Array.isArray(r.rating_details) ? (
+                                        r.rating_details.map((detail: any, idx: number) => (
+                                            <View key={idx} style={[styles.detailsRow, { marginBottom: 4 }]}>
+                                                <MaterialIcons name="restaurant" size={14} color={colors.primary} />
+                                                <Text style={[styles.detailsText, { flex: 1 }]} numberOfLines={1}>
+                                                    {detail.name}
+                                                </Text>
+                                                <View style={{ flexDirection: 'row', marginLeft: 'auto', gap: 2 }}>
+                                                    {[1, 2, 3, 4, 5].map(i => (
+                                                        <MaterialIcons key={i} name="star" size={12} color={i <= detail.rating ? "#fbbf24" : colors.surfaceBorder} />
+                                                    ))}
+                                                </View>
+                                            </View>
+                                        ))
+                                    ) : (
+                                        <View style={styles.detailsRow}>
+                                            <MaterialIcons name="restaurant" size={14} color={colors.primary} />
+                                            <Text style={styles.detailsText}>
+                                                {Object.keys(r.rating_details).length} kalem ürün değerlendirildi.
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                            )}
                             <Text style={styles.feedbackDate}>{r.date}</Text>
                         </View>
                     ))
@@ -480,5 +528,16 @@ const getStyles = (colors: any) => StyleSheet.create({
     feedbackCompany: { fontSize: 12, color: colors.muted },
     starsCont: { flexDirection: "row", gap: 2 },
     feedbackNote: { fontSize: 14, color: colors.text, fontStyle: "italic", lineHeight: 22, marginBottom: 16 },
+    ratingDetailsBox: {
+        backgroundColor: colors.surface,
+        padding: 12,
+        borderRadius: 12,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder
+    },
+    detailsTitle: { fontSize: 11, fontWeight: 'bold', color: colors.muted, marginBottom: 4 },
+    detailsRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    detailsText: { fontSize: 12, color: colors.text },
     feedbackDate: { fontSize: 10, fontWeight: "900", color: colors.muted, textTransform: "uppercase", letterSpacing: 1, textAlign: "right" }
 });

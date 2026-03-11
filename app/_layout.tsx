@@ -1,9 +1,9 @@
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
+    DarkTheme,
+    DefaultTheme,
+    ThemeProvider,
 } from "@react-navigation/native";
 import { useFonts } from "expo-font";
 // import * as Notifications from "expo-notifications";
@@ -79,7 +79,7 @@ function RootLayoutNav() {
         }),
       });
 
-      const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      const responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
         const url = response.notification.request.content.data?.url;
         if (url && typeof url === 'string') {
           router.push(url as any);
@@ -112,7 +112,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(admin)" />
 
         {/* Customer Screens (Outside Tabs) */}
-        <Stack.Screen name="order-selection" />
+
         <Stack.Screen name="order-success" />
         <Stack.Screen name="adisyon" />
         <Stack.Screen name="account-info" />

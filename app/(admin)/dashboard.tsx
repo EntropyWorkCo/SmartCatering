@@ -71,6 +71,8 @@ export default function AdminDashboard() {
       const safeOrders = orders || [];
 
       safeOrders.forEach((order) => {
+
+
         const isActuallyCorporate = !!order.companyName;
 
         const match =
@@ -111,6 +113,8 @@ export default function AdminDashboard() {
       return [];
     }
   }, [orders, mainTab]);
+
+
 
   const totalDebt = useMemo(
     () => groupedAccounts.reduce((acc, curr) => acc + curr.total, 0),
@@ -279,6 +283,7 @@ export default function AdminDashboard() {
       </View>
 
       <View style={styles.tabContainer}>
+
         <TouchableOpacity
           style={[
             styles.tab,
@@ -292,7 +297,7 @@ export default function AdminDashboard() {
               mainTab === "KURUMSAL" && styles.activeTabText,
             ]}
           >
-            KURUMSAL HESAPLAR
+            KURUMSAL
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -308,20 +313,22 @@ export default function AdminDashboard() {
               mainTab === "BIREYSEL" && styles.activeTabText,
             ]}
           >
-            BİREYSEL HESAPLAR
+            BİREYSEL
           </Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.totalCard}>
-          <Text style={styles.totalLabel}>
-            TOPLAM BEKLEYEN BORÇ
-          </Text>
-          <Text style={styles.totalAmount}>
-            ₺{totalDebt.toLocaleString("tr-TR")}
-          </Text>
-        </View>
+        {true && (
+          <View style={styles.totalCard}>
+            <Text style={styles.totalLabel}>
+              TOPLAM BEKLEYEN BORÇ
+            </Text>
+            <Text style={styles.totalAmount}>
+              ₺{totalDebt.toLocaleString("tr-TR")}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.statsRow}>
           <View style={styles.miniStatCard}>
@@ -338,6 +345,8 @@ export default function AdminDashboard() {
             </View>
           </View>
         </View>
+
+
 
         {groupedAccounts.map((account) => (
           <View key={account.userId} style={styles.accountCard}>
@@ -624,6 +633,37 @@ const getStyles = (colors: any) => StyleSheet.create({
   accountBalance: {
     fontSize: 12,
     color: colors.muted,
+  },
+  orderTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  statusTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusTagText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  orderTypeTag: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: colors.muted,
+    backgroundColor: colors.surfaceBorder,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  orderNoteAdmin: {
+    fontSize: 12,
+    color: colors.muted,
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   accountActions: {
     flexDirection: 'row',

@@ -1,45 +1,45 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
-import Colors from "@/constants/Colors";
-import { useResolvedTheme } from "@/lib/store/themeStore";
-import { supabase } from "@/lib/supabase";
-import { MaterialIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import ThemeSwitcher from "@/components/ThemeSwitcher"; //tema değiştirme butonu
+import Colors from "@/constants/Colors"; // tema renklerini tutan dosya
+import { useResolvedTheme } from "@/lib/store/themeStore"; // aktif temayı döndürür. (light-dark)
+import { supabase } from "@/lib/supabase"; // supabase client. auth,database,storage işlemleri yapılır
+import { MaterialIcons } from "@expo/vector-icons"; // google material ikonları
+import { router } from "expo-router"; // expo router navigation system
 import React, { useState } from "react";
 import {
-    Alert,
-    ScrollView,
+    Alert, // popup
+    ScrollView, // scroll
     StyleSheet,
-    Text,
+    Text, //yazı
     TextInput,
-    TouchableOpacity,
-    View,
+    TouchableOpacity, // button
+    View, // container
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context"; //Telefonun notch / status bar alanına çarpmamak için kullanılır
 
 export default function AdminChangeCode() {
     const insets = useSafeAreaInsets();
 
     const theme = useResolvedTheme();
-    const colors = Colors[theme];
-    const styles = getStyles(colors);
+    const colors = Colors[theme];        // tema renkleri
+    const styles = getStyles(colors);    // stil
 
-    const [oldCode, setOldCode] = useState("");
-    const [newCode, setNewCode] = useState("");
-    const [confirmCode, setConfirmCode] = useState("");
+    const [oldCode, setOldCode] = useState(""); // mevcut kod
+    const [newCode, setNewCode] = useState(""); // yeni kod
+    const [confirmCode, setConfirmCode] = useState(""); // onay kodu
 
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(false); // loading state
 
     const handleSave = async () => {
-        if (!oldCode || !newCode || !confirmCode) {
+        if (!oldCode || !newCode || !confirmCode) {  // tüm alanlar doldurulup doldurulmadığını kontrol eder
             Alert.alert("Hata", "Lütfen tüm alanları doldurun.");
             return;
         }
         if (newCode !== confirmCode) {
-            Alert.alert("Hata", "Yeni kodlar eşleşmiyor!");
+            Alert.alert("Hata", "Yeni kodlar eşleşmiyor!");  // yeni kodlar eşleşmiyor mu kontrol eder
             return;
         }
         if (newCode.length < 4) {
-            Alert.alert("Hata", "Kod en az 4 haneli olmalıdır.");
+            Alert.alert("Hata", "Kod en az 4 haneli olmalıdır."); // yeni kodun uzunluğu kontrol eder
             return;
         }
 
@@ -63,14 +63,14 @@ export default function AdminChangeCode() {
 
             // 3. Doğrulandıysa yeni parolayı (kodu) belirle
             const { error: updateError } = await supabase.auth.updateUser({
-                password: newCode
+                password: newCode      // supabase de auth.users.password değerini değiştirir
             });
 
             if (updateError) throw updateError;
 
             Alert.alert("Başarılı", "Erişim kodu (Parola) başarıyla değiştirildi.");
             router.back();
-        } catch (err: any) {
+        } catch (err: any) {  // hata kontrolü
             Alert.alert("Hata", "Kod güncellenirken bir hata oluştu: " + err.message);
         } finally {
             setLoading(false);
@@ -136,80 +136,80 @@ export default function AdminChangeCode() {
     );
 }
 
-const getStyles = (colors: any) => StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({  // tema destekli stil sistemi,React Native’in stil optimizasyon sistemi.
     container: {
-        flex: 1,
-        backgroundColor: colors.background,
+        flex: 1, //Bu View ekranın tamamını kaplasın.flexbox mantığı
+        backgroundColor: colors.background, //arka plan rengi 
     },
     header: {
         flexDirection: "row",
         alignItems: "center",
         paddingHorizontal: 24,
         paddingVertical: 16,
-        marginBottom: 24,
+        marginBottom: 24, // Header ile aşağıdaki içerik arasına boşluk koyar.
     },
     backButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: colors.surface,
-        alignItems: "center",
-        justifyContent: "center",
-        borderWidth: 1,
-        borderColor: colors.surfaceBorder,
-        marginRight: 16,
+        width: 40, 
+        height: 40, // buton boyutu
+        borderRadius: 20, // kenar yuvarlatma
+        backgroundColor: colors.surface, // buton arka plan rengi
+        alignItems: "center", // buton içindeki elementlerin ortalanması
+        justifyContent: "center", // buton içindeki elementlerin ortalanması
+        borderWidth: 1, // kenarlık
+        borderColor: colors.surfaceBorder, // kenarlık rengi
+        marginRight: 16, // buton ile sağ kenar boşluğu
     },
-    title: { fontSize: 24, fontWeight: "900", color: colors.text },
-    scrollContent: {
-        paddingHorizontal: 24,
-        paddingBottom: 40,
+    title: { fontSize: 24, fontWeight: "900", color: colors.text }, // başlık
+    scrollContent: { // scroll content
+        paddingHorizontal: 24, // yatay boşluk
+        paddingBottom: 40, // alt boşluk
     },
     formContainer: {
-        marginBottom: 24,
+        marginBottom: 24, // form ile alt kenar boşluğu
     },
     inputGroup: {
-        marginBottom: 24,
+        marginBottom: 24, // input ile alt kenar boşluğu
     },
     inputLabel: {
-        fontSize: 10,
-        fontWeight: "900",
-        color: colors.muted,
-        textTransform: "uppercase",
-        letterSpacing: 2,
-        marginBottom: 12,
-        marginLeft: 4,
+        fontSize: 10,   // etiket boyutu
+        fontWeight: "900", // etiket kalınlığı
+        color: colors.muted, // etiket rengi
+        textTransform: "uppercase", // etiket büyük harf
+        letterSpacing: 2, // etiket harf arası boşluk
+        marginBottom: 12, // etiket ile alt kenar boşluğu
+        marginLeft: 4, // etiket ile sol kenar boşluğu
     },
     input: {
-        backgroundColor: colors.surface,
-        borderRadius: 24,
-        paddingVertical: 20,
-        paddingHorizontal: 24,
-        fontSize: 24,
-        fontWeight: "900",
-        letterSpacing: 10,
-        color: colors.text,
-        textAlign: "center",
-        borderWidth: 1,
-        borderColor: colors.surfaceBorder,
+        backgroundColor: colors.surface,    // input arka plan rengi
+        borderRadius: 24, // kenar yuvarlatma
+        paddingVertical: 20, // input dikey boşluk
+        paddingHorizontal: 24, // input yatay boşluk
+        fontSize: 24, // input boyutu
+        fontWeight: "900", // input kalınlığı
+        letterSpacing: 10, // input harf arası boşluk
+        color: colors.text, // input rengi
+        textAlign: "center", // input içindeki elementlerin ortalanması
+        borderWidth: 1, // kenarlık
+        borderColor: colors.surfaceBorder, // kenarlık rengi
     },
     divider: {
-        height: 1,
-        backgroundColor: colors.surfaceBorder,
-        marginVertical: 8,
-        marginBottom: 32,
+        height: 1, // ayırıcı boyutu
+        backgroundColor: colors.surfaceBorder, // ayırıcı rengi
+        marginVertical: 8, // ayırıcı ile alt kenar boşluğu
+        marginBottom: 32, // ayırıcı ile alt kenar boşluğu
     },
     saveBtn: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 12,
-        backgroundColor: colors.primary,
-        paddingVertical: 24,
+        flexDirection: "row", // yatay dizayn
+        alignItems: "center", // elementlerin ortalanması
+        justifyContent: "center", // elementlerin ortalanması
+        gap: 12, // elementler arası boşluk
+        backgroundColor: colors.primary, // buton arka plan rengi
+        paddingVertical: 24, // buton dikey boşluk
         borderRadius: 24,
-    },
-    saveBtnText: {
-        color: colors.background,
-        fontSize: 14,
-        fontWeight: "900",
+    },  
+    saveBtnText: { // buton metin
+        color: colors.background, // buton rengi
+        fontSize: 14, // buton boyutu
+        fontWeight: "900", // buton kalınlığı
     },
 });

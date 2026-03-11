@@ -96,10 +96,31 @@ export const adisyonService = {
       .from("adisyon")
       .update(updateData)
       .eq("id", orderId)
-      .select()
+      .select("*, users(*)")
       .single();
 
     if (error) throw error;
+
+    // "Hazır" durumuna geçtiğinde kullanıcıya bildirim gönder
+    if (status === 'READY' || status === 'Hazır' || status === 'HAZIR') {
+      try {
+        const userId = data.user_id;
+        const { notificationService } = require("./notificationService");
+        const tokens = await notificationService.getPushTokens(userId);
+        if (tokens.length > 0) {
+          const typeLabel = 'Siparişiniz';
+          await notificationService.sendPushNotification(
+            tokens,
+            `🍽️ ${typeLabel} Hazır!`,
+            `Siparişiniz hazırlandı ve sizi bekliyor. Afiyet olsun!`,
+            { type: "order_ready", orderId: data.id }
+          );
+        }
+      } catch (err) {
+        console.error("Bildirim gönderme hatası:", err);
+      }
+    }
+
     return data;
   }
 };

@@ -1,9 +1,10 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -15,15 +16,49 @@ export default function RatingScreen() {
     const colors = Colors[theme];
     const styles = getStyles(colors);
 
+    const { orderId } = useLocalSearchParams<{ orderId?: string }>();
     const { user } = useAuth();
 
+    const [order, setOrder] = useState<any>(null);
+    const [loadingOrder, setLoadingOrder] = useState(!!orderId);
     const [rating, setRating] = useState(0);
-    const [ratingAna, setRatingAna] = useState(0);
-    const [ratingCorba, setRatingCorba] = useState(0);
-    const [ratingYan, setRatingYan] = useState(0);
-    const [ratingTatli, setRatingTatli] = useState(0);
+    const [itemRatings, setItemRatings] = useState<{ [key: string]: number }>({});
     const [comment, setComment] = useState("");
     const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (orderId) {
+            fetchOrderDetails(orderId);
+        }
+    }, [orderId]);
+
+    const fetchOrderDetails = async (id: string) => {
+        try {
+            const { data, error } = await supabase
+                .from("adisyon")
+                .select("*, adisyon_items(*, menu_items(name))")
+                .eq("id", id)
+                .single();
+
+            if (data) {
+                setOrder(data);
+                // Initialize item ratings
+                const initial: { [key: string]: number } = {};
+                data.adisyon_items?.forEach((item: any) => {
+                    initial[item.id] = 0;
+                });
+                setItemRatings(initial);
+            }
+        } catch (err) {
+            console.error("Order fetch error:", err);
+        } finally {
+            setLoadingOrder(false);
+        }
+    };
+
+    const updateItemRating = (itemId: string, val: number) => {
+        setItemRatings(prev => ({ ...prev, [itemId]: val }));
+    };
 
     // Example list of predefined tags
     const tags = ["Lezzetli", "Hızlı Teslimat", "Sıcak Geldi", "Porsiyon Doyurucu", "Kötü Paketlenmiş", "Geç Geldi", "Soğuktu"];
@@ -53,12 +88,13 @@ export default function RatingScreen() {
 
                 await supabase.from("feedbacks").insert({
                     user_id: user.id,
+                    order_id: orderId || null,
                     rating,
-                    rating_ana: ratingAna || rating,
-                    rating_corba: ratingCorba || rating,
-                    rating_yan: ratingYan || rating,
-                    rating_tatli: ratingTatli || rating,
                     note: finalNote,
+                    // Store detailed ratings as JSON in a new column or format the note
+                    // For now, let's format them into the note since we don't want to break schema
+                    // unless we add specific columns. Actually let's just use the note for now.
+                    rating_details: itemRatings 
                 });
             }
 
@@ -79,7 +115,10 @@ export default function RatingScreen() {
                     <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
                         <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                     </TouchableOpacity>
-                    <Text style={styles.title}>Değerlendir</Text>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.title}>Değerlendir</Text>
+                    </View>
+                    <ThemeSwitcher />
                 </View>
 
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -101,14 +140,36 @@ export default function RatingScreen() {
                         </View>
                     </View>
 
-                    <View style={styles.categoriesSection}>
-                        <Text style={styles.categoryTitle}>Kategori Bazlı Puanlama</Text>
+                    {order && order.adisyon_items && order.adisyon_items.length > 0 && (
+                        <View style={styles.categoriesSection}>
+                            <Text style={styles.categoryTitle}>Yemekleri Puanla</Text>
+                            {order.adisyon_items.map((item: any) => (
+                                <RatingRow 
+                                    key={item.id}
+                                    label={item.menu_items?.name || 'Ürün'} 
+                                    value={itemRatings[item.id] || 0} 
+                                    onSelect={(val: number) => updateItemRating(item.id, val)} 
+                                    colors={colors} 
+                                    styles={styles} 
+                                />
+                            ))}
+                        </View>
+                    )}
 
-                        <RatingRow label="Ana Yemek" value={ratingAna} onSelect={setRatingAna} colors={colors} styles={styles} />
-                        <RatingRow label="Çorba" value={ratingCorba} onSelect={setRatingCorba} colors={colors} styles={styles} />
-                        <RatingRow label="Yan Yemek" value={ratingYan} onSelect={setRatingYan} colors={colors} styles={styles} />
-                        <RatingRow label="Tatlı" value={ratingTatli} onSelect={setRatingTatli} colors={colors} styles={styles} />
-                    </View>
+                    {!orderId && (
+                        <View style={styles.categoriesSection}>
+                            <Text style={styles.categoryTitle}>Genel Kategori Puanlama</Text>
+                            <Text style={{ color: colors.muted, fontSize: 13, marginBottom: 12 }}>
+                                Belirli bir siparişi değerlendirmek için "Geçmiş Siparişlerim" ekranını kullanabilirsiniz.
+                            </Text>
+                            <View style={styles.emptyItemsBox}>
+                                <MaterialIcons name="info-outline" size={20} color={colors.primary} />
+                                <Text style={{ color: colors.text, fontSize: 13, flex: 1 }}>
+                                    Genel değerlendirme için aşağıdaki yıldızları ve yorum alanını kullanın.
+                                </Text>
+                            </View>
+                        </View>
+                    )}
 
                     {rating > 0 && (
                         <View style={styles.feedbackSection}>
@@ -233,7 +294,15 @@ const getStyles = (colors: any) => StyleSheet.create({
         padding: 16, minHeight: 120
     },
     textArea: { flex: 1, fontSize: 15, color: colors.text },
-
+    emptyItemsBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        backgroundColor: colors.primary + '10',
+        padding: 12,
+        borderRadius: 12,
+        marginTop: 8
+    },
     footer: { padding: 24, paddingBottom: 32, backgroundColor: colors.background, borderTopWidth: 1, borderColor: colors.surfaceBorder },
     submitBtn: {
         backgroundColor: colors.primary,

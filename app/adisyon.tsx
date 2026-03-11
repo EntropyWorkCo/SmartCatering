@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -17,12 +18,31 @@ export default function AdisyonScreen() {
 
     const { user } = useAuth();
     const { orders, loading } = useAdisyon(user?.id);
+    const [timeFilter, setTimeFilter] = React.useState<"ALL" | "DAILY" | "WEEKLY" | "MONTHLY">("ALL");
 
     // Filter orders that are specifically unpaid / pending / added to bill
     const pendingOrders = useMemo(() => {
         if (!orders) return [];
-        return orders.filter(o => o.status === "PENDING" || o.status === "Bekliyor" || o.payment_status === "UNPAID");
-    }, [orders]);
+        const now = new Date();
+        
+        return orders.filter(o => {
+            const isUnpaid = o.status === "PENDING" || o.status === "Bekliyor" || o.payment_status === "UNPAID" || o.status === "PREPARING" || o.status === "READY";
+            if (!isUnpaid) return false;
+
+            if (timeFilter === "ALL") return true;
+
+            const orderDate = new Date(o.created_at || o.date);
+            const diffTime = Math.abs(now.getTime() - orderDate.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (timeFilter === "DAILY") {
+                return orderDate.getDate() === now.getDate() && orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
+            }
+            if (timeFilter === "WEEKLY") return diffDays <= 7;
+            if (timeFilter === "MONTHLY") return diffDays <= 30;
+            return true;
+        });
+    }, [orders, timeFilter]);
 
     const totalDebt = useMemo(() => {
         return pendingOrders.reduce((acc, curr) => acc + (curr.total_amount || 0), 0);
@@ -42,7 +62,24 @@ export default function AdisyonScreen() {
                 <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.title}>Adisyonum</Text>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.title}>Adisyonum</Text>
+                </View>
+                <ThemeSwitcher />
+            </View>
+
+            <View style={styles.filterContainer}>
+                {(['ALL', 'DAILY', 'WEEKLY', 'MONTHLY'] as const).map((filter) => (
+                    <TouchableOpacity
+                        key={filter}
+                        style={[styles.filterBtn, timeFilter === filter && styles.filterBtnActive]}
+                        onPress={() => setTimeFilter(filter)}
+                    >
+                        <Text style={[styles.filterBtnText, timeFilter === filter && styles.filterBtnTextActive]}>
+                            {filter === 'ALL' ? 'Tümü' : filter === 'DAILY' ? 'Günlük' : filter === 'WEEKLY' ? 'Haftalık' : 'Aylık'}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -111,6 +148,23 @@ const getStyles = (colors: any) => StyleSheet.create({
         marginRight: 16
     },
     title: { fontSize: 24, fontWeight: '900', color: colors.text },
+    
+    filterContainer: {
+        flexDirection: 'row', paddingHorizontal: 24, marginBottom: 16, gap: 12, justifyContent: 'space-between'
+    },
+    filterBtn: {
+        flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 12,
+        backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.surfaceBorder,
+    },
+    filterBtnActive: {
+        backgroundColor: colors.primary, borderColor: colors.primary,
+    },
+    filterBtnText: {
+        fontSize: 12, fontWeight: 'bold', color: colors.muted
+    },
+    filterBtnTextActive: {
+        color: '#fff'
+    },
 
     scrollContent: { padding: 24, paddingBottom: 40 },
 
@@ -122,17 +176,17 @@ const getStyles = (colors: any) => StyleSheet.create({
     },
     summaryBgIcon: { position: 'absolute', top: -10, right: -10 },
     summaryLabel: {
-        fontSize: 11, fontWeight: '900', letterSpacing: 1.5,
-        color: colors.text === '#f8fafc' ? '#064e3b' : '#94a3b8', marginBottom: 8
+        fontSize: 11, fontWeight: "900", letterSpacing: 1.5,
+        color: colors.text === "#ffffff" ? colors.muted : "#064e3b", marginBottom: 8
     },
-    summaryRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 8 },
+    summaryRow: { flexDirection: "row", alignItems: "baseline", marginBottom: 8 },
     summaryValue: {
-        fontSize: 40, fontWeight: '900', letterSpacing: -1,
-        color: colors.text === '#f8fafc' ? '#022c22' : '#ffffff'
+        fontSize: 40, fontWeight: "900", letterSpacing: -1,
+        color: colors.text === "#ffffff" ? colors.primary : "#022c22"
     },
     summarySub: {
-        fontSize: 12, fontWeight: '600',
-        color: colors.text === '#f8fafc' ? '#064e3b' : '#94a3b8', opacity: 0.8
+        fontSize: 12, fontWeight: "600",
+        color: colors.text === "#ffffff" ? colors.muted : "#064e3b", opacity: 0.8
     },
 
     sectionTitle: { fontSize: 12, fontWeight: '900', color: colors.muted, letterSpacing: 1.5, marginBottom: 16 },

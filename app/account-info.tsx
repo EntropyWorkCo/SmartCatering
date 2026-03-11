@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
@@ -45,6 +46,34 @@ export default function AccountInfoScreen() {
             setSaving(false);
         }
     };
+
+    const handleDowngrade = async () => {
+        Alert.alert(
+            "Hesabı Bireysel Yap",
+            "Kurumsal bilgileriniz silinecek ve hesabınız bireysel hesaba dönüştürülecek. Onaylıyor musunuz?",
+            [
+                { text: "Vazgeç", style: "cancel" },
+                {
+                    text: "Evet, Yap",
+                    style: "destructive",
+                    onPress: async () => {
+                        if (!user?.id) return;
+                        setSaving(true);
+                        try {
+                            await userService.downgradeToIndividual(user.id);
+                            Alert.alert("Başarılı", "Hesabınız bireysel hesaba dönüştürüldü.");
+                            router.back();
+                        } catch (error: any) {
+                            console.error("Downgrade hatası:", error);
+                            Alert.alert("Hata", "Hesap dönüştürülürken bir hata oluştu.");
+                        } finally {
+                            setSaving(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
     if (loading) {
         return (
             <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -59,7 +88,10 @@ export default function AccountInfoScreen() {
                 <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.title}>Hesap Bilgilerim</Text>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.title}>Hesap Bilgilerim</Text>
+                </View>
+                <ThemeSwitcher />
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -118,6 +150,17 @@ export default function AccountInfoScreen() {
                         <Text style={styles.saveBtnText}>Değişiklikleri Kaydet</Text>
                     )}
                 </TouchableOpacity>
+
+                {profile?.is_company && (
+                    <TouchableOpacity
+                        style={styles.downgradeBtn}
+                        onPress={handleDowngrade}
+                        disabled={saving}
+                    >
+                        <MaterialIcons name="person-remove" size={20} color={colors.danger} />
+                        <Text style={styles.downgradeBtnText}>Hesabı Bireysel Hesaba Döndür</Text>
+                    </TouchableOpacity>
+                )}
             </ScrollView>
         </SafeAreaView>
     );
@@ -163,11 +206,18 @@ const getStyles = (colors: any) => StyleSheet.create({
     roleText: { color: colors.primary, fontWeight: 'bold', fontSize: 14 },
 
     saveBtn: {
-        backgroundColor: colors.text,
+        backgroundColor: colors.primary,
         height: 56, borderRadius: 16,
-        alignItems: 'center', justifyContent: 'center',
+        alignItems: "center", justifyContent: "center",
         marginTop: 16,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5
+        shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5
     },
-    saveBtnText: { color: colors.background, fontSize: 16, fontWeight: 'bold' }
+    saveBtnText: { color: colors.background, fontSize: 16, fontWeight: "bold" },
+    downgradeBtn: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+        marginTop: 32, padding: 12, borderRadius: 12,
+        borderWidth: 1, borderColor: colors.danger + '40',
+        backgroundColor: colors.danger + '08'
+    },
+    downgradeBtnText: { color: colors.danger, fontSize: 14, fontWeight: '600' }
 });

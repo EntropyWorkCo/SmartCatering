@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
@@ -67,7 +68,10 @@ export default function CorporateInfoScreen() {
                 <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.title}>Kurumsal Bilgiler</Text>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.title}>Kurumsal Bilgiler</Text>
+                </View>
+                <ThemeSwitcher />
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -199,7 +203,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     textArea: { minHeight: 90, paddingTop: 12, paddingBottom: 12 },
 
     saveBtn: {
-        backgroundColor: colors.text,
+        backgroundColor: colors.primary,
         height: 56, borderRadius: 16,
         alignItems: 'center', justifyContent: 'center',
         marginTop: 16,

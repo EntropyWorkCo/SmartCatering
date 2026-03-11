@@ -23,43 +23,73 @@ export default function AdminMessages() {
     const colors = Colors[theme];
     const styles = getStyles(colors);
 
-    const [messages, setMessages] = useState<any[]>([]);
+    const [activeTab, setActiveTab] = useState<"ORDERS" | "PRIVATE">("ORDERS");
+    const [privateMessages, setPrivateMessages] = useState<any[]>([]);
+    const [orderMessages, setOrderMessages] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetchMessages = async () => {
-            const { data, error } = await supabase
+        const fetchData = async () => {
+            setLoading(true);
+            
+            // 1. Fetch Private Messages
+            const { data: pData } = await supabase
                 .from("messages")
                 .select("*, users(full_name, companies(company_name))")
                 .order("created_at", { ascending: false });
 
-            if (data) {
-                const formatted = data.map((m: any) => {
+            if (pData) {
+                const formattedP = pData.map((m: any) => {
                     const user = m.users?.[0] || m.users;
                     const company = user?.companies?.[0] || user?.companies;
-
                     return {
                         id: m.id,
                         userName: user?.full_name || "Müşteri",
                         companyName: company?.company_name || null,
-                        orderNumber: "---",
-                        date: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        date: new Date(m.created_at).toLocaleDateString('tr-TR') + " " + new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                         note: m.content,
-                        itemsCount: 0,
-                        is_read: m.is_read
+                        is_read: m.is_read,
                     };
                 });
-                setMessages(formatted);
+                setPrivateMessages(formattedP);
             }
+
+            // 2. Fetch Order Messages
+            const { data: oData } = await supabase
+                .from("adisyon")
+                .select("*, users(full_name, companies(company_name))")
+                .not("note", "is", null)
+                .not("note", "eq", "")
+                .order("created_at", { ascending: false });
+
+            if (oData) {
+                const formattedO = oData.map((o: any) => {
+                    const user = o.users?.[0] || o.users;
+                    const company = user?.companies?.[0] || user?.companies;
+                    return {
+                        id: o.id,
+                        userName: user?.full_name || "Müşteri",
+                        companyName: company?.company_name || null,
+                        orderNumber: String(o.id).substring(0, 6).toUpperCase(),
+                        date: new Date(o.created_at).toLocaleDateString('tr-TR') + " " + new Date(o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        note: o.note,
+                        status: o.status
+                    };
+                });
+                setOrderMessages(formattedO);
+            }
+
             setLoading(false);
         };
 
-        fetchMessages();
+        fetchData();
 
-        // Realtime Subscription
         const channel = supabase.channel('messages_changes')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
-                fetchMessages();
+                fetchData();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'adisyon' }, () => {
+                fetchData();
             })
             .subscribe();
 
@@ -70,8 +100,9 @@ export default function AdminMessages() {
 
     const markAsRead = async (id: string) => {
         await supabase.from("messages").update({ is_read: true }).eq("id", id);
-        setMessages(prev => prev.map(m => m.id === id ? { ...m, is_read: true } : m));
+        setPrivateMessages(prev => prev.map(m => m.id === id ? { ...m, is_read: true } : m));
     };
+
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -87,52 +118,106 @@ export default function AdminMessages() {
                 <ThemeSwitcher />
             </View>
 
+            <View style={styles.tabContainer}>
+                <TouchableOpacity
+                    style={[styles.tab, activeTab === "ORDERS" && styles.activeTab]}
+                    onPress={() => setActiveTab("ORDERS")}
+                >
+                    <Text style={[styles.tabText, activeTab === "ORDERS" && styles.activeTabText]}>SİPARİŞ MESAJLARI</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.tab, activeTab === "PRIVATE" && styles.activeTab]}
+                    onPress={() => setActiveTab("PRIVATE")}
+                >
+                    <Text style={[styles.tabText, activeTab === "PRIVATE" && styles.activeTabText]}>ÖZEL MESAJLAR</Text>
+                </TouchableOpacity>
+            </View>
+
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                {messages.length === 0 ? (
-                    <View style={styles.emptyState}>
-                        <View style={styles.emptyIconCircle}>
-                            <MaterialIcons name="chat-bubble-outline" size={48} color={colors.surfaceBorder} />
+                {activeTab === "ORDERS" && (
+                    orderMessages.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <View style={styles.emptyIconCircle}>
+                                <MaterialIcons name="receipt-long" size={48} color={colors.surfaceBorder} />
+                            </View>
+                            <Text style={styles.emptyText}>{loading ? "Yükleniyor..." : "Sipariş notu yok"}</Text>
                         </View>
-                        <Text style={styles.emptyText}>{loading ? "Yükleniyor..." : "Henüz mesaj yok"}</Text>
-                    </View>
-                ) : (
-                    messages.map((order) => (
-                        <View key={order.id} style={[styles.messageCard, !order.is_read && { borderColor: colors.primary, borderWidth: 2 }]}>
-                            <View style={styles.cardHeader}>
-                                <View style={styles.userInfo}>
-                                    <View style={styles.avatar}>
-                                        <MaterialIcons name="person" size={20} color={colors.primary} />
+                    ) : (
+                        orderMessages.map((order) => (
+                            <View key={order.id} style={styles.messageCard}>
+                                <View style={styles.cardHeader}>
+                                    <View style={styles.userInfo}>
+                                        <View style={styles.avatar}>
+                                            <MaterialIcons name="person" size={20} color={colors.primary} />
+                                        </View>
+                                        <View>
+                                            <Text style={styles.userName}>{order.userName}</Text>
+                                            {order.companyName && (
+                                                <Text style={{ fontSize: 10, color: colors.primary, fontWeight: 'bold' }}>
+                                                    {order.companyName}
+                                                </Text>
+                                            )}
+                                            <Text style={styles.orderLabel}>Sipariş: #{order.orderNumber} ({order.status})</Text>
+                                        </View>
                                     </View>
-                                    <View>
-                                        <Text style={styles.userName}>{order.userName}</Text>
-                                        {order.companyName && (
-                                            <Text style={{ fontSize: 10, color: colors.primary, fontWeight: 'bold' }}>
-                                                {order.companyName}
-                                            </Text>
-                                        )}
-                                        <Text style={styles.orderLabel}>Bildirim Müşteriden Geldi</Text>
-                                    </View>
+                                    <Text style={styles.timeText}>{order.date}</Text>
                                 </View>
-                                <Text style={styles.timeText}>{order.date}</Text>
-                            </View>
 
-                            <View style={styles.messageBox}>
-                                <Text style={styles.messageText}>"{order.note}"</Text>
-                            </View>
-
-                            <View style={styles.cardFooter}>
-                                <View style={styles.badge}>
-                                    <Text style={styles.badgeText}>{order.is_read ? 'Okundu' : 'Yeni Mesaj'}</Text>
+                                <View style={styles.messageBox}>
+                                    <Text style={styles.messageText}>"{order.note}"</Text>
                                 </View>
-                                {!order.is_read && (
-                                    <TouchableOpacity style={styles.markReadBtn} onPress={() => markAsRead(order.id)}>
-                                        <Text style={styles.markReadText}>OKUNDU İŞARETLE</Text>
-                                        <MaterialIcons name="done-all" size={16} color={colors.primary} />
-                                    </TouchableOpacity>
-                                )}
                             </View>
+                        ))
+                    )
+                )}
+
+                {activeTab === "PRIVATE" && (
+                    privateMessages.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <View style={styles.emptyIconCircle}>
+                                <MaterialIcons name="chat-bubble-outline" size={48} color={colors.surfaceBorder} />
+                            </View>
+                            <Text style={styles.emptyText}>{loading ? "Yükleniyor..." : "Henüz özel mesaj yok"}</Text>
                         </View>
-                    ))
+                    ) : (
+                        privateMessages.map((msg) => (
+                            <View key={msg.id} style={[styles.messageCard, !msg.is_read && { borderColor: colors.primary, borderWidth: 2 }]}>
+                                <View style={styles.cardHeader}>
+                                    <View style={styles.userInfo}>
+                                        <View style={styles.avatar}>
+                                            <MaterialIcons name="person" size={20} color={colors.primary} />
+                                        </View>
+                                        <View>
+                                            <Text style={styles.userName}>{msg.userName}</Text>
+                                            {msg.companyName && (
+                                                <Text style={{ fontSize: 10, color: colors.primary, fontWeight: 'bold' }}>
+                                                    {msg.companyName}
+                                                </Text>
+                                            )}
+                                            <Text style={styles.orderLabel}>Destek / Öneri Formu</Text>
+                                        </View>
+                                    </View>
+                                    <Text style={styles.timeText}>{msg.date}</Text>
+                                </View>
+
+                                <View style={styles.messageBox}>
+                                    <Text style={styles.messageText}>"{msg.note}"</Text>
+                                </View>
+
+                                <View style={styles.cardFooter}>
+                                    <View style={styles.badge}>
+                                        <Text style={styles.badgeText}>{msg.is_read ? 'Okundu' : 'Yeni Mesaj'}</Text>
+                                    </View>
+                                    {!msg.is_read && (
+                                        <TouchableOpacity style={styles.markReadBtn} onPress={() => markAsRead(msg.id)}>
+                                            <Text style={styles.markReadText}>OKUNDU İŞARETLE</Text>
+                                            <MaterialIcons name="done-all" size={16} color={colors.primary} />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </View>
+                        ))
+                    )
                 )}
             </ScrollView>
         </View>
@@ -174,6 +259,31 @@ const getStyles = (colors: any) => StyleSheet.create({
     },
     title: { fontSize: 28, fontWeight: "900", color: colors.text, marginBottom: 4 },
     subtitle: { fontSize: 12, color: colors.muted, fontWeight: "bold" },
+    tabContainer: {
+        flexDirection: "row",
+        paddingHorizontal: 24,
+        marginBottom: 20,
+        gap: 12,
+    },
+    tab: {
+        flex: 1,
+        borderBottomWidth: 2,
+        borderBottomColor: "transparent",
+        paddingVertical: 12,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    activeTab: {
+        borderBottomColor: colors.primary,
+    },
+    tabText: {
+        fontSize: 14,
+        fontWeight: "bold",
+        color: colors.muted,
+    },
+    activeTabText: {
+        color: colors.primary,
+    },
     scrollContent: {
         paddingHorizontal: 24,
         paddingBottom: 40,

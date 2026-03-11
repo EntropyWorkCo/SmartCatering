@@ -1,7 +1,7 @@
 {
   "editor.codeActionsOnSave": {
-    "source.fixAll": "explicit",
-    "source.organizeImports": "explicit",
-    "source.sortMembers": "explicit"
+    "source.fixAll": "explicit",  //Bu ayar, kaydetme işlemi sırasında tüm hataları otomatik olarak düzeltir.
+    "source.organizeImports": "explicit", //Bu ayar, kaydetme işlemi sırasında import ifadelerini otomatik olarak düzenler.
+    "source.sortMembers": "explicit"//Bu ayar, kaydetme işlemi sırasında sınıf üyeleri otomatik olarak sıralanır.
   }
 }

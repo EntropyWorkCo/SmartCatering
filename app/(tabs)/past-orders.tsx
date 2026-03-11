@@ -1,13 +1,15 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useResolvedTheme } from "@/lib/store/themeStore";
+import { supabase } from "@/lib/supabase";
 
 export default function PastOrdersScreen() {
     const router = useRouter();
@@ -18,6 +20,30 @@ export default function PastOrdersScreen() {
     const { user } = useAuth();
     const { orders, loading } = useAdisyon(user?.id);
     const [timeFilter, setTimeFilter] = useState<"ALL" | "DAILY" | "WEEKLY" | "MONTHLY">("ALL");
+
+    const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+    const [itemRatings, setItemRatings] = useState<{ [key: string]: number }>({});
+    const [comment, setComment] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+    const [ratedOrders, setRatedOrders] = useState<string[]>([]);
+
+    useFocusEffect(
+        useCallback(() => {
+            if (user?.id) {
+                supabase.from("feedbacks").select("order_id").eq("user_id", user.id).not("order_id", "is", null)
+                    .then(({ data }) => {
+                        if (data) setRatedOrders(data.map((d: any) => d.order_id));
+                    });
+            }
+        }, [user?.id])
+    );
+
+    const handleEvaluate = (orderId: string) => {
+        router.push({
+            pathname: "/(tabs)/order-rating",
+            params: { orderId }
+        });
+    };
 
     // Sort orders descending by date
     const sortedOrders = useMemo(() => {
@@ -57,7 +83,10 @@ export default function PastOrdersScreen() {
                 <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.title}>Geçmiş Siparişlerim</Text>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.title}>Geçmiş Siparişlerim</Text>
+                </View>
+                <ThemeSwitcher />
             </View>
 
             <View style={styles.filterContainer}>
@@ -86,7 +115,7 @@ export default function PastOrdersScreen() {
                 ) : (
                     sortedOrders.map((order, idx) => {
                         const date = new Date(order.created_at || order.date);
-                        const isCompleted = order.status === "COMPLETED" || order.status === "Tamamlandı" || order.status === "Ödendi";
+                        const isCompleted = true; // Show evaluate button for all past orders
 
                         return (
                             <View key={order.id || idx} style={styles.orderCard}>
@@ -126,6 +155,21 @@ export default function PastOrdersScreen() {
                                         <Text style={styles.orderTotalLabel}>Toplam Tutar</Text>
                                         <Text style={styles.orderTotalValue}>₺{order.total_amount || 0}</Text>
                                     </View>
+                                    {isCompleted && !ratedOrders.includes(order.id) && (
+                                        <TouchableOpacity 
+                                            style={styles.evaluateBtn} 
+                                            onPress={() => handleEvaluate(order.id)}
+                                        >
+                                            <MaterialIcons name="star-outline" size={16} color="#fff" />
+                                            <Text style={styles.evaluateBtnText}>Değerlendir</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                    {isCompleted && ratedOrders.includes(order.id) && (
+                                        <View style={[styles.evaluateBtn, { backgroundColor: colors.surfaceBorder }]}>
+                                            <MaterialIcons name="check" size={16} color={colors.text} />
+                                            <Text style={[styles.evaluateBtnText, { color: colors.text }]}>Değerlendirildi</Text>
+                                        </View>
+                                    )}
                                 </View>
                             </View>
                         );
@@ -194,5 +238,19 @@ const getStyles = (colors: any) => StyleSheet.create({
     statusText: { fontSize: 10, fontWeight: '900' },
     totalBox: { alignItems: 'flex-end' },
     orderTotalLabel: { fontSize: 11, fontWeight: 'bold', color: colors.muted, marginBottom: 2 },
-    orderTotalValue: { fontSize: 18, fontWeight: '900', color: colors.text }
+    orderTotalValue: { fontSize: 18, fontWeight: '900', color: colors.text },
+    evaluateBtn: {
+        backgroundColor: colors.primary,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+    },
+    evaluateBtnText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: 'bold',
+    }
 });

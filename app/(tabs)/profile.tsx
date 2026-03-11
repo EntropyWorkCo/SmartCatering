@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
@@ -31,7 +32,14 @@ export default function ProfileScreen() {
     const styles = getStyles(colors);
 
     const { user } = useAuth();
-    const { profile, loading } = useProfile(user?.id);
+    const { profile, loading, refresh } = useProfile(user?.id);
+
+    // Sekme her odaklandığında veriyi yenile (Örn: Kurumsal Bilgiler'den dönünce)
+    useFocusEffect(
+        React.useCallback(() => {
+            refresh();
+        }, [user?.id])
+    );
 
     const [fullName, setFullName] = useState("");
     const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -112,7 +120,10 @@ export default function ProfileScreen() {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <Text style={styles.title}>Hesabım</Text>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.title}>Hesabım</Text>
+                </View>
+                <ThemeSwitcher />
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -182,12 +193,6 @@ export default function ProfileScreen() {
                         <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/rating")}>
-                        <MaterialIcons name="star-outline" size={24} color={colors.text} />
-                        <Text style={styles.linkText}>Yemekleri Değerlendir</Text>
-                        <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
-                    </TouchableOpacity>
-
                     <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/support" as any)}>
                         <MaterialIcons name="support-agent" size={24} color={colors.text} />
                         <Text style={styles.linkText}>Mutfakla İletişime Geç (İstek/Öneri)</Text>
@@ -230,7 +235,7 @@ export default function ProfileScreen() {
 
 const getStyles = (colors: any) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    header: { padding: 24, paddingBottom: 16 },
+    header: { padding: 24, paddingBottom: 16, flexDirection: 'row', alignItems: 'center' },
     title: { fontSize: 28, fontWeight: '900', color: colors.text },
     scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
 

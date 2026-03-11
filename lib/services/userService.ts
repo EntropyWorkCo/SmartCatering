@@ -62,14 +62,26 @@ export const userService = {
 
       if (error) throw error;
     }
+
+    // KRİTİK: Kullanıcıyı kurumsal olarak işaretle (is_company flag'ini güncelle)
+    const { error: userUpdateError } = await supabase
+      .from("users")
+      .update({
+        is_company: true,
+        role: "corporate"
+      } as any) // Type error'u önlemek için as any kullanıyoruz (database.types güncellenecek)
+      .eq("id", userId);
+
+    if (userUpdateError) {
+      console.error("User tablosu güncellenirken hata:", userUpdateError);
+    }
   },
   async updateProfile(userId: string, data: { fullName: string, phone: string }) {
     const { error } = await supabase
       .from("users")
       .update({
         full_name: data.fullName,
-        phone: data.phone,
-        updated_at: new Date().toISOString()
+        phone: data.phone
       })
       .eq("id", userId);
 
@@ -91,6 +103,29 @@ export const userService = {
     if (error) {
       console.error("Error updating push token:", error);
       throw error;
+    }
+  },
+
+  async downgradeToIndividual(userId: string) {
+    // 1. Users tablosunu güncelle
+    const { error: userError } = await supabase
+      .from("users")
+      .update({
+        is_company: false,
+        role: "customer"
+      } as any)
+      .eq("id", userId);
+
+    if (userError) throw userError;
+
+    // 2. Şirket bilgisini sil (veya tutmak istersen silme, ama genellikle temizlenir)
+    const { error: companyError } = await supabase
+      .from("companies")
+      .delete()
+      .eq("user_id", userId);
+
+    if (companyError) {
+      console.error("Şirket silinirken hata (downgrade):", companyError);
     }
   }
 };

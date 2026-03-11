@@ -232,6 +232,7 @@ export type Database = {
           phone: string
           role: string | null
           push_token: string | null
+          is_company: boolean | null
         }
         Insert: {
           created_at?: string | null
@@ -240,6 +241,7 @@ export type Database = {
           phone: string
           role?: string | null
           push_token?: string | null
+          is_company?: boolean | null
         }
         Update: {
           created_at?: string | null
@@ -248,6 +250,7 @@ export type Database = {
           phone?: string
           role?: string | null
           push_token?: string | null
+          is_company?: boolean | null
         }
         Relationships: []
       }

@@ -1,12 +1,13 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Print from 'expo-print';
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useRef } from "react";
 import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -22,7 +23,13 @@ export default function HomeScreen() {
   const styles = getStyles(colors);
 
   const { user } = useAuth();
-  const { profile } = useProfile(user?.id);
+  const { profile, refresh } = useProfile(user?.id);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refresh();
+    }, [user?.id])
+  );
   const { orders } = useAdisyon(user?.id);
   const { menu } = useMenu(true);
   const cartItems = useCartStore((state) => state.items);
@@ -206,6 +213,7 @@ export default function HomeScreen() {
             <Text style={styles.subtitleText}>BUGÜN NE YEMEK İSTERSİN?</Text>
           </View>
           <View style={styles.headerActions}>
+            <ThemeSwitcher />
             <TouchableOpacity
               style={styles.cartBtn}
               onPress={() => router.push("/(tabs)/cart")}
@@ -240,7 +248,7 @@ export default function HomeScreen() {
             <View style={styles.balanceFooter}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 {orders && orders.filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)).length > 0 ? (
-                  <Text style={{ fontSize: 11, color: colors.text === '#f8fafc' ? '#064e3b' : '#cbd5e1', fontWeight: 'bold' }}>
+                  <Text style={{ fontSize: 11, color: theme === 'dark' ? colors.muted : '#064e3b', fontWeight: 'bold' }}>
                     {orders.filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)).length} Ödenmemiş Adisyon
                   </Text>
                 ) : (
@@ -256,7 +264,7 @@ export default function HomeScreen() {
         <View style={styles.gridContainer}>
           <ActionCard
             icon="restaurant-menu" title="SİPARİŞ VER" subtitle="Hızlı & Taze"
-            bgColor="#10b981" onPress={() => router.push("/order-selection")}
+            bgColor="#10b981" onPress={() => router.push("/(tabs)/menu")}
           />
         </View>
 
@@ -568,7 +576,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   foodBottomColumn: { alignItems: "flex-end", justifyContent: "center", minWidth: 60 },
   foodPrice: { fontSize: 18, fontWeight: "900", color: colors.primary },
   addBtn: {
-    backgroundColor: colors.text, width: 40, height: 40, borderRadius: 12,
+    backgroundColor: colors.primary, width: 40, height: 40, borderRadius: 12,
     alignItems: "center", justifyContent: "center",
   },
   quantityContainer: {

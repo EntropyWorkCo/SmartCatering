@@ -34,6 +34,14 @@ export default function TabLayout() {
         }}
       />
 
+      <Tabs.Screen
+        name="order-rating"
+        options={{
+          href: null,
+          headerShown: false
+        }}
+      />
+
       {/* Ana Sayfa (Home) */}
       <Tabs.Screen
         name="home"

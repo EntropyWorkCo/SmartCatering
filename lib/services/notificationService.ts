@@ -80,10 +80,11 @@ export const notificationService = {
     /**
      * Kullanıcı sipariş verdikten belirli bir süre (örn. 15 dk) sonra yerel bildirim (local push) planlar.
      */
-    async scheduleRatingNotification(minutesDelay: number = 15) {
+    async scheduleRatingNotification(minutesDelay: number = 15, orderId?: string) {
         const { Platform, Alert } = require("react-native");
         const title = "Yemeğiniz nasıldı? 🍽️";
         const body = "Bugünkü siparişinizi değerlendirerek bize yardımcı olmak ister misiniz?";
+        const targetUrl = orderId ? `/(tabs)/order-rating?orderId=${orderId}` : "/(tabs)/past-orders";
 
         // Android Expo Go SDK 53+ restriction workaround: Simulate with Alert
         if (Platform.OS === "android" && isExpoGo) {
@@ -100,7 +101,7 @@ export const notificationService = {
                             text: "Değerlendir",
                             onPress: () => {
                                 const { router } = require("expo-router");
-                                router.push("/rating");
+                                router.push(targetUrl as any);
                             }
                         }
                     ]
@@ -117,7 +118,7 @@ export const notificationService = {
                 content: {
                     title,
                     body,
-                    data: { url: "/rating" },
+                    data: { url: targetUrl },
                     sound: true,
                 },
                 trigger: {
@@ -127,7 +128,7 @@ export const notificationService = {
                 },
             });
             console.log(
-                `Rating notification scheduled for ${minutesDelay} minutes later.`
+                `Rating notification scheduled for ${minutesDelay} minutes later with target: ${targetUrl}`
             );
         } catch (error) {
             console.warn(
