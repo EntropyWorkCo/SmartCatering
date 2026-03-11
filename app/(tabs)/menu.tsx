@@ -200,55 +200,73 @@ export default function MenuScreen() {
         {((selectedCategory === "TÜMÜ" || selectedCategory === "GÜNÜN MENÜSÜ") && dailyMenu.length > 0) && (
           <View style={{ paddingTop: 24, paddingHorizontal: 24 }}>
             <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 16 }}>Günün Menüsü</Text>
-            <View style={{ gap: 16 }}>
-              {dailyMenu.map(item => (
-                <View key={item.id} style={[styles.foodCard, item.status === 'sold_out' && { opacity: 0.6 }]}>
-                  <View style={styles.foodImageContainer}>
-                    {item.image_url ? (
-                      <Image source={{ uri: item.image_url }} style={styles.foodImage} />
-                    ) : (
-                      <MaterialIcons name={
-                        item.category === "İÇECEK" ? "local-drink" :
-                          item.category === "ÇORBA" ? "soup-kitchen" :
-                            item.category === "EKSTRA" ? "add-circle-outline" :
-                              "restaurant"
-                      } size={40} color={colors.muted} />
-                    )}
-                  </View>
-                  <View style={styles.foodDetails}>
-                    <View style={{ flex: 1, paddingRight: 8 }}>
-                      <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
-                      <Text style={styles.foodCategory}>{item.category}</Text>
-                    </View>
-                    <View style={styles.foodBottomColumn}>
-                      <Text style={styles.foodPrice}>₺{item.price}</Text>
-                      {item.status === 'sold_out' ? (
-                        <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
-                          <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
+            
+            {(["ÇORBA", "ANA YEMEK", "YARDIMCI"] as const).map(catKey => {
+              const catItems = dailyMenu.filter(item => item.category === catKey);
+              if (catItems.length === 0) return null;
+              
+              const catLabels: Record<string, string> = {
+                "ÇORBA": "Çorbalar",
+                "ANA YEMEK": "Ana Yemekler",
+                "YARDIMCI": "Yardımcı Yemekler"
+              };
+
+              return (
+                <View key={catKey} style={{ marginBottom: 20 }}>
+                  <Text style={{ fontSize: 13, fontWeight: 'bold', color: colors.primary, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>
+                    {catLabels[catKey]}
+                  </Text>
+                  <View style={{ gap: 16 }}>
+                    {catItems.map(item => (
+                      <View key={item.id} style={[styles.foodCard, item.status === 'sold_out' && { opacity: 0.6 }]}>
+                        <View style={styles.foodImageContainer}>
+                          {item.image_url ? (
+                            <Image source={{ uri: item.image_url }} style={styles.foodImage} />
+                          ) : (
+                            <MaterialIcons name={
+                              item.category === "İÇECEK" ? "local-drink" :
+                                item.category === "ÇORBA" ? "soup-kitchen" :
+                                  item.category === "EKSTRA" ? "add-circle-outline" :
+                                    "restaurant"
+                            } size={40} color={colors.muted} />
+                          )}
                         </View>
-                      ) : (
-                        getCartQuantity(item.id) > 0 ? (
-                          <View style={[styles.activeQuantityContainer, { marginTop: 8 }]}>
-                            <TouchableOpacity onPress={() => handleDecrement(item.id)} style={styles.activeQtyBtn}>
-                              <MaterialIcons name="remove" size={16} color="#fff" />
-                            </TouchableOpacity>
-                            <Text style={styles.activeQtyText}>{getCartQuantity(item.id)}</Text>
-                            <TouchableOpacity onPress={() => handleAddToCart(item)} style={styles.activeQtyBtn}>
-                              <MaterialIcons name="add" size={16} color="#fff" />
-                            </TouchableOpacity>
+                        <View style={styles.foodDetails}>
+                          <View style={{ flex: 1, paddingRight: 8 }}>
+                            <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
                           </View>
-                        ) : (
-                          <TouchableOpacity style={[styles.addBtnLarge, { marginTop: 8 }]} onPress={() => handleAddToCart(item)}>
-                            <MaterialIcons name="add" size={16} color="#fff" style={{ marginRight: 4 }} />
-                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>EKLE</Text>
-                          </TouchableOpacity>
-                        )
-                      )}
-                    </View>
+                          <View style={styles.foodBottomColumn}>
+                            <Text style={styles.foodPrice}>₺{item.price}</Text>
+                            {item.status === 'sold_out' ? (
+                              <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
+                                <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
+                              </View>
+                            ) : (
+                              getCartQuantity(item.id) > 0 ? (
+                                <View style={[styles.activeQuantityContainer, { marginTop: 8 }]}>
+                                  <TouchableOpacity onPress={() => handleDecrement(item.id)} style={styles.activeQtyBtn}>
+                                    <MaterialIcons name="remove" size={16} color="#fff" />
+                                  </TouchableOpacity>
+                                  <Text style={styles.activeQtyText}>{getCartQuantity(item.id)}</Text>
+                                  <TouchableOpacity onPress={() => handleAddToCart(item)} style={styles.activeQtyBtn}>
+                                    <MaterialIcons name="add" size={16} color="#fff" />
+                                  </TouchableOpacity>
+                                </View>
+                              ) : (
+                                <TouchableOpacity style={[styles.addBtnLarge, { marginTop: 8 }]} onPress={() => handleAddToCart(item)}>
+                                  <MaterialIcons name="add" size={16} color="#fff" style={{ marginRight: 4 }} />
+                                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>EKLE</Text>
+                                </TouchableOpacity>
+                              )
+                            )}
+                          </View>
+                        </View>
+                      </View>
+                    ))}
                   </View>
                 </View>
-              ))}
-            </View>
+              );
+            })}
           </View>
         )}
 
