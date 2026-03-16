@@ -37,7 +37,7 @@ export default function AdminReports() {
             const fetchRatings = async () => {
                 const { data, error } = await supabase
                     .from("feedbacks")
-                    .select("*, users(full_name, companies!companies_user_id_fkey(company_name))")
+                    .select("*, users(full_name, companies!users_company_id_fkey(company_name))")
                     .order("created_at", { ascending: false });
 
                 if (error) {
@@ -47,7 +47,7 @@ export default function AdminReports() {
                 if (data) {
                     const formatted = data.map((r: any) => {
                         const user = r.users?.[0] || r.users;
-                        const company = user?.companies?.[0] || user?.companies;
+                        const company = user?.["companies!users_company_id_fkey"]?.[0] || user?.["companies!users_company_id_fkey"] || user?.companies?.[0] || user?.companies;
 
                         let parsedNote = r.note || '';
                         let parsedDetails = r.rating_details;

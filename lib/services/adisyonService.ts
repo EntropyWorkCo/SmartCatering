@@ -56,7 +56,7 @@ export const adisyonService = {
     try {
       const { data, error } = await supabase
         .from("adisyon")
-        .select("*, adisyon_items(*, menu_items(name)), users(*, companies!companies_user_id_fkey(*))")
+        .select("*, adisyon_items(*, menu_items(name)), users(*, companies!users_company_id_fkey(*))")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
@@ -75,7 +75,7 @@ export const adisyonService = {
     try {
       const { data, error } = await supabase
         .from("adisyon")
-        .select("*, adisyon_items(*, menu_items(name)), users(*, companies!companies_user_id_fkey(*))")
+        .select("*, adisyon_items(*, menu_items(name)), users(*, companies!users_company_id_fkey(*))")
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -85,7 +85,7 @@ export const adisyonService = {
 
       return (data || []).map((order: any) => {
         const user = order.users?.[0] || order.users;
-        const company = user?.companies?.[0] || user?.companies;
+        const company = user?.["companies!users_company_id_fkey"]?.[0] || user?.["companies!users_company_id_fkey"] || user?.companies?.[0] || user?.companies;
 
         return {
           ...order,
@@ -136,5 +136,49 @@ export const adisyonService = {
     }
 
     return data;
+  },
+
+  async getCompanyOrders(companyId: string) {
+    try {
+      // 1. Get all employees in the company
+      const { data: users, error: userError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("company_id", companyId);
+
+      if (userError) throw userError;
+
+      const userIds = users.map(u => u.id);
+      if (userIds.length === 0) return [];
+
+      // 2. Fetch adisyons for these user IDs
+      const { data: adisyons, error: adisyonError } = await supabase
+        .from("adisyon")
+        .select(`
+          *,
+          users (*, companies!users_company_id_fkey(*)),
+          adisyon_items (*, menu_items(name))
+        `)
+        .in("user_id", userIds)
+        .order("created_at", { ascending: false });
+
+      if (adisyonError) throw adisyonError;
+
+      // Map format similarly to getAllOrders to be displayed uniformly
+      return (adisyons || []).map((order: any) => {
+        const user = order.users?.[0] || order.users;
+        const company = user?.["companies!users_company_id_fkey"]?.[0] || user?.["companies!users_company_id_fkey"] || user?.companies?.[0] || user?.companies;
+        return {
+          ...order,
+          userName: user?.full_name || 'Müşteri',
+          companyName: company?.company_name || null,
+          isCorporate: !!company
+        };
+      });
+
+    } catch (error: any) {
+      console.error("getCompanyOrders error:", error);
+      throw error;
+    }
   }
 };

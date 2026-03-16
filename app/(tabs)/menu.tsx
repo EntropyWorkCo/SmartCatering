@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,6 +27,7 @@ export default function MenuScreen() {
   const navigation = useNavigation();
   const [selectedCategory, setSelectedCategory] = useState("TÜMÜ");
   const cartItems = useCartStore(state => state.items);
+  const orderMode = useCartStore(state => state.orderMode);
 
   const { user } = useAuth();
   const { profile, refresh } = useProfile(user?.id);
@@ -73,7 +75,7 @@ export default function MenuScreen() {
   let filteredMenu: any[] = [];
 
   // Günün Menüsü (Always separate unless filtered out entirely, but user wants it at top)
-  const dailyMenu = menu.filter(m => ["ÇORBA", "ANA YEMEK", "YARDIMCI"].includes(m.category));
+  const dailyMenu = menu.filter(m => ["ÇORBA", "ANA YEMEK", "YARDIMCI", "TATLI"].includes(m.category));
 
   if (selectedCategory === "TÜMÜ") {
     filteredMenu = [
@@ -94,6 +96,22 @@ export default function MenuScreen() {
   }
 
   const handleAddToCart = (item: any) => {
+    if (!orderMode) {
+      Alert.alert(
+        "Seçim Gerekli",
+        "Menüden ürün ekleyebilmek için lütfen önce Ana Sayfadan 'Şimdi Ye' veya 'Sipariş Ver' seçeneğini işaretleyin.",
+        [{ text: "Tamam" }]
+      );
+      return;
+    }
+
+    if ((item.category === "PAKET" || item.category === "TABLDOT") && orderMode === 'pre_order') {
+      setSelectedPackage(item);
+      setPackageSelections([]); // reset
+      setPackageModalVisible(true);
+      return;
+    }
+
     useCartStore.getState().addItem({
       menu_item_id: item.id,
       name: item.name,
@@ -110,8 +128,18 @@ export default function MenuScreen() {
   const getCartQuantity = (id: string) => cartItems.find(i => i.menu_item_id === id)?.quantity || 0;
 
   const handleConfirmPackage = () => {
-    if (selectedPackage && packageSelections.length !== selectedPackage.maxItems) {
-      Alert.alert("Eksik/Fazla Seçim", `Lütfen tam olarak ${selectedPackage.maxItems} çeşit yemek seçiniz.`);
+    if (!selectedPackage) return;
+    
+    // Check if one item from each required category is selected
+    const requiredCategories = ["ÇORBA", "ANA YEMEK"];
+    if (selectedPackage.maxItems >= 3) requiredCategories.push("YARDIMCI");
+    if (selectedPackage.maxItems >= 4) requiredCategories.push("TATLI"); // Or whatever the 4th is. For now, just ensure total count is maxItems and we have unique categories
+
+    const hasAll = requiredCategories.every(cat => packageSelections.some(s => s.category === cat));
+    
+    // As per user request: "Ama her çeşitten birer tane"
+    if (!hasAll || packageSelections.length !== selectedPackage.maxItems) {
+      Alert.alert("Eksik/Fazla Seçim", `Lütfen her gruptan birer tane olmak şartıyla tam ${selectedPackage.maxItems} çeşit yemek seçiniz.`);
       return;
     }
 
@@ -135,7 +163,11 @@ export default function MenuScreen() {
     if (isSelected) {
       setPackageSelections(prev => prev.filter(s => s.item_id !== meal.id));
     } else {
-      setPackageSelections(prev => [...prev, { category: meal.category, item_id: meal.id, item_name: meal.name }]);
+      // Her çeşitten birer tane kuralı - aynı kategoriden varsa değiştir
+      setPackageSelections(prev => {
+        const filtered = prev.filter(s => s.category !== meal.category);
+        return [...filtered, { category: meal.category, item_id: meal.id, item_name: meal.name }];
+      });
     }
   };
 
@@ -236,7 +268,7 @@ export default function MenuScreen() {
                             <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
                           </View>
                           <View style={styles.foodBottomColumn}>
-                            <Text style={styles.foodPrice}>₺{item.price}</Text>
+                            {isCompany ? null : <Text style={styles.foodPrice}>₺{item.price}</Text>}
                             {item.status === 'sold_out' ? (
                               <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
                                 <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
@@ -304,7 +336,7 @@ export default function MenuScreen() {
                       <Text style={styles.foodCategory}>{item.category === 'İÇECEK' || item.category === 'EKSTRA' ? 'Tabela Ürünü' : item.category}</Text>
                     </View>
                     <View style={styles.foodBottomColumn}>
-                      <Text style={styles.foodPrice}>₺{item.price}</Text>
+                      {isCompany ? null : <Text style={styles.foodPrice}>₺{item.price}</Text>}
                       {item.status === 'sold_out' ? (
                         <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
                           <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
@@ -353,7 +385,7 @@ export default function MenuScreen() {
 
                 {/* Alt Kısım (Fiyat ve Butonlar) */}
                 <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 12 }}>
-                  <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary, marginRight: 12 }}>₺{pkg.price}</Text>
+                  {isCompany ? null : <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary, marginRight: 12 }}>₺{pkg.price}</Text>}
 
                   {getCartQuantity(pkg.id) > 0 ? (
                     <View style={[styles.activeQuantityContainer, { marginTop: 0 }]}>
@@ -378,6 +410,74 @@ export default function MenuScreen() {
         )}
       </ScrollView>
 
+      {/* Floating Forward Button */}
+      {totalCartCount > 0 && (
+        <TouchableOpacity 
+          style={{
+            position: 'absolute', bottom: 40, left: 24, right: 24,
+            backgroundColor: colors.primary, padding: 16, borderRadius: 16,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5
+          }}
+          onPress={() => router.push("/(tabs)/cart")}
+          activeOpacity={0.9}
+        >
+          <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', marginRight: 8 }}>Siparişi Tamamla</Text>
+          <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+        </TouchableOpacity>
+      )}
+
+      {/* Package Selection Modal */}
+      <Modal visible={packageModalVisible} animationType="slide" transparent>
+        <View style={[styles.modalOverlay, { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.background, height: '90%', borderTopLeftRadius: 32, borderTopRightRadius: 32 }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 24, borderBottomWidth: 1, borderColor: colors.surfaceBorder }}>
+              <View>
+                <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text }}>{selectedPackage?.name}</Text>
+                <Text style={{ fontSize: 12, color: colors.muted, marginTop: 4 }}>{selectedPackage?.maxItems} Çeşit Ürün Seçiniz</Text>
+              </View>
+              <TouchableOpacity onPress={() => setPackageModalVisible(false)} style={{ padding: 4 }}>
+                <MaterialIcons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 100 }}>
+              {["ÇORBA", "ANA YEMEK", "YARDIMCI", "TATLI"].map(catName => {
+                const catItems = dailyMenu.filter(m => m.category === catName);
+                if (catItems.length === 0) return null;
+                
+                return (
+                  <View key={catName} style={{ marginBottom: 24 }}>
+                    <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.muted, marginBottom: 12 }}>{catName}</Text>
+                    {catItems.map(item => {
+                      const isSelected = packageSelections.find(s => s.item_id === item.id);
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          style={[styles.modalMealCard, isSelected && styles.modalMealCardActive]}
+                          onPress={() => togglePackageSelection(item)}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.modalMealName}>{item.name}</Text>
+                          </View>
+                          {isSelected && <MaterialIcons name="check-circle" size={20} color={colors.primary} />}
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </View>
+                )
+              })}
+            </ScrollView>
+
+            <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 24, backgroundColor: colors.background, borderTopWidth: 1, borderColor: colors.surfaceBorder }}>
+              <TouchableOpacity style={[styles.confirmPackageBtn, { margin: 0 }]} onPress={handleConfirmPackage}>
+                <Text style={styles.confirmPackageBtnText}>Paketi Onayla ({packageSelections.length}/{selectedPackage?.maxItems})</Text>
+                {isCompany ? null : <Text style={styles.confirmPackagePriceInfo}>₺{selectedPackage?.price}</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
     </View>
   );
@@ -609,5 +709,20 @@ const getStyles = (colors: any) => StyleSheet.create({
     color: '#dcfce7',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
   },
 });

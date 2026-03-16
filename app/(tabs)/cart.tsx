@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../lib/hooks/useAuth";
+import { useProfile } from "../../lib/hooks/useProfile";
 import { adisyonService } from "../../lib/services/adisyonService";
 import { notificationService } from "../../lib/services/notificationService";
 
@@ -24,12 +25,15 @@ export default function CartScreen() {
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
     const { user } = useAuth();
+    const { profile } = useProfile(user?.id);
+    const isCompany = profile?.is_company || false;
 
     const theme = useResolvedTheme();
     const colors = Colors[theme];
     const styles = getStyles(colors);
 
-    const orderType = "Şimdi Ye";
+    const orderMode = useCartStore((state) => state.orderMode);
+    const orderType = orderMode === "eat_now" ? "Şimdi Ye" : "Sipariş Ver";
     const [orderNote, setOrderNote] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -46,7 +50,7 @@ export default function CartScreen() {
 
         Alert.alert(
             "Siparişi Onayla",
-            `${getTotal()}₺ tutarındaki siparişinizi onaylıyor musunuz?\nSipariş Türü: ${orderType}`,
+            `${isCompany ? '' : `${getTotal()}₺ tutarındaki `}siparişinizi onaylıyor musunuz?\nSipariş Türü: ${orderType}`,
             [
                 { text: "İptal", style: "cancel" },
                 {
@@ -122,15 +126,15 @@ export default function CartScreen() {
                                     <View style={styles.selectionsList}>
                                         {item.selections.map((sel, idx) => (
                                             <Text key={idx} style={styles.selectionText}>
-                                                • {sel.item_name}
+                                                • {sel.item_name} ({sel.category})
                                             </Text>
                                         ))}
                                     </View>
                                 )}
-                                <Text style={styles.itemPrice}>{item.price} ₺ x {item.quantity}</Text>
+                                {isCompany ? null : <Text style={styles.itemPrice}>{item.price} ₺ x {item.quantity}</Text>}
                             </View>
                             <View style={styles.itemActions}>
-                                <Text style={styles.itemTotal}>{item.price * item.quantity} ₺</Text>
+                                {isCompany ? null : <Text style={styles.itemTotal}>{item.price * item.quantity} ₺</Text>}
                                 <TouchableOpacity onPress={() => removeItem(item.id)} style={styles.removeBtn}>
                                     <MaterialIcons name="close" size={20} color={colors.danger} />
                                 </TouchableOpacity>
@@ -158,7 +162,7 @@ export default function CartScreen() {
 
                     <View style={styles.totalContainer}>
                         <Text style={styles.totalText}>Toplam</Text>
-                        <Text style={styles.totalAmount}>{getTotal()} ₺</Text>
+                        <Text style={styles.totalAmount}>{isCompany ? "-" : `${getTotal()} ₺`}</Text>
                     </View>
 
                     <TouchableOpacity

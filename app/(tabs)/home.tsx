@@ -4,7 +4,7 @@ import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useRef } from "react";
-import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ThemeSwitcher from "@/components/ThemeSwitcher";
@@ -13,6 +13,7 @@ import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useMenu } from "@/lib/hooks/useMenu";
 import { useProfile } from "@/lib/hooks/useProfile";
+import { adisyonService } from "@/lib/services/adisyonService";
 import { useCartStore } from "@/lib/store/cartStore";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 
@@ -34,13 +35,20 @@ export default function HomeScreen() {
   const { orders } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
   const { menu } = useMenu(true);
   const cartItems = useCartStore((state) => state.items);
+  const orderMode = useCartStore((state) => state.orderMode);
+  const setOrderMode = useCartStore((state) => state.setOrderMode);
 
   const [modalVisible, setModalVisible] = React.useState(false);
   const [timeFilter, setTimeFilter] = React.useState<"ALL" | "DAILY" | "WEEKLY" | "MONTHLY">("ALL");
   const [quantities, setQuantities] = React.useState<{ [key: string]: number }>({});
+  const [companyOrders, setCompanyOrders] = React.useState<any[]>([]);
+  const [companyOrdersLoading, setCompanyOrdersLoading] = React.useState(false);
   const hasAlertedMenuRef = useRef(false);
 
   const isCompany = profile?.is_company || false;
+  const isCompanyOwner = !!profile?.corporate_info;
+  const actualCompanyId = profile?.company_id || profile?.corporate_info?.id; 
+
   const getQuantity = (id: string) => quantities[id] || 1;
   const setQuantity = (id: string, val: number) => {
     setQuantities(prev => ({ ...prev, [id]: Math.max(1, val) }));
@@ -74,6 +82,43 @@ export default function HomeScreen() {
     };
     checkNotification();
   }, [dailyMenu]);
+
+  // Load Corporate Orders for Owner
+  useEffect(() => {
+    const loadCompanyOrders = async () => {
+      if (!isCompanyOwner || !actualCompanyId) return;
+      setCompanyOrdersLoading(true);
+      try {
+        const data = await adisyonService.getCompanyOrders(actualCompanyId);
+        setCompanyOrders(data || []);
+      } catch (e) {
+        console.error("Owner orders load error:", e);
+      } finally {
+        setCompanyOrdersLoading(false);
+      }
+    };
+    loadCompanyOrders();
+  }, [isCompanyOwner, actualCompanyId]);
+
+  const handlePressAction = (mode: 'eat_now' | 'pre_order') => {
+    if (cartItemCount > 0 && orderMode !== mode && orderMode !== null) {
+      Alert.alert(
+        "Sepetiniz Sıfırlanacak",
+        `Sepetinizde zaten '${orderMode === 'eat_now' ? 'Şimdi Ye' : 'Sipariş Ver'}' ürünleri bulunuyor. Diğer moda geçmek sepetinizi sıfırlayacaktır. Devam etmek istiyor musunuz?`,
+        [
+          { text: "Vazgeç", style: "cancel" },
+          { text: "Sepeti Boşalt ve Geç", style: "destructive", onPress: () => {
+              useCartStore.getState().clearCart();
+              setOrderMode(mode);
+              router.push("/(tabs)/menu");
+          }}
+        ]
+      );
+    } else {
+      setOrderMode(mode);
+      router.push("/(tabs)/menu");
+    }
+  };
 
   const handleAddToCart = (item: any) => {
     const quantity = getQuantity(item.id);
@@ -233,7 +278,65 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Quick Actions Grid (Main Order Flows) */}
+        <View style={styles.gridContainer}>
+          <ActionCard
+            icon="restaurant" title="ŞİMDİ YE" subtitle="Hemen Teslim"
+            bgColor="#f59e0b" 
+            onPress={() => handlePressAction('eat_now')}
+            isDisabled={cartItemCount > 0 && orderMode === 'pre_order'}
+          />
+          <ActionCard
+            icon="event-note" title="SİPARİŞ VER" subtitle="Önceden Planla"
+            bgColor="#10b981" 
+            onPress={() => handlePressAction('pre_order')}
+            isDisabled={cartItemCount > 0 && orderMode === 'eat_now'}
+          />
+        </View>
+
+        {isCompanyOwner ? (
+          <View style={{ marginBottom: 32 }}>
+            <Text style={styles.sectionTitle}>ÇALIŞAN ADİSYONLARI (TÜM FİRMA)</Text>
+            {companyOrdersLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : companyOrders.length === 0 ? (
+              <View style={[styles.foodCard, { padding: 16, alignItems: 'center', justifyContent: 'center' }]}>
+                <Text style={{ color: colors.muted, fontSize: 12 }}>Bekleyen çalışan adisyonu bulunmuyor.</Text>
+              </View>
+            ) : (
+              companyOrders.slice(0, 5).map(order => {
+                const date = new Date(order.created_at || order.date);
+                return (
+                  <TouchableOpacity key={order.id} style={[styles.foodCard, { padding: 16, marginBottom: 12 }]} activeOpacity={0.9}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <Text style={{ fontWeight: 'bold', color: colors.text }}>{order.userName}</Text>
+                    </View>
+                    <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 8 }}>{date.toLocaleString('tr-TR')}</Text>
+                    {order.adisyon_items?.map((item: any) => (
+                      <View key={item.id} style={{ flexDirection: 'row', marginBottom: 4 }}>
+                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.text, width: 20 }}>{item.quantity}x</Text>
+                        <Text style={{ fontSize: 12, color: colors.muted }}>{item.menu_items?.name}</Text>
+                      </View>
+                    ))}
+                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
+                      <View style={{ backgroundColor: colors.infoBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                        <Text style={{ fontSize: 10, color: colors.info, fontWeight: 'bold' }}>{order.status}</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                )
+              })
+            )}
+            {companyOrders.length > 5 && (
+              <TouchableOpacity onPress={() => router.push("/corporate-info")} style={{ alignItems: 'center', marginTop: 8 }}>
+                <Text style={{ color: colors.primary, fontSize: 12, fontWeight: 'bold' }}>Tümünü Raporlarda Gör</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : null}
+
         {/* Balance Card */}
+        {isCompanyOwner && (
         <TouchableOpacity activeOpacity={0.9} onPress={() => setModalVisible(true)}>
           <View style={styles.balanceCard}>
             <MaterialIcons name="account-balance-wallet" size={140} color={theme === 'dark' ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)"} style={styles.balanceBgIcon} />
@@ -260,14 +363,7 @@ export default function HomeScreen() {
             </View>
           </View>
         </TouchableOpacity>
-
-        {/* Quick Actions Grid */}
-        <View style={styles.gridContainer}>
-          <ActionCard
-            icon="restaurant-menu" title="SİPARİŞ VER" subtitle="Hızlı & Taze"
-            bgColor="#10b981" onPress={() => router.push("/(tabs)/menu")}
-          />
-        </View>
+        )}
 
         {/* Removed Last Order Highlight based on user request */}
 
@@ -298,30 +394,11 @@ export default function HomeScreen() {
                       <Text style={styles.foodCategory}>{item.category}</Text>
                     </View>
                     <View style={styles.foodBottomColumn}>
-                      <Text style={styles.foodPrice}>₺{item.price}</Text>
-                      {item.status === 'sold_out' ? (
+                      {isCompany ? null : <Text style={styles.foodPrice}>₺{item.price}</Text>}
+                      {item.status === 'sold_out' && (
                         <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
                           <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
                         </View>
-                      ) : (
-                        isCompany ? (
-                          <View style={[styles.quantityContainer, { marginTop: 8 }]}>
-                            <TouchableOpacity onPress={() => setQuantity(item.id, getQuantity(item.id) - 1)} style={styles.qtyBtn}>
-                              <MaterialIcons name="remove" size={14} color={colors.text} />
-                            </TouchableOpacity>
-                            <Text style={styles.qtyTextSmall}>{getQuantity(item.id)}</Text>
-                            <TouchableOpacity onPress={() => setQuantity(item.id, getQuantity(item.id) + 1)} style={styles.qtyBtn}>
-                              <MaterialIcons name="add" size={14} color={colors.text} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.addBtn, { marginLeft: 8, width: 32, height: 32 }]} onPress={() => handleAddToCart(item)}>
-                              <MaterialIcons name="add-shopping-cart" size={16} color="#fff" />
-                            </TouchableOpacity>
-                          </View>
-                        ) : (
-                          <TouchableOpacity style={styles.addBtn} onPress={() => handleAddToCart(item)}>
-                            <MaterialIcons name="add-shopping-cart" size={20} color="#fff" />
-                          </TouchableOpacity>
-                        )
                       )}
                     </View>
                   </View>
@@ -413,16 +490,27 @@ export default function HomeScreen() {
   );
 }
 
-const ActionCard = ({ icon, title, subtitle, bgColor, onPress }: any) => {
+const ActionCard = ({ icon, title, subtitle, bgColor, onPress, isDisabled = false }: any) => {
   const theme = useResolvedTheme();
   const colors = Colors[theme];
   return (
-    <TouchableOpacity style={[stylesBase.actionCard, { backgroundColor: colors.surface, borderColor: colors.surfaceBorder }]} activeOpacity={0.8} onPress={onPress}>
+    <TouchableOpacity 
+      style={[
+        stylesBase.actionCard, 
+        { backgroundColor: colors.surface, borderColor: colors.surfaceBorder },
+        isDisabled && { opacity: 0.4 }
+      ]} 
+      activeOpacity={isDisabled ? 1 : 0.8} 
+      onPress={onPress}
+    >
       <View style={[stylesBase.actionIconBox, { backgroundColor: bgColor }]}>
         <MaterialIcons name={icon} size={20} color="#fff" />
       </View>
       <View style={stylesBase.actionTexts}>
-        <Text style={[stylesBase.actionTitle, { color: colors.text }]}>{title}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={[stylesBase.actionTitle, { color: colors.text }]}>{title}</Text>
+          {isDisabled && <MaterialIcons name="lock" size={12} color={colors.muted} style={{ marginLeft: 4 }} />}
+        </View>
         <Text style={[stylesBase.actionSubtitle, { color: colors.muted }]}>{subtitle}</Text>
       </View>
     </TouchableOpacity>

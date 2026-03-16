@@ -8,6 +8,7 @@ import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useProfile } from "@/lib/hooks/useProfile";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 
@@ -18,6 +19,9 @@ export default function PastOrdersScreen() {
     const styles = getStyles(colors);
 
     const { user, loading: authLoading } = useAuth();
+    const { profile } = useProfile(user?.id);
+    const isCompany = profile?.is_company || false;
+
     // EĞER KULLANICI HENÜZ YÜKLENMEDİYSE null GÖNDER Kİ ADMİN MODU TETİKLENMESİN
     // Supabase uuid beklediği için standart boş uuid gönderiyoruz
     const { orders, loading } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
@@ -141,7 +145,7 @@ export default function PastOrdersScreen() {
                                     {order.adisyon_items && order.adisyon_items.length > 0 ? (
                                         order.adisyon_items.map((item: any) => (
                                             <Text key={item.id} style={styles.orderItemText}>
-                                                {item.quantity}x {item.menu_items?.name || 'Yemek'} - ₺{item.line_total}
+                                                {item.quantity}x {item.menu_items?.name || 'Yemek'} {!isCompany && `- ₺${item.line_total}`}
                                             </Text>
                                         ))
                                     ) : (
@@ -155,7 +159,7 @@ export default function PastOrdersScreen() {
                                 <View style={styles.orderFooter}>
                                     <View style={styles.totalBox}>
                                         <Text style={styles.orderTotalLabel}>Toplam Tutar</Text>
-                                        <Text style={styles.orderTotalValue}>₺{order.total_amount || 0}</Text>
+                                        <Text style={styles.orderTotalValue}>{isCompany ? "-" : `₺${order.total_amount || 0}`}</Text>
                                     </View>
                                     {isCompleted && !ratedOrders.includes(order.id) && (
                                         <TouchableOpacity 

@@ -1,3 +1,5 @@
+import 'react-native-get-random-values';
+import { v4 as uuidv4 } from 'uuid';
 import { supabase } from "../supabase";
 
 export const userService = {
@@ -127,5 +129,60 @@ export const userService = {
     if (companyError) {
       console.error("Şirket silinirken hata (downgrade):", companyError);
     }
+  },
+
+  async getCompanyEmployees(companyId: string) {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  async addEmployee(companyId: string, fullName: string, phone: string, role: string = "customer", isCompany: boolean = true) {
+    const id = uuidv4();
+    const { error } = await supabase
+      .from("users")
+      .insert({
+        id,
+        full_name: fullName,
+        phone,
+        company_id: companyId,
+        is_company: isCompany,
+        role
+      });
+    if (error) throw error;
+    return id;
+  },
+
+  async deleteEmployee(employeeId: string) {
+    // Unlink the employee from the company rather than hard deleting the user row, 
+    // to preserve adisyon history and avoid FK violation if any exist.
+    const { error } = await supabase
+      .from("users")
+      .update({ company_id: null, is_company: false, role: "customer" })
+      .eq("id", employeeId);
+      
+    if (error) throw error;
+  },
+
+  async uploadEmployeesCSV(companyId: string, employees: { fullName: string, phone: string }[]) {
+    if (employees.length === 0) return;
+    const rows = employees.map(emp => ({
+      id: uuidv4(),
+      full_name: emp.fullName,
+      phone: emp.phone,
+      company_id: companyId,
+      is_company: true,
+      role: "customer"
+    }));
+
+    const { error } = await supabase
+      .from("users")
+      .insert(rows);
+      
+    if (error) throw error;
   }
 };
