@@ -1,5 +1,7 @@
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { useProfile } from "@/lib/hooks/useProfile";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Tabs } from "expo-router";
@@ -8,6 +10,9 @@ import { View } from "react-native";
 export default function TabLayout() {
   const theme = useResolvedTheme();
   const colors = Colors[theme];
+  const { user } = useAuth();
+  const { profile } = useProfile(user?.id);
+  const isCompanyOwner = !!profile?.corporate_info;
 
   return (
     <Tabs
@@ -85,6 +90,19 @@ export default function TabLayout() {
           headerShown: false,
           tabBarIcon: ({ color }) => (
             <FontAwesome name="history" size={24} color={color} />
+          ),
+        }}
+      />
+
+      {/* Firma Ekranı */}
+      <Tabs.Screen
+        name="corporate-info"
+        options={{
+          title: "Firma Ekranı",
+          headerShown: false,
+          href: isCompanyOwner ? undefined : null,
+          tabBarIcon: ({ color }) => (
+            <FontAwesome name="briefcase" size={22} color={color} />
           ),
         }}
       />

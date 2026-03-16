@@ -1,12 +1,12 @@
 import { supabase } from "../supabase";
 
 export const adisyonService = {
-  async createOrder(userId: string, totalAmount: number, items: any[], orderType: string = "Şimdi Ye", note: string = "") {
+  async createOrder(userId: string, totalAmount: number, items: any[], orderType: string = "Şimdi Ye", note: string = "", isCorporate: boolean = false) {
     // 1. Adisyon Başlığı
     const { data: adisyon, error: adisyonError } = await supabase
       .from("adisyon")
       .insert([
-        { user_id: userId, total_amount: totalAmount, status: "PENDING", order_type: orderType, note: note },
+        { user_id: userId, total_amount: isCorporate ? 0 : totalAmount, status: "PENDING", order_type: orderType, note: note },
       ])
       .select()
       .single();
@@ -35,8 +35,8 @@ export const adisyonService = {
       adisyon_id: adisyon.id,
       menu_item_id: item.menu_item_id,
       quantity: item.quantity,
-      unit_price: item.price,
-      line_total: item.quantity * item.price,
+      unit_price: isCorporate ? 0 : item.price,
+      line_total: isCorporate ? 0 : (item.quantity * item.price),
       selections: item.selections || null
     }));
 

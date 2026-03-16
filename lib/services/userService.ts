@@ -20,6 +20,7 @@ export const userService = {
 
     if (companyData) {
       (data as any).corporate_info = {
+        id: companyData.id,
         companyName: companyData.company_name,
         taxNumber: companyData.tax_number,
         companyPhone: companyData.company_phone,

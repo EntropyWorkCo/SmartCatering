@@ -4,7 +4,7 @@ import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useRef } from "react";
-import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ThemeSwitcher from "@/components/ThemeSwitcher";
@@ -294,76 +294,10 @@ export default function HomeScreen() {
           />
         </View>
 
-        {isCompanyOwner ? (
-          <View style={{ marginBottom: 32 }}>
-            <Text style={styles.sectionTitle}>ÇALIŞAN ADİSYONLARI (TÜM FİRMA)</Text>
-            {companyOrdersLoading ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : companyOrders.length === 0 ? (
-              <View style={[styles.foodCard, { padding: 16, alignItems: 'center', justifyContent: 'center' }]}>
-                <Text style={{ color: colors.muted, fontSize: 12 }}>Bekleyen çalışan adisyonu bulunmuyor.</Text>
-              </View>
-            ) : (
-              companyOrders.slice(0, 5).map(order => {
-                const date = new Date(order.created_at || order.date);
-                return (
-                  <TouchableOpacity key={order.id} style={[styles.foodCard, { padding: 16, marginBottom: 12 }]} activeOpacity={0.9}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <Text style={{ fontWeight: 'bold', color: colors.text }}>{order.userName}</Text>
-                    </View>
-                    <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 8 }}>{date.toLocaleString('tr-TR')}</Text>
-                    {order.adisyon_items?.map((item: any) => (
-                      <View key={item.id} style={{ flexDirection: 'row', marginBottom: 4 }}>
-                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.text, width: 20 }}>{item.quantity}x</Text>
-                        <Text style={{ fontSize: 12, color: colors.muted }}>{item.menu_items?.name}</Text>
-                      </View>
-                    ))}
-                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
-                      <View style={{ backgroundColor: colors.infoBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-                        <Text style={{ fontSize: 10, color: colors.info, fontWeight: 'bold' }}>{order.status}</Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                )
-              })
-            )}
-            {companyOrders.length > 5 && (
-              <TouchableOpacity onPress={() => router.push("/corporate-info")} style={{ alignItems: 'center', marginTop: 8 }}>
-                <Text style={{ color: colors.primary, fontSize: 12, fontWeight: 'bold' }}>Tümünü Raporlarda Gör</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        ) : null}
+
 
         {/* Balance Card */}
-        {isCompanyOwner && (
-        <TouchableOpacity activeOpacity={0.9} onPress={() => setModalVisible(true)}>
-          <View style={styles.balanceCard}>
-            <MaterialIcons name="account-balance-wallet" size={140} color={theme === 'dark' ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)"} style={styles.balanceBgIcon} />
-
-            <Text style={styles.balanceLabel}>GÜNCEL BORÇ BAKİYESİ</Text>
-            <View style={styles.balanceRow}>
-              <Text style={styles.balanceValue}>₺{currentDebt.toLocaleString('tr-TR')}</Text>
-              <Text style={styles.balanceCurrency}>TL</Text>
-            </View>
-
-            <View style={styles.balanceDivider} />
-
-            <View style={styles.balanceFooter}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {orders && orders.filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)).length > 0 ? (
-                  <Text style={{ fontSize: 11, color: theme === 'dark' ? colors.muted : '#064e3b', fontWeight: 'bold' }}>
-                    {orders.filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)).length} Ödenmemiş Adisyon
-                  </Text>
-                ) : (
-                  <Text style={{ fontSize: 11, color: colors.text === '#f8fafc' ? '#064e3b' : '#cbd5e1', fontWeight: 'bold' }}>Borcunuz bulunmuyor</Text>
-                )}
-              </View>
-              <Text style={styles.lastPaymentText}>TOPLAM BEKLEYEN: ₺{currentDebt.toLocaleString('tr-TR')}</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-        )}
+        {/* Balance Card Kaldırıldı */}
 
         {/* Removed Last Order Highlight based on user request */}
 
@@ -413,79 +347,7 @@ export default function HomeScreen() {
 
       </ScrollView>
 
-      {/* Borç Detayı Modalı */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
-            <View style={styles.modalHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.modalTitle, { color: colors.text }]}>Ödenmemiş Adisyonlar</Text>
-                <Text style={{ fontSize: 12, color: colors.muted, marginTop: 4 }}>Toplam Borcunuz: <Text style={{ fontWeight: 'bold', color: colors.primary }}>₺{currentDebt.toLocaleString('tr-TR')}</Text></Text>
-              </View>
-              <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-                <TouchableOpacity onPress={generatePdf} style={styles.modalPdfBtn}>
-                  <MaterialIcons name="picture-as-pdf" size={18} color="#fff" />
-                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>İNDİR</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.modalCloseBtn}>
-                  <MaterialIcons name="close" size={24} color={colors.text} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.filterContainer}>
-              {(['ALL', 'DAILY', 'WEEKLY', 'MONTHLY'] as const).map((filter) => (
-                <TouchableOpacity
-                  key={filter}
-                  style={[styles.filterBtn, timeFilter === filter && styles.filterBtnActive]}
-                  onPress={() => setTimeFilter(filter)}
-                >
-                  <Text style={[styles.filterBtnText, timeFilter === filter && styles.filterBtnTextActive]}>
-                    {filter === 'ALL' ? 'Tümü' : filter === 'DAILY' ? 'Günlük' : filter === 'WEEKLY' ? 'Haftalık' : 'Aylık'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {filteredUnpaidOrders.length > 0 ? (
-                filteredUnpaidOrders.map(order => {
-                  const date = new Date(order.created_at || order.date);
-                  return (
-                    <View key={order.id} style={[styles.modalOrderCard, { borderColor: colors.surfaceBorder, backgroundColor: colors.surface }]}>
-                      <View style={styles.modalOrderHeader}>
-                        <Text style={[styles.modalOrderDate, { color: colors.text }]}>
-                          {date.toLocaleDateString('tr-TR')} {date.getHours().toString().padStart(2, '0')}:{date.getMinutes().toString().padStart(2, '0')}
-                        </Text>
-                        <Text style={[styles.modalOrderTotal, { color: colors.primary }]}>₺{order.total_amount || 0}</Text>
-                      </View>
-
-                      {order.adisyon_items && order.adisyon_items.length > 0 ? (
-                        order.adisyon_items.map((item: any) => (
-                          <View key={item.id} style={styles.modalItemRow}>
-                            <Text style={[styles.modalItemCount, { color: colors.text }]}>{item.quantity}x </Text>
-                            <Text style={[styles.modalItemName, { color: colors.muted }]}>{item.menu_items?.name || 'Yemek'}</Text>
-                            <Text style={[styles.modalItemPrice, { color: colors.text }]}>₺{item.line_total}</Text>
-                          </View>
-                        ))
-                      ) : (
-                        <Text style={{ fontSize: 12, color: colors.muted, fontStyle: 'italic' }}>Paket içeriği gösterilemiyor.</Text>
-                      )}
-                      {order.note && <Text style={{ fontSize: 11, color: colors.info, marginTop: 8, fontStyle: 'italic' }}>Not: {order.note}</Text>}
-                    </View>
-                  );
-                })
-              ) : (
-                <View style={{ padding: 40, alignItems: 'center' }}>
-                  <MaterialIcons name="done-all" size={48} color={colors.primary} />
-                  <Text style={{ marginTop: 12, fontSize: 16, fontWeight: 'bold', color: colors.text }}>Harika!</Text>
-                  <Text style={{ marginTop: 4, color: colors.muted, textAlign: 'center' }}>Ödenmemiş veya bekleyen borcunuz bulunmuyor.</Text>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      {/* Borç Detayı Modalı Kaldırıldı */}
     </SafeAreaView>
   );
 }

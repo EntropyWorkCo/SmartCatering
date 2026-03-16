@@ -65,7 +65,8 @@ export default function CartScreen() {
                                 getTotal(),
                                 items,
                                 orderType,
-                                note
+                                note,
+                                isCompany
                             );
 
                             clearCart();

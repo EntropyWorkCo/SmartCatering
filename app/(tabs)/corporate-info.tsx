@@ -16,6 +16,7 @@ import { useProfile } from "@/lib/hooks/useProfile";
 import { adisyonService } from "@/lib/services/adisyonService";
 import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
+import { supabase } from "@/lib/supabase";
 
 export default function CorporateInfoScreen() {
     const router = useRouter();
@@ -45,10 +46,26 @@ export default function CorporateInfoScreen() {
     const [orders, setOrders] = useState<any[]>([]);
     const [ordersLoading, setOrdersLoading] = useState(false);
 
-    const companyId = profile?.corporate_info?.id || profile?.company_id; // we need company_id. Profilde company nesnesini almak lazım. 
-    // Wait, userService.getProfile injects corporate_info object, let's use the current logged in user company_id
-    // But userService injects `taxNumber` etc. Wait, we need company ID.
-    const actualCompanyId = profile?.company_id;
+    const [fetchedCompanyId, setFetchedCompanyId] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchCompanyId = async () => {
+            if (!user?.id) return;
+            const { data, error } = await supabase
+                .from("companies")
+                .select("id")
+                .eq("user_id", user.id)
+                .single();
+            if (data) {
+                setFetchedCompanyId(data.id);
+            } else if (error) {
+                console.error("fetchCompanyId error:", error);
+            }
+        };
+        fetchCompanyId();
+    }, [user?.id]);
+
+    const actualCompanyId = fetchedCompanyId || profile?.corporate_info?.id || profile?.company_id;
     const isCompanyOwner = !!profile?.corporate_info;
 
     useEffect(() => {
@@ -239,7 +256,7 @@ export default function CorporateInfoScreen() {
                     
                     <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 30px 0;">
                         <p style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase;">Toplam Ödenmemiş Borç</p>
-                        <h2 style="margin: 10px 0 0 0; color: #e11d48;">₺${totalDebt.toLocaleString("tr-TR")}</h2>
+                        <h2 style="margin: 10px 0 0 0; color: #e11d48;">${totalDebt > 0 ? `₺${totalDebt.toLocaleString("tr-TR")}` : 'Fiyat Onayı Bekleniyor'}</h2>
                     </div>
 
                     <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
@@ -374,12 +391,9 @@ export default function CorporateInfoScreen() {
                                 onChangeText={setNewEmpPhone} 
                                 keyboardType="phone-pad" 
                             />
-                            <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-                                <TouchableOpacity style={[styles.actionBtn, { flex: 1, backgroundColor: colors.primary }]} onPress={() => handleAddEmployee(false)}>
+                            <View style={{ marginTop: 8 }}>
+                                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }]} onPress={() => handleAddEmployee(false)}>
                                     <Text style={styles.actionBtnText}>Çalışan Ekle</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={[styles.actionBtn, { flex: 1, backgroundColor: '#f59e0b' }]} onPress={() => handleAddEmployee(true)}>
-                                    <Text style={styles.actionBtnText}>Misafir Ekle</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -434,7 +448,7 @@ export default function CorporateInfoScreen() {
                     <View style={{ gap: 24 }}>
                         <View style={[styles.sectionCard, { alignItems: 'center', backgroundColor: colors.dangerBg, borderColor: colors.danger, borderWidth: 1 }]}>
                             <Text style={{ fontSize: 12, color: colors.danger, fontWeight: 'bold', marginBottom: 4, textTransform: 'uppercase' }}>Toplam Ödenmemiş Borç</Text>
-                            <Text style={{ fontSize: 36, fontWeight: '900', color: colors.danger }}>₺{totalDebt.toLocaleString('tr-TR')}</Text>
+                            <Text style={{ fontSize: 36, fontWeight: '900', color: colors.danger }}>{totalDebt > 0 ? `₺${totalDebt.toLocaleString('tr-TR')}` : 'Fiyat Bekleniyor'}</Text>
                         </View>
 
                         <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }]} onPress={generatePdfEkstre}>

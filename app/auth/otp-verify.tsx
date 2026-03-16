@@ -2,6 +2,7 @@ import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -17,9 +18,8 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { supabase } from "../../lib/supabase";
 import { verifyOtp } from "../../lib/services/authService";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "../../lib/supabase";
 
 export default function OtpVerifyScreen() {
     const router = useRouter();
@@ -102,14 +102,35 @@ export default function OtpVerifyScreen() {
                 }
             } else {
                 // GİRİŞ PENCERESİ
+                if (role === 'employee') {
+                    const { data: empUser, error: empError } = await supabase
+                        .from("users")
+                        .select("*")
+                        .eq("phone", phone)
+                        .single();
+
+                    if (empError || !empUser) {
+                        Alert.alert(
+                            "Kayıt Bulunamadı",
+                            "Firma sahibiniz tarafından sisteme eklenmemişsiniz. Lütfen eklemesini isteyin."
+                        );
+                        setLoading(false);
+                        return;
+                    }
+
+                    await AsyncStorage.setItem("softUser", JSON.stringify(empUser));
+                    await AsyncStorage.removeItem("isAdmin");
+                    router.replace("/(tabs)/home");
+                    return;
+                }
+
                 const { data, error } = await supabase.auth.signInWithPassword({
                     email: fakeEmail,
                     password: `${phone}OtpPassword!`, 
                 });
 
                 if (error) {
-                    // Kaydedilmemişse veya şifre uyuşmazlığı varsa hata fırlatır
-                     Alert.alert(
+                    Alert.alert(
                         "Kayıt Bulunamadı",
                         "Bu numarayla eşleşen hesabınız bulunamadı. Lütfen ilgili sekmeden kayıt olmayı deneyin."
                     );
@@ -119,7 +140,7 @@ export default function OtpVerifyScreen() {
 
                 if (data.session) {
                     await AsyncStorage.removeItem("isAdmin");
-                    router.replace("/(tabs)");
+                    router.replace("/(tabs)/home");
                 }
             }
         } catch (error: any) {

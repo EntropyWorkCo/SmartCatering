@@ -33,6 +33,7 @@ export default function ProfileScreen() {
 
     const { user } = useAuth();
     const { profile, loading, refresh } = useProfile(user?.id);
+    const isCompanyOwner = !!profile?.corporate_info;
 
     // Sekme her odaklandığında veriyi yenile (Örn: Kurumsal Bilgiler'den dönünce)
     useFocusEffect(
@@ -102,11 +103,8 @@ export default function ProfileScreen() {
 
     const handleLogout = async () => {
         const { error } = await supabase.auth.signOut();
-        if (error) {
-            Alert.alert("Çıkış Yapılamadı", error.message);
-        } else {
-            router.replace("/welcome");
-        }
+        await AsyncStorage.removeItem("softUser");
+        router.replace("/welcome");
     };
 
     if (loading) {
@@ -187,11 +185,13 @@ export default function ProfileScreen() {
                         <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
                     </TouchableOpacity>
 
+                    {isCompanyOwner && (
                     <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/corporate-info")}>
                         <MaterialIcons name="business" size={24} color={colors.text} />
                         <Text style={styles.linkText}>Kurumsal Fatura / Şirket Bilgileri</Text>
                         <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
                     </TouchableOpacity>
+                    )}
 
                     <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/support" as any)}>
                         <MaterialIcons name="support-agent" size={24} color={colors.text} />
