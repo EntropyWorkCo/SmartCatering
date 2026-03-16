@@ -12,7 +12,19 @@ export const useAuth = () => {
     const initAuth = async () => {
       // 1. Session'ı al
       const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
+      if (session) {
+        setSession(session);
+      } else {
+        const softUserStr = await AsyncStorage.getItem("softUser");
+        if (softUserStr) {
+          try {
+            const softUser = JSON.parse(softUserStr);
+            setSession({ user: softUser, isSoftUser: true });
+          } catch (e) {
+            console.error("SoftUser parse error:", e);
+          }
+        }
+      }
 
       // 2. Admin rolünü storage'dan oku
       const adminFlag = await AsyncStorage.getItem("isAdmin");

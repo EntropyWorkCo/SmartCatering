@@ -18,6 +18,8 @@ export type CartItem = {
 
 type CartState = {
     items: CartItem[];
+    orderMode: 'eat_now' | 'pre_order' | null;
+    setOrderMode: (mode: 'eat_now' | 'pre_order' | null) => void;
     addItem: (item: Omit<CartItem, 'id'>) => void;
     removeItem: (id: string) => void;
     decrementItem: (menu_item_id: string) => void;
@@ -27,6 +29,9 @@ type CartState = {
 
 export const useCartStore = create<CartState>((set, get) => ({
     items: [],
+    orderMode: null,
+
+    setOrderMode: (mode) => set({ orderMode: mode }),
 
     addItem: (newItem) => {
         set((state) => {

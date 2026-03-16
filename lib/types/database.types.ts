@@ -237,6 +237,7 @@ export type Database = {
           role: string | null
           push_token: string | null
           is_company: boolean | null
+          company_id: string | null
         }
         Insert: {
           created_at?: string | null
@@ -246,6 +247,7 @@ export type Database = {
           role?: string | null
           push_token?: string | null
           is_company?: boolean | null
+          company_id?: string | null
         }
         Update: {
           created_at?: string | null
@@ -255,6 +257,7 @@ export type Database = {
           role?: string | null
           push_token?: string | null
           is_company?: boolean | null
+          company_id?: string | null
         }
         Relationships: []
       }

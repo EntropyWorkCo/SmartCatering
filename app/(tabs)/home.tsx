@@ -4,7 +4,7 @@ import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useRef } from "react";
-import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ThemeSwitcher from "@/components/ThemeSwitcher";
@@ -13,6 +13,7 @@ import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useMenu } from "@/lib/hooks/useMenu";
 import { useProfile } from "@/lib/hooks/useProfile";
+import { adisyonService } from "@/lib/services/adisyonService";
 import { useCartStore } from "@/lib/store/cartStore";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 
@@ -34,13 +35,20 @@ export default function HomeScreen() {
   const { orders } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
   const { menu } = useMenu(true);
   const cartItems = useCartStore((state) => state.items);
+  const orderMode = useCartStore((state) => state.orderMode);
+  const setOrderMode = useCartStore((state) => state.setOrderMode);
 
   const [modalVisible, setModalVisible] = React.useState(false);
   const [timeFilter, setTimeFilter] = React.useState<"ALL" | "DAILY" | "WEEKLY" | "MONTHLY">("ALL");
   const [quantities, setQuantities] = React.useState<{ [key: string]: number }>({});
+  const [companyOrders, setCompanyOrders] = React.useState<any[]>([]);
+  const [companyOrdersLoading, setCompanyOrdersLoading] = React.useState(false);
   const hasAlertedMenuRef = useRef(false);
 
   const isCompany = profile?.is_company || false;
+  const isCompanyOwner = !!profile?.corporate_info;
+  const actualCompanyId = profile?.company_id || profile?.corporate_info?.id; 
+
   const getQuantity = (id: string) => quantities[id] || 1;
   const setQuantity = (id: string, val: number) => {
     setQuantities(prev => ({ ...prev, [id]: Math.max(1, val) }));
@@ -74,6 +82,43 @@ export default function HomeScreen() {
     };
     checkNotification();
   }, [dailyMenu]);
+
+  // Load Corporate Orders for Owner
+  useEffect(() => {
+    const loadCompanyOrders = async () => {
+      if (!isCompanyOwner || !actualCompanyId) return;
+      setCompanyOrdersLoading(true);
+      try {
+        const data = await adisyonService.getCompanyOrders(actualCompanyId);
+        setCompanyOrders(data || []);
+      } catch (e) {
+        console.error("Owner orders load error:", e);
+      } finally {
+        setCompanyOrdersLoading(false);
+      }
+    };
+    loadCompanyOrders();
+  }, [isCompanyOwner, actualCompanyId]);
+
+  const handlePressAction = (mode: 'eat_now' | 'pre_order') => {
+    if (cartItemCount > 0 && orderMode !== mode && orderMode !== null) {
+      Alert.alert(
+        "Sepetiniz Sıfırlanacak",
+        `Sepetinizde zaten '${orderMode === 'eat_now' ? 'Şimdi Ye' : 'Sipariş Ver'}' ürünleri bulunuyor. Diğer moda geçmek sepetinizi sıfırlayacaktır. Devam etmek istiyor musunuz?`,
+        [
+          { text: "Vazgeç", style: "cancel" },
+          { text: "Sepeti Boşalt ve Geç", style: "destructive", onPress: () => {
+              useCartStore.getState().clearCart();
+              setOrderMode(mode);
+              router.push("/(tabs)/menu");
+          }}
+        ]
+      );
+    } else {
+      setOrderMode(mode);
+      router.push("/(tabs)/menu");
+    }
+  };
 
   const handleAddToCart = (item: any) => {
     const quantity = getQuantity(item.id);
@@ -233,41 +278,26 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Balance Card */}
-        <TouchableOpacity activeOpacity={0.9} onPress={() => setModalVisible(true)}>
-          <View style={styles.balanceCard}>
-            <MaterialIcons name="account-balance-wallet" size={140} color={theme === 'dark' ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)"} style={styles.balanceBgIcon} />
-
-            <Text style={styles.balanceLabel}>GÜNCEL BORÇ BAKİYESİ</Text>
-            <View style={styles.balanceRow}>
-              <Text style={styles.balanceValue}>₺{currentDebt.toLocaleString('tr-TR')}</Text>
-              <Text style={styles.balanceCurrency}>TL</Text>
-            </View>
-
-            <View style={styles.balanceDivider} />
-
-            <View style={styles.balanceFooter}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {orders && orders.filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)).length > 0 ? (
-                  <Text style={{ fontSize: 11, color: theme === 'dark' ? colors.muted : '#064e3b', fontWeight: 'bold' }}>
-                    {orders.filter(o => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)).length} Ödenmemiş Adisyon
-                  </Text>
-                ) : (
-                  <Text style={{ fontSize: 11, color: colors.text === '#f8fafc' ? '#064e3b' : '#cbd5e1', fontWeight: 'bold' }}>Borcunuz bulunmuyor</Text>
-                )}
-              </View>
-              <Text style={styles.lastPaymentText}>TOPLAM BEKLEYEN: ₺{currentDebt.toLocaleString('tr-TR')}</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        {/* Quick Actions Grid */}
+        {/* Quick Actions Grid (Main Order Flows) */}
         <View style={styles.gridContainer}>
           <ActionCard
-            icon="restaurant-menu" title="SİPARİŞ VER" subtitle="Hızlı & Taze"
-            bgColor="#10b981" onPress={() => router.push("/(tabs)/menu")}
+            icon="restaurant" title="ŞİMDİ YE" subtitle="Hemen Teslim"
+            bgColor="#f59e0b" 
+            onPress={() => handlePressAction('eat_now')}
+            isDisabled={cartItemCount > 0 && orderMode === 'pre_order'}
+          />
+          <ActionCard
+            icon="event-note" title="SİPARİŞ VER" subtitle="Önceden Planla"
+            bgColor="#10b981" 
+            onPress={() => handlePressAction('pre_order')}
+            isDisabled={cartItemCount > 0 && orderMode === 'eat_now'}
           />
         </View>
+
+
+
+        {/* Balance Card */}
+        {/* Balance Card Kaldırıldı */}
 
         {/* Removed Last Order Highlight based on user request */}
 
@@ -298,30 +328,11 @@ export default function HomeScreen() {
                       <Text style={styles.foodCategory}>{item.category}</Text>
                     </View>
                     <View style={styles.foodBottomColumn}>
-                      <Text style={styles.foodPrice}>₺{item.price}</Text>
-                      {item.status === 'sold_out' ? (
+                      {isCompany ? null : <Text style={styles.foodPrice}>₺{item.price}</Text>}
+                      {item.status === 'sold_out' && (
                         <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
                           <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
                         </View>
-                      ) : (
-                        isCompany ? (
-                          <View style={[styles.quantityContainer, { marginTop: 8 }]}>
-                            <TouchableOpacity onPress={() => setQuantity(item.id, getQuantity(item.id) - 1)} style={styles.qtyBtn}>
-                              <MaterialIcons name="remove" size={14} color={colors.text} />
-                            </TouchableOpacity>
-                            <Text style={styles.qtyTextSmall}>{getQuantity(item.id)}</Text>
-                            <TouchableOpacity onPress={() => setQuantity(item.id, getQuantity(item.id) + 1)} style={styles.qtyBtn}>
-                              <MaterialIcons name="add" size={14} color={colors.text} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.addBtn, { marginLeft: 8, width: 32, height: 32 }]} onPress={() => handleAddToCart(item)}>
-                              <MaterialIcons name="add-shopping-cart" size={16} color="#fff" />
-                            </TouchableOpacity>
-                          </View>
-                        ) : (
-                          <TouchableOpacity style={styles.addBtn} onPress={() => handleAddToCart(item)}>
-                            <MaterialIcons name="add-shopping-cart" size={20} color="#fff" />
-                          </TouchableOpacity>
-                        )
                       )}
                     </View>
                   </View>
@@ -336,93 +347,32 @@ export default function HomeScreen() {
 
       </ScrollView>
 
-      {/* Borç Detayı Modalı */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
-            <View style={styles.modalHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.modalTitle, { color: colors.text }]}>Ödenmemiş Adisyonlar</Text>
-                <Text style={{ fontSize: 12, color: colors.muted, marginTop: 4 }}>Toplam Borcunuz: <Text style={{ fontWeight: 'bold', color: colors.primary }}>₺{currentDebt.toLocaleString('tr-TR')}</Text></Text>
-              </View>
-              <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-                <TouchableOpacity onPress={generatePdf} style={styles.modalPdfBtn}>
-                  <MaterialIcons name="picture-as-pdf" size={18} color="#fff" />
-                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>İNDİR</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.modalCloseBtn}>
-                  <MaterialIcons name="close" size={24} color={colors.text} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.filterContainer}>
-              {(['ALL', 'DAILY', 'WEEKLY', 'MONTHLY'] as const).map((filter) => (
-                <TouchableOpacity
-                  key={filter}
-                  style={[styles.filterBtn, timeFilter === filter && styles.filterBtnActive]}
-                  onPress={() => setTimeFilter(filter)}
-                >
-                  <Text style={[styles.filterBtnText, timeFilter === filter && styles.filterBtnTextActive]}>
-                    {filter === 'ALL' ? 'Tümü' : filter === 'DAILY' ? 'Günlük' : filter === 'WEEKLY' ? 'Haftalık' : 'Aylık'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {filteredUnpaidOrders.length > 0 ? (
-                filteredUnpaidOrders.map(order => {
-                  const date = new Date(order.created_at || order.date);
-                  return (
-                    <View key={order.id} style={[styles.modalOrderCard, { borderColor: colors.surfaceBorder, backgroundColor: colors.surface }]}>
-                      <View style={styles.modalOrderHeader}>
-                        <Text style={[styles.modalOrderDate, { color: colors.text }]}>
-                          {date.toLocaleDateString('tr-TR')} {date.getHours().toString().padStart(2, '0')}:{date.getMinutes().toString().padStart(2, '0')}
-                        </Text>
-                        <Text style={[styles.modalOrderTotal, { color: colors.primary }]}>₺{order.total_amount || 0}</Text>
-                      </View>
-
-                      {order.adisyon_items && order.adisyon_items.length > 0 ? (
-                        order.adisyon_items.map((item: any) => (
-                          <View key={item.id} style={styles.modalItemRow}>
-                            <Text style={[styles.modalItemCount, { color: colors.text }]}>{item.quantity}x </Text>
-                            <Text style={[styles.modalItemName, { color: colors.muted }]}>{item.menu_items?.name || 'Yemek'}</Text>
-                            <Text style={[styles.modalItemPrice, { color: colors.text }]}>₺{item.line_total}</Text>
-                          </View>
-                        ))
-                      ) : (
-                        <Text style={{ fontSize: 12, color: colors.muted, fontStyle: 'italic' }}>Paket içeriği gösterilemiyor.</Text>
-                      )}
-                      {order.note && <Text style={{ fontSize: 11, color: colors.info, marginTop: 8, fontStyle: 'italic' }}>Not: {order.note}</Text>}
-                    </View>
-                  );
-                })
-              ) : (
-                <View style={{ padding: 40, alignItems: 'center' }}>
-                  <MaterialIcons name="done-all" size={48} color={colors.primary} />
-                  <Text style={{ marginTop: 12, fontSize: 16, fontWeight: 'bold', color: colors.text }}>Harika!</Text>
-                  <Text style={{ marginTop: 4, color: colors.muted, textAlign: 'center' }}>Ödenmemiş veya bekleyen borcunuz bulunmuyor.</Text>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      {/* Borç Detayı Modalı Kaldırıldı */}
     </SafeAreaView>
   );
 }
 
-const ActionCard = ({ icon, title, subtitle, bgColor, onPress }: any) => {
+const ActionCard = ({ icon, title, subtitle, bgColor, onPress, isDisabled = false }: any) => {
   const theme = useResolvedTheme();
   const colors = Colors[theme];
   return (
-    <TouchableOpacity style={[stylesBase.actionCard, { backgroundColor: colors.surface, borderColor: colors.surfaceBorder }]} activeOpacity={0.8} onPress={onPress}>
+    <TouchableOpacity 
+      style={[
+        stylesBase.actionCard, 
+        { backgroundColor: colors.surface, borderColor: colors.surfaceBorder },
+        isDisabled && { opacity: 0.4 }
+      ]} 
+      activeOpacity={isDisabled ? 1 : 0.8} 
+      onPress={onPress}
+    >
       <View style={[stylesBase.actionIconBox, { backgroundColor: bgColor }]}>
         <MaterialIcons name={icon} size={20} color="#fff" />
       </View>
       <View style={stylesBase.actionTexts}>
-        <Text style={[stylesBase.actionTitle, { color: colors.text }]}>{title}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={[stylesBase.actionTitle, { color: colors.text }]}>{title}</Text>
+          {isDisabled && <MaterialIcons name="lock" size={12} color={colors.muted} style={{ marginLeft: 4 }} />}
+        </View>
         <Text style={[stylesBase.actionSubtitle, { color: colors.muted }]}>{subtitle}</Text>
       </View>
     </TouchableOpacity>

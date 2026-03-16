@@ -1,12 +1,12 @@
 import { supabase } from "../supabase";
 
 export const adisyonService = {
-  async createOrder(userId: string, totalAmount: number, items: any[], orderType: string = "Şimdi Ye", note: string = "") {
+  async createOrder(userId: string, totalAmount: number, items: any[], orderType: string = "Şimdi Ye", note: string = "", isCorporate: boolean = false) {
     // 1. Adisyon Başlığı
     const { data: adisyon, error: adisyonError } = await supabase
       .from("adisyon")
       .insert([
-        { user_id: userId, total_amount: totalAmount, status: "PENDING", order_type: orderType, note: note },
+        { user_id: userId, total_amount: isCorporate ? 0 : totalAmount, status: "PENDING", order_type: orderType, note: note },
       ])
       .select()
       .single();
@@ -35,8 +35,8 @@ export const adisyonService = {
       adisyon_id: adisyon.id,
       menu_item_id: item.menu_item_id,
       quantity: item.quantity,
-      unit_price: item.price,
-      line_total: item.quantity * item.price,
+      unit_price: isCorporate ? 0 : item.price,
+      line_total: isCorporate ? 0 : (item.quantity * item.price),
       selections: item.selections || null
     }));
 
@@ -56,7 +56,7 @@ export const adisyonService = {
     try {
       const { data, error } = await supabase
         .from("adisyon")
-        .select("*, adisyon_items(*, menu_items(name)), users(*, companies!companies_user_id_fkey(*))")
+        .select("*, adisyon_items(*, menu_items(name)), users(*, companies!users_company_id_fkey(*))")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
@@ -75,7 +75,7 @@ export const adisyonService = {
     try {
       const { data, error } = await supabase
         .from("adisyon")
-        .select("*, adisyon_items(*, menu_items(name)), users(*, companies!companies_user_id_fkey(*))")
+        .select("*, adisyon_items(*, menu_items(name)), users(*, companies!users_company_id_fkey(*))")
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -85,7 +85,7 @@ export const adisyonService = {
 
       return (data || []).map((order: any) => {
         const user = order.users?.[0] || order.users;
-        const company = user?.companies?.[0] || user?.companies;
+        const company = user?.["companies!users_company_id_fkey"]?.[0] || user?.["companies!users_company_id_fkey"] || user?.companies?.[0] || user?.companies;
 
         return {
           ...order,
@@ -136,5 +136,49 @@ export const adisyonService = {
     }
 
     return data;
+  },
+
+  async getCompanyOrders(companyId: string) {
+    try {
+      // 1. Get all employees in the company
+      const { data: users, error: userError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("company_id", companyId);
+
+      if (userError) throw userError;
+
+      const userIds = users.map(u => u.id);
+      if (userIds.length === 0) return [];
+
+      // 2. Fetch adisyons for these user IDs
+      const { data: adisyons, error: adisyonError } = await supabase
+        .from("adisyon")
+        .select(`
+          *,
+          users (*, companies!users_company_id_fkey(*)),
+          adisyon_items (*, menu_items(name))
+        `)
+        .in("user_id", userIds)
+        .order("created_at", { ascending: false });
+
+      if (adisyonError) throw adisyonError;
+
+      // Map format similarly to getAllOrders to be displayed uniformly
+      return (adisyons || []).map((order: any) => {
+        const user = order.users?.[0] || order.users;
+        const company = user?.["companies!users_company_id_fkey"]?.[0] || user?.["companies!users_company_id_fkey"] || user?.companies?.[0] || user?.companies;
+        return {
+          ...order,
+          userName: user?.full_name || 'Müşteri',
+          companyName: company?.company_name || null,
+          isCorporate: !!company
+        };
+      });
+
+    } catch (error: any) {
+      console.error("getCompanyOrders error:", error);
+      throw error;
+    }
   }
 };

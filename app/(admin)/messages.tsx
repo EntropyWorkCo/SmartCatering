@@ -35,13 +35,13 @@ export default function AdminMessages() {
             // 1. Fetch Private Messages
             const { data: pData } = await supabase
                 .from("messages")
-                .select("*, users(full_name, companies!companies_user_id_fkey(company_name))")
+                .select("*, users(full_name, companies!users_company_id_fkey(company_name))")
                 .order("created_at", { ascending: false });
 
             if (pData) {
                 const formattedP = pData.map((m: any) => {
                     const user = m.users?.[0] || m.users;
-                    const company = user?.companies?.[0] || user?.companies;
+                    const company = user?.["companies!users_company_id_fkey"]?.[0] || user?.["companies!users_company_id_fkey"] || user?.companies?.[0] || user?.companies;
                     return {
                         id: m.id,
                         userName: user?.full_name || "Müşteri",
@@ -57,7 +57,7 @@ export default function AdminMessages() {
             // 2. Fetch Order Messages
             const { data: oData } = await supabase
                 .from("adisyon")
-                .select("*, users(full_name, companies!companies_user_id_fkey(company_name))")
+                .select("*, users(full_name, companies!users_company_id_fkey(company_name))")
                 .not("note", "is", null)
                 .not("note", "eq", "")
                 .order("created_at", { ascending: false });
@@ -65,7 +65,7 @@ export default function AdminMessages() {
             if (oData) {
                 const formattedO = oData.map((o: any) => {
                     const user = o.users?.[0] || o.users;
-                    const company = user?.companies?.[0] || user?.companies;
+                    const company = user?.["companies!users_company_id_fkey"]?.[0] || user?.["companies!users_company_id_fkey"] || user?.companies?.[0] || user?.companies;
                     return {
                         id: o.id,
                         userName: user?.full_name || "Müşteri",
