@@ -108,7 +108,7 @@ export default function AdminCustomers() {
     const groupedKurumsal = React.useMemo(() => {
         const groups: Record<string, { companyName: string; vkn: string; totalDebt: number; customers: User[] }> = {};
         for (const c of kurumsalCustomers) {
-            const key = c.vkn || c.company || 'Unknown';
+            const key = `${c.company}-${c.vkn || ''}`;
             if (!groups[key]) {
                 groups[key] = { companyName: c.company || 'İsimsiz Firma', vkn: c.vkn || '', totalDebt: 0, customers: [] };
             }
@@ -215,12 +215,13 @@ export default function AdminCustomers() {
                 {mainTab === "KURUMSAL" && (
                     groupedKurumsal.length > 0 ? (
                         groupedKurumsal.map(group => {
-                            const isExpanded = expandedCompanies[group.vkn];
+                            const groupKey = `${group.companyName}-${group.vkn}`;
+                            const isExpanded = expandedCompanies[groupKey];
                             return (
-                                <View key={group.vkn} style={styles.companyAccordion}>
+                                <View key={groupKey} style={styles.companyAccordion}>
                                     <TouchableOpacity
                                         style={styles.companyAccordionHeader}
-                                        onPress={() => toggleCompany(group.vkn)}
+                                        onPress={() => toggleCompany(groupKey)}
                                         activeOpacity={0.7}
                                     >
                                         <View style={styles.accordionTitleContainer}>

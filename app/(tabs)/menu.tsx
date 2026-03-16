@@ -236,7 +236,7 @@ export default function MenuScreen() {
                             <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
                           </View>
                           <View style={styles.foodBottomColumn}>
-                            <Text style={styles.foodPrice}>₺{item.price}</Text>
+                            {!isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
                             {item.status === 'sold_out' ? (
                               <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
                                 <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
@@ -304,7 +304,7 @@ export default function MenuScreen() {
                       <Text style={styles.foodCategory}>{item.category === 'İÇECEK' || item.category === 'EKSTRA' ? 'Tabela Ürünü' : item.category}</Text>
                     </View>
                     <View style={styles.foodBottomColumn}>
-                      <Text style={styles.foodPrice}>₺{item.price}</Text>
+                      {!isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
                       {item.status === 'sold_out' ? (
                         <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
                           <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
@@ -353,7 +353,7 @@ export default function MenuScreen() {
 
                 {/* Alt Kısım (Fiyat ve Butonlar) */}
                 <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 12 }}>
-                  <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary, marginRight: 12 }}>₺{pkg.price}</Text>
+                  {!isCompany && <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary, marginRight: 12 }}>₺{pkg.price}</Text>}
 
                   {getCartQuantity(pkg.id) > 0 ? (
                     <View style={[styles.activeQuantityContainer, { marginTop: 0 }]}>

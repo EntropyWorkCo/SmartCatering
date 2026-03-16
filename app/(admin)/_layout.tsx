@@ -79,10 +79,10 @@ export default function AdminLayout() { //Admin panelindeki tüm sayfaların lay
                 }}
             />
 
-            {/* View-Only / Hidden from Tab Bar Screens */}  
-               // 5 adet tab var ama bu 3 tab gizlidir.
+
             <Tabs.Screen name="reports" options={{ href: null }} />
             <Tabs.Screen name="unit-price" options={{ href: null }} />
+            <Tabs.Screen name="summary" options={{ href: null }} />
             <Tabs.Screen name="change-code" options={{ href: null }} />
         </Tabs>
     );

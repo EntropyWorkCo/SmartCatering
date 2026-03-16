@@ -24,6 +24,7 @@ import { useProfile } from "@/lib/hooks/useProfile";
 import { notificationService } from "@/lib/services/notificationService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
+import { billingService } from "@/lib/services/billingService";
 
 export default function ProfileScreen() {
     const router = useRouter();
@@ -45,6 +46,7 @@ export default function ProfileScreen() {
     const [photoUrl, setPhotoUrl] = useState<string | null>(null);
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [balance, setBalance] = useState<number | null>(null);
 
     // Initialize state once profile is loaded
     React.useEffect(() => {
@@ -64,6 +66,16 @@ export default function ProfileScreen() {
             const storedVal = await AsyncStorage.getItem("notifications_enabled");
             if (storedVal !== null) {
                 setNotificationsEnabled(storedVal === "true");
+            }
+
+            // Borç bakiyesini çek (Kurumsal ise)
+            if (profile?.is_company) {
+                try {
+                    const balanceData = await billingService.getCompanyBalance(user?.id || "");
+                    if (balanceData) setBalance(balanceData.balance);
+                } catch (err) {
+                    console.log("Bakiye çekilemedi:", err);
+                }
             }
         };
         init();
@@ -175,6 +187,16 @@ export default function ProfileScreen() {
                             <Text style={styles.saveBtnText}>Profili Güncelle</Text>
                         )}
                     </TouchableOpacity>
+
+                    {profile?.is_company && balance !== null && (
+                        <View style={[styles.debtCard, { backgroundColor: colors.primary + '15' }]}>
+                            <View>
+                                <Text style={[styles.debtLabel, { color: colors.muted }]}>ÖDENECEK TOPLAM BORÇ</Text>
+                                <Text style={[styles.debtAmount, { color: colors.primary }]}>₺{balance.toLocaleString("tr-TR")}</Text>
+                            </View>
+                            <MaterialIcons name="account-balance-wallet" size={32} color={colors.primary} />
+                        </View>
+                    )}
                 </View>
 
                 <View style={styles.divider} />
@@ -292,5 +314,17 @@ const getStyles = (colors: any) => StyleSheet.create({
         backgroundColor: colors.dangerBg, padding: 16, borderRadius: 16,
         marginTop: 32, borderWidth: 1, borderColor: colors.dangerBorder
     },
-    logoutText: { color: colors.danger, fontSize: 16, fontWeight: 'bold' }
+    logoutText: { color: colors.danger, fontSize: 16, fontWeight: 'bold' },
+    debtCard: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 20,
+        borderRadius: 20,
+        marginTop: 16,
+        borderWidth: 1,
+        borderColor: colors.primary + '30'
+    },
+    debtLabel: { fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
+    debtAmount: { fontSize: 24, fontWeight: '900' }
 });

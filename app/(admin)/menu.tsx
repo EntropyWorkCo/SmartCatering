@@ -105,9 +105,9 @@ export default function AdminMenuAdd() {
     };
 
     const handleSaveBulk = async () => {
-        const invalidItems = bulkItems.filter(item => item.name.trim() === "" || item.price === "");
+        const invalidItems = bulkItems.filter(item => item.name.trim() === "");
         if (invalidItems.length > 0) {
-            Alert.alert("Uyarı", "Lütfen tüm yemeklerin adını ve fiyatını eksiksiz giriniz veya boş bıraktığınız satırları (X) butonundan siliniz.");
+            Alert.alert("Uyarı", "Lütfen tüm yemeklerin adını eksiksiz giriniz.");
             return;
         }
 
@@ -145,8 +145,8 @@ export default function AdminMenuAdd() {
     };
 
     const handleSaveEdit = async () => {
-        if (!editingItem || !editingItem.name || !editingItem.price) {
-            Alert.alert("Hata", "Lütfen isim ve fiyat giriniz.");
+        if (!editingItem || !editingItem.name) {
+            Alert.alert("Hata", "Lütfen isim giriniz.");
             return;
         }
         try {
@@ -350,15 +350,7 @@ export default function AdminMenuAdd() {
 
                                 <View style={{ flexDirection: 'row', gap: 12 }}>
                                     <View style={{ flex: 1 }}>
-                                        <InputField
-                                            label="FİYATI (₺) *"
-                                            icon="payments"
-                                            keyboardType="numeric"
-                                            value={bItem.price}
-                                            onChangeText={(t: string) => setBulkItems(prev => prev.map(item => item.id === bItem.id ? { ...item, price: t } : item))}
-                                            colors={colors}
-                                            styles={styles}
-                                        />
+                                        {/* Fiyat alanı admin tarafından gizlendi (Plandaki istek üzerine) */}
                                     </View>
                                     <View style={{ width: 80, alignItems: 'center' }}>
                                         <Text style={styles.inputLabel}>FOTO</Text>
@@ -584,15 +576,17 @@ export default function AdminMenuAdd() {
                                 </>
                             )}
 
-                            <InputField
-                                label="BİRİM FİYAT (₺)"
-                                icon="payments"
-                                keyboardType="numeric"
-                                value={editingItem.price}
-                                onChangeText={(t: string) => setEditingItem(prev => prev ? { ...prev, price: t } : null)}
-                                colors={colors}
-                                styles={styles}
-                            />
+                            {mainTab === 'FIXED' && (
+                                <InputField
+                                    label="BİRİM FİYAT (₺)"
+                                    icon="payments"
+                                    keyboardType="numeric"
+                                    value={editingItem.price}
+                                    onChangeText={(t: string) => setEditingItem(prev => prev ? { ...prev, price: t } : null)}
+                                    colors={colors}
+                                    styles={styles}
+                                />
+                            )}
 
                             <TouchableOpacity style={styles.addBtn} onPress={handleSaveEdit}>
                                 <Text style={styles.addBtnText}>GÜNCELLE</Text>
@@ -628,8 +622,8 @@ const ItemCard = ({ item, isPoolTab, handleToggleStatus, handleEditItem, handleD
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <Text style={styles.menuItemName}>{item.name}</Text>
                     </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                        <Text style={styles.menuItemDetails}>₺{item.price}</Text>
+                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        {/* Fiyat gösterimi adminde gizlendi */}
                         {isDraft && <Text style={{ fontSize: 9, color: '#f59e0b', fontWeight: 'bold' }}>(YAYIN BEKLİYOR)</Text>}
                         {isActive && <Text style={{ fontSize: 9, color: '#10b981', fontWeight: 'bold' }}>(AKTİF)</Text>}
                         {isPassive && <Text style={{ fontSize: 9, color: colors.muted, fontWeight: 'bold' }}>(HAVUZDA)</Text>}

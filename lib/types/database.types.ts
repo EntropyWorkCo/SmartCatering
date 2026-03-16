@@ -129,6 +129,8 @@ export type Database = {
           id: string
           tax_number: string
           user_id: string | null
+          balance: number | null
+          last_debt_update: string | null
         }
         Insert: {
           address?: string | null
@@ -137,6 +139,8 @@ export type Database = {
           id?: string
           tax_number: string
           user_id?: string | null
+          balance?: number | null
+          last_debt_update?: string | null
         }
         Update: {
           address?: string | null
