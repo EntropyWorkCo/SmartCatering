@@ -56,7 +56,7 @@ export const adisyonService = {
     try {
       const { data, error } = await supabase
         .from("adisyon")
-        .select("*, adisyon_items(*, menu_items(name)), users(*, companies(*))")
+        .select("*, adisyon_items(*, menu_items(name)), users(*, companies!companies_user_id_fkey(*))")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
@@ -75,7 +75,7 @@ export const adisyonService = {
     try {
       const { data, error } = await supabase
         .from("adisyon")
-        .select("*, adisyon_items(*, menu_items(name)), users(*, companies(*))")
+        .select("*, adisyon_items(*, menu_items(name)), users(*, companies!companies_user_id_fkey(*))")
         .order("created_at", { ascending: false });
 
       if (error) {

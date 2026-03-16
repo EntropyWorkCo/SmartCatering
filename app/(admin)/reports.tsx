@@ -37,7 +37,7 @@ export default function AdminReports() {
             const fetchRatings = async () => {
                 const { data, error } = await supabase
                     .from("feedbacks")
-                    .select("*, users(full_name, companies(company_name))")
+                    .select("*, users(full_name, companies!companies_user_id_fkey(company_name))")
                     .order("created_at", { ascending: false });
 
                 if (error) {

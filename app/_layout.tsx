@@ -134,7 +134,7 @@ function RootLayoutNav() {
         {/* 2. SIRALAMA: Auth klasörü */}
         <Stack.Screen name="auth/login" />
         <Stack.Screen name="auth/admin-login" />
-        <Stack.Screen name="auth/register" />
+        <Stack.Screen name="auth/otp-verify" />
 
         {/* 3. SIRALAMA: Tab yapısı (Giriş sonrası) */}
         <Stack.Screen name="(tabs)" />

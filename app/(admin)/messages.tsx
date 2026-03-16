@@ -35,7 +35,7 @@ export default function AdminMessages() {
             // 1. Fetch Private Messages
             const { data: pData } = await supabase
                 .from("messages")
-                .select("*, users(full_name, companies(company_name))")
+                .select("*, users(full_name, companies!companies_user_id_fkey(company_name))")
                 .order("created_at", { ascending: false });
 
             if (pData) {
@@ -57,7 +57,7 @@ export default function AdminMessages() {
             // 2. Fetch Order Messages
             const { data: oData } = await supabase
                 .from("adisyon")
-                .select("*, users(full_name, companies(company_name))")
+                .select("*, users(full_name, companies!companies_user_id_fkey(company_name))")
                 .not("note", "is", null)
                 .not("note", "eq", "")
                 .order("created_at", { ascending: false });

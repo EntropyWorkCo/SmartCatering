@@ -1,82 +1,61 @@
-// lib/services/authService.ts
-import { supabase } from "../supabase";
+import { supabase } from '../supabase';
 
-// YARDIMCI: Telefonu Email formatına çevirir (SMS masrafından kaçınmak için)
-const formatPhoneToEmail = (phone: string) => {
-  const cleanPhone = phone.replace(/[^0-9]/g, "");
-  // Meydan app yerine kendi uygulamanın adını yazabilirsin
-  return `${cleanPhone}@smartcatering.app`;
+// Geçiçi Test OTP Kodu (Mentör AWS ayarlayana kadar her zaman bu kod geçerli olacak)
+export const TEST_OTP_CODE = "123456";
+
+/**
+ * Kullanıcıya OTP kodu gönderir.
+ * Gerçekte bu fonksiyon AWS SNS üzerinden SMS atacak.
+ * Şimdilik konsola logluyor ve başarılı dönüyor.
+ * @param phone 5xxxxxxxxx formatında telefon numarası
+ */
+export const sendOtp = async (phone: string): Promise<boolean> => {
+    try {
+        // AWS Entegrasyonu: İleride Mentör AWS'yi bağladığında
+        // const response = await fetch('https://aws-api...', { method: 'POST', body: JSON.stringify({ phone, message: `Kodunuz: ${TEST_OTP_CODE}` }) });
+        // return response.ok;
+
+        console.log(`[MOCK SMS] Numaraya giden onay kodu: ${TEST_OTP_CODE} -> Numara: ${phone}`);
+
+        // Sahte gecikme (Ağ simülasyonu)
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        return true;
+    } catch (error) {
+        console.error("OTP Gönderim Hatası:", error);
+        return false;
+    }
 };
 
-export const authService = {
-  // 1. KAYIT OLMA
-  async registerUser(params: {
-    adSoyad: string;
-    telefon: string;
-    password: string;
-    isKurumsal: boolean;
-    firmaUnvani?: string;
-    vergiNo?: string;
-  }) {
-    const email = formatPhoneToEmail(params.telefon);
+/**
+ * Kullanıcının girdiği OTP kodunu doğrular.
+ * @param phone Telefon numarası
+ * @param code Kullanıcının girdiği 6 haneli kod
+ */
+export const verifyOtp = async (phone: string, code: string): Promise<boolean> => {
+    // Şimdilik sadece TEST_OTP_CODE ile eşleştiriyoruz.
+    // İleride veritabanında tutulan geçici kodlarla karşılaştırılabilir.
+    
+    // Sahte gecikme (Ağ simülasyonu)
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    return code === TEST_OTP_CODE;
+};
 
-    // 1. Supabase Auth'a (Sisteme) Kayıt
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: email,
-      password: params.password,
-    });
-
-    if (authError) throw authError;
-
-    if (authData.user) {
-      // 2. 'users' tablosuna genel profil bilgilerini kaydet
-      const { error: userError } = await supabase.from("users").insert({
-        id: authData.user.id,
-        full_name: params.adSoyad,
-        phone: params.telefon,
-        // İsteğe bağlı: isKurumsal true ise rolü corporate yapabilirsin
-        role: params.isKurumsal ? "corporate" : "customer",
-      });
-
-      if (userError) throw userError;
-
-      // 3. Eğer kullanıcı kurumsalsa, ekstra olarak 'companies' tablosuna kaydet
-      if (params.isKurumsal && params.firmaUnvani && params.vergiNo) {
-        const { error: companyError } = await supabase
-          .from("companies")
-          .insert({
-            user_id: authData.user.id,
-            company_name: params.firmaUnvani,
-            tax_number: params.vergiNo,
-            // Senin veritabanında adres ve telefon zorunlu olduğu için varsayılan değer atıyoruz
-            address: "Belirtilmedi",
-            company_phone: params.telefon,
-          });
-
-        if (companyError) throw companyError;
-      }
+/**
+ * Telefon formatını normalize eder (baştaki satırları ve 0'ı siler).
+ * @param phone Ham telefon string'i
+ * @returns 5 ile başlayan 10 haneli format veya null
+ */
+export const normalizePhone = (phone: string): string | null => {
+    let cleaned = phone.replace(/\D/g, "");
+    if (cleaned.startsWith("0")) {
+        cleaned = cleaned.substring(1);
     }
-
-    return authData;
-  },
-
-  // 2. GİRİŞ YAPMA
-  async loginUser(telefon: string, password: string) {
-    const email = formatPhoneToEmail(telefon);
-
-    // Auth tablosundan giriş kontrolü
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
-    });
-
-    if (error) throw error;
-    return data;
-  },
-
-  // 3. ÇIKIŞ YAPMA
-  async signOut() {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-  },
+    
+    if (cleaned.length !== 10 || !cleaned.startsWith("5")) {
+        return null;
+    }
+    
+    return cleaned;
 };
