@@ -240,6 +240,8 @@ export default function CorporateInfoScreen() {
 
         return orders.filter(o => {
             if (["CANCELLED", "İptal"].includes(o.status)) return false;
+            // Manuel kayıtlar her zaman veya en azından bu filtreye takılmadan gelsin istenebilir, 
+            // ama şimdilik tarih filtresine uysunlar.
             const orderDate = new Date(o.created_at || o.date);
             return orderDate >= thresholdDate;
         });
@@ -271,14 +273,23 @@ export default function CorporateInfoScreen() {
         const tableRows = filteredOrders.map((o: any) => {
             const d = new Date(o.created_at || o.date);
             const dateFormatted = `${d.toLocaleDateString('tr-TR')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+            
+            const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
+            const manualLabel = o.order_type === 'MANUAL_DEBT' ? 'Borç Girişi' : 'Ödeme Kaydı';
+            const detailText = isManual 
+                ? `<strong>${manualLabel}</strong><br>Aralık: ${o.note}` 
+                : (o.adisyon_items?.map((item: any) => `${item.quantity}x ${item.menu_items?.name || 'Yemek'}`).join('<br>') || 'Detay yok');
+
             return `
                 <tr>
                     <td style="padding: 12px; border-bottom: 1px solid #ddd;">${dateFormatted}</td>
                     <td style="padding: 12px; border-bottom: 1px solid #ddd;">${o.userName}</td>
                     <td style="padding: 12px; border-bottom: 1px solid #ddd;">
-                      ${o.adisyon_items?.map((item: any) => `${item.quantity}x ${item.menu_items?.name || 'Yemek'}`).join('<br>') || 'Detay yok'}
+                      ${detailText}
                     </td>
-                    <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right;">₺${o.total_amount?.toLocaleString("tr-TR")}</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right; color: ${o.order_type === 'MANUAL_PAYMENT' ? '#10b981' : '#333'}">
+                        ${o.order_type === 'MANUAL_PAYMENT' ? '-' : ''}₺${o.total_amount?.toLocaleString("tr-TR")}
+                    </td>
                 </tr>
             `;
         }).join('');
@@ -288,12 +299,18 @@ export default function CorporateInfoScreen() {
                 <body style="font-family: Helvetica, Arial, sans-serif; padding: 40px; color: #333;">
                     <h1 style="color: ${colors.primary}; margin-bottom: 5px;">Smart Catering</h1>
                     <h2 style="color: #666; font-weight: normal; margin-top: 0;">Firma Borç Ekstresi</h2>
+                    ${filteredOrders.some((o: any) => o.order_type === 'MANUAL_DEBT') 
+                      ? `<p style="color: #ed1c18; font-size: 14px; font-weight: bold; margin-bottom: 15px;">${filteredOrders.find((o: any) => o.order_type === 'MANUAL_DEBT')?.note} Aralığı Hizmet Detayı</p>`
+                      : ''
+                    }
                     <p style="color: #888; font-size: 12px;">Firma: ${companyName}</p>
                     <p style="color: #888; font-size: 12px;">Tarih: ${dateStr}</p>
                     
                     <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 30px 0;">
                         <p style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase;">Toplam Ödenmemiş Borç</p>
-                        <h2 style="margin: 10px 0 0 0; color: #e11d48;">${totalDebt > 0 ? `₺${totalDebt.toLocaleString("tr-TR")}` : 'Borç Bulunmuyor'}</h2>
+                        <h2 style="margin: 10px 0 0 0; color: ${totalDebt > 0 ? '#e11d48' : '#10b981'};">
+                            ${totalDebt > 0 ? `₺${totalDebt.toLocaleString("tr-TR")}` : 'BORÇ ÖDENDİ'}
+                        </h2>
                     </div>
 
                     <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
@@ -540,16 +557,29 @@ export default function CorporateInfoScreen() {
                                                         return (
                                                             <View key={order.id} style={{ borderBottomWidth: 1, borderColor: colors.surfaceBorder, paddingVertical: 12 }}>
                                                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                                    <Text style={{ fontWeight: 'bold', color: colors.text }}>{order.userName}</Text>
+                                                                    <Text style={{ fontWeight: 'bold', color: colors.text }}>
+                                                                        {order.order_type === 'MANUAL_DEBT' ? 'Kayıtlı Borç' : order.order_type === 'MANUAL_PAYMENT' ? 'Kayıtlı Ödeme' : order.userName}
+                                                                    </Text>
+                                                                    <Text style={{ fontWeight: 'bold', color: order.order_type === 'MANUAL_PAYMENT' ? '#10b981' : colors.primary }}>
+                                                                        {order.order_type === 'MANUAL_PAYMENT' ? '-' : ''}₺{order.total_amount?.toLocaleString("tr-TR")}
+                                                                    </Text>
                                                                 </View>
                                                                 <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 8 }}>{date.toLocaleString('tr-TR')}</Text>
                                                                 
-                                                                {order.adisyon_items?.map((item: any) => (
-                                                                    <View key={item.id} style={{ flexDirection: 'row', marginBottom: 2 }}>
-                                                                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.text, width: 24 }}>{item.quantity}x </Text>
-                                                                        <Text style={{ fontSize: 12, color: colors.muted }}>{item.menu_items?.name || 'Yemek'}</Text>
+                                                                {order.order_type?.startsWith('MANUAL') ? (
+                                                                    <View style={{ backgroundColor: colors.background, padding: 8, borderRadius: 8 }}>
+                                                                        <Text style={{ fontSize: 12, color: colors.text }}>
+                                                                            <Text style={{ fontWeight: 'bold' }}>Tarih Aralığı:</Text> {order.note}
+                                                                        </Text>
                                                                     </View>
-                                                                ))}
+                                                                ) : (
+                                                                    order.adisyon_items?.map((item: any) => (
+                                                                        <View key={item.id} style={{ flexDirection: 'row', marginBottom: 2 }}>
+                                                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.text, width: 24 }}>{item.quantity}x </Text>
+                                                                            <Text style={{ fontSize: 12, color: colors.muted }}>{item.menu_items?.name || 'Yemek'}</Text>
+                                                                        </View>
+                                                                    ))
+                                                                )}
                                                             </View>
                                                         )
                                                     })}

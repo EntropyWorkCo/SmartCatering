@@ -149,6 +149,8 @@ export type Database = {
           id?: string
           tax_number?: string
           user_id?: string | null
+          balance?: number | null
+          last_debt_update?: string | null
         }
         Relationships: [
           {

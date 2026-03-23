@@ -13,12 +13,14 @@ import React, { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Keyboard,
     Modal,
     ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -38,8 +40,21 @@ export default function SummaryScreen() {
   const [debtModalVisible, setDebtModalVisible] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [newDebtAmount, setNewDebtAmount] = useState("");
+  const [startDay, setStartDay] = useState<number | null>(null);
+  const [endDay, setEndDay] = useState<number | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toLocaleString('tr-TR', { month: 'long' }));
+  const [activePicker, setActivePicker] = useState<'START' | 'END' | null>(null);
   const [updatingDebt, setUpdatingDebt] = useState(false);
   const [companies, setCompanies] = useState<any[]>([]);
+
+  const daysInMonth = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const monthIndex = now.getMonth();
+    return new Date(year, monthIndex + 1, 0).getDate();
+  }, []);
+
+  const months = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 
   useFocusEffect(
     useCallback(() => {
@@ -176,15 +191,36 @@ export default function SummaryScreen() {
     if (!selectedCompanyId || !newDebtAmount) return;
     setUpdatingDebt(true);
     try {
-      await billingService.updateCompanyBalance(selectedCompanyId, Number(newDebtAmount));
-      Alert.alert("Başarılı", "Borç tutarı güncellendi.");
+      const company = companies.find(c => c.id === selectedCompanyId);
+      if (!company) throw new Error("Firma bulunamadı");
+      if (!startDay || !endDay) throw new Error("Lütfen başlangıç ve bitiş günlerini seçiniz.");
+
+      // 1. Manuel Adisyon Kaydı Oluştur (Arşiv için)
+      await billingService.addManualEntry(
+        company.user_id, 
+        Number(newDebtAmount), 
+        `${startDay} ${selectedMonth}`, 
+        `${endDay} ${selectedMonth}`, 
+        'DEBT'
+      );
+
+      // 2. Şirket Bakiyesini Güncelle (Hızlı toplam için)
+      const currentBalance = company.balance || 0;
+      const amount = Number(newDebtAmount);
+      const updatedBalance = currentBalance + amount;
+
+      await billingService.updateCompanyBalance(selectedCompanyId, updatedBalance);
+      
+      Alert.alert("Başarılı", "Borç kaydı eklendi.");
+      
       setCompanies(prev => prev.map(c => 
-        c.id === selectedCompanyId ? { ...c, balance: Number(newDebtAmount) } : c
+        c.id === selectedCompanyId ? { ...c, balance: updatedBalance } : c
       ));
+      
       setDebtModalVisible(false);
       setNewDebtAmount("");
     } catch (err: any) {
-      Alert.alert("Hata", "Borç güncellenirken hata oluştu: " + err.message);
+      Alert.alert("Hata", "İşlem yapılırken hata oluştu: " + err.message);
     } finally {
       setUpdatingDebt(false);
     }
@@ -245,7 +281,11 @@ export default function SummaryScreen() {
           <body>
             <div class="header">
               <p class="title">SMART CATERING</p>
-              <p style="margin:5px 0; font-size:14px; color:#666;">Yemek Özet & Tahsilat Dökümü</p>
+              <p style="margin:5px 0; font-size:14px; color:#666;">Hizmet Detay & Borç Ekstresi</p>
+              ${account.orders.some((o: any) => o.order_type === 'MANUAL_DEBT') 
+                ? `<p style="margin:2px 0; font-size:12px; color:#ed1c24; font-weight:bold;">${account.orders.find((o: any) => o.order_type === 'MANUAL_DEBT')?.note} Tarih Aralığı Hizmet Detayı</p>`
+                : ''
+              }
             </div>
 
             <div class="meta">
@@ -253,28 +293,41 @@ export default function SummaryScreen() {
               <div class="meta-item"><strong>Tarih:</strong> ${new Date().toLocaleDateString('tr-TR')}</div>
             </div>
 
-            <div class="section-title">HİZMET DETAYLARI (ADET)</div>
+            <div class="section-title">HİZMET DETAYLARI / ÖDEMELER</div>
             <table>
               <thead>
                 <tr>
                   <th>Tarih</th>
-                  <th>Ürün Detayı</th>
-                  <th style="text-align:right">Adet</th>
+                  <th>Detay</th>
+                  <th style="text-align:right">Tutar</th>
                 </tr>
               </thead>
               <tbody>
-                ${account.orders.map((o: any) => `
-                  <tr>
-                    <td>${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
-                    <td>
-                      ${o.adisyon_items?.map((i: any) => `${i.menu_items?.name || 'Ürün'}`).join(', ')}
-                    </td>
-                    <td style="text-align:right">${o.adisyon_items?.reduce((acc: number, curr: any) => acc + curr.quantity, 0)}</td>
-                  </tr>
-                `).join('')}
+                ${account.orders.map((o: any) => {
+                  const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
+                  const manualLabel = o.order_type === 'MANUAL_DEBT' ? '<strong>Borç Kaydı</strong>' : '<strong>Ödeme Kaydı</strong>';
+                  const detail = isManual 
+                    ? `${manualLabel} (Aralık: ${o.note})`
+                    : (o.adisyon_items?.map((i: any) => `${i.menu_items?.name || 'Ürün'}`).join(', ') || 'Detay yok');
+                  
+                  return `
+                    <tr>
+                      <td>${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
+                      <td>${detail}</td>
+                      <td style="text-align:right; color: ${o.order_type === 'MANUAL_PAYMENT' ? '#10b981' : '#333'}">
+                        ${o.order_type === 'MANUAL_PAYMENT' ? '-' : ''}₺${o.total_amount?.toLocaleString('tr-TR')}
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
                 <tr class="total-row">
                   <td colspan="2" style="border:none; padding-top:20px">TOPLAM BORÇ TUTARI</td>
-                  <td style="text-align:right; color:#ed1c24; border:none; padding-top:20px">₺${(account.isCorporate ? account.manualDebt : account.total).toLocaleString('tr-TR')}</td>
+                  <td style="text-align:right; border:none; padding-top:20px">
+                    ${(account.isCorporate ? account.manualDebt : account.total) <= 0 
+                      ? '<span style="color: #10b981;">BORÇ ÖDENDİ</span>' 
+                      : `<span style="color: #ed1c24;">₺${(account.isCorporate ? account.manualDebt : account.total).toLocaleString('tr-TR')}</span>`
+                    }
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -411,20 +464,90 @@ export default function SummaryScreen() {
 
       {/* Borç Giriş Modalı */}
       <Modal visible={debtModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>Manuel Borç Girişi</Text>
-            <Text style={{ fontSize: 12, color: colors.muted, marginBottom: 16 }}>
-              Şirketin 15 günlük toplam borç tutarını buraya giriniz.
-            </Text>
+            
+            <Text style={{ fontSize: 12, color: colors.muted, marginBottom: 8, fontWeight: 'bold' }}>TUTAR (₺)</Text>
             <TextInput
-               style={[styles.debtInput, { color: colors.text, borderColor: colors.surfaceBorder }]}
+               style={[styles.debtInput, { color: colors.text, borderColor: colors.surfaceBorder, marginBottom: 16 }]}
                keyboardType="numeric"
                value={newDebtAmount}
                onChangeText={setNewDebtAmount}
-               placeholder="Tutar giriniz (₺)"
+               placeholder="1500"
                placeholderTextColor={colors.muted}
             />
+
+            <Text style={{ fontSize: 12, color: colors.muted, marginBottom: 8, fontWeight: 'bold' }}>TARİH ARALIĞI SEÇİN</Text>
+            
+            <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+              <TouchableOpacity 
+                activeOpacity={0.7}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setActivePicker(activePicker === 'START' ? null : 'START');
+                }}
+                style={{ flex: 1, backgroundColor: colors.background, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: activePicker === 'START' ? colors.primary : colors.surfaceBorder }}>
+                <Text style={{ fontSize: 10, color: colors.muted, marginBottom: 4 }}>BAŞLANGIÇ GÜNÜ</Text>
+                <Text style={{ fontWeight: 'bold', color: startDay ? colors.text : colors.muted }}>{startDay || "Seç"}</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                activeOpacity={0.7}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setActivePicker(activePicker === 'END' ? null : 'END');
+                }}
+                style={{ flex: 1, backgroundColor: colors.background, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: activePicker === 'END' ? colors.primary : colors.surfaceBorder }}>
+                <Text style={{ fontSize: 10, color: colors.muted, marginBottom: 4 }}>BİTİŞ GÜNÜ</Text>
+                <Text style={{ fontWeight: 'bold', color: endDay ? colors.text : colors.muted }}>{endDay || "Seç"}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {activePicker && (
+              <View style={{ marginBottom: 20 }}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, backgroundColor: colors.background, padding: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => (
+                    <TouchableOpacity 
+                      key={day}
+                      onPress={() => {
+                        if (activePicker === 'START') setStartDay(day);
+                        else setEndDay(day);
+                        setActivePicker(null);
+                      }}
+                      style={{ 
+                        width: '12%', 
+                        aspectRatio: 1, 
+                        justifyContent: 'center', 
+                        alignItems: 'center', 
+                        borderRadius: 8, 
+                        backgroundColor: (activePicker === 'START' ? startDay === day : endDay === day) ? colors.primary : colors.surface,
+                        borderWidth: 1,
+                        borderColor: colors.surfaceBorder
+                      }}>
+                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: (activePicker === 'START' ? startDay === day : endDay === day) ? '#fff' : colors.text }}>{day}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {!activePicker && (
+               <View style={{ marginBottom: 20 }}>
+                 <Text style={{ fontSize: 10, color: colors.muted, marginBottom: 8, fontWeight: 'bold' }}>AY SEÇİMİ</Text>
+                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                   {months.map(m => (
+                     <TouchableOpacity 
+                        key={m}
+                        onPress={() => setSelectedMonth(m)}
+                        style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: selectedMonth === m ? colors.primary : colors.surface, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                       <Text style={{ fontSize: 12, fontWeight: 'bold', color: selectedMonth === m ? '#fff' : colors.text }}>{m}</Text>
+                     </TouchableOpacity>
+                   ))}
+                 </ScrollView>
+               </View>
+            )}
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setDebtModalVisible(false)}>
                 <Text style={{ color: colors.muted }}>İptal</Text>
@@ -435,7 +558,8 @@ export default function SummaryScreen() {
             </View>
           </View>
         </View>
-      </Modal>
+      </TouchableWithoutFeedback>
+    </Modal>
 
       {/* Önizleme Modalı */}
       {previewAccount && (
