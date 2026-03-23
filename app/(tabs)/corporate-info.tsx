@@ -256,7 +256,7 @@ export default function CorporateInfoScreen() {
                     
                     <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 30px 0;">
                         <p style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase;">Toplam Ödenmemiş Borç</p>
-                        <h2 style="margin: 10px 0 0 0; color: #e11d48;">${totalDebt > 0 ? `₺${totalDebt.toLocaleString("tr-TR")}` : 'Fiyat Onayı Bekleniyor'}</h2>
+                        <h2 style="margin: 10px 0 0 0; color: #e11d48;">${totalDebt > 0 ? `₺${totalDebt.toLocaleString("tr-TR")}` : 'Borç Bulunmuyor'}</h2>
                     </div>
 
                     <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
@@ -448,7 +448,7 @@ export default function CorporateInfoScreen() {
                     <View style={{ gap: 24 }}>
                         <View style={[styles.sectionCard, { alignItems: 'center', backgroundColor: colors.dangerBg, borderColor: colors.danger, borderWidth: 1 }]}>
                             <Text style={{ fontSize: 12, color: colors.danger, fontWeight: 'bold', marginBottom: 4, textTransform: 'uppercase' }}>Toplam Ödenmemiş Borç</Text>
-                            <Text style={{ fontSize: 36, fontWeight: '900', color: colors.danger }}>{totalDebt > 0 ? `₺${totalDebt.toLocaleString('tr-TR')}` : 'Fiyat Bekleniyor'}</Text>
+                            <Text style={{ fontSize: 36, fontWeight: '900', color: colors.danger }}>{totalDebt > 0 ? `₺${totalDebt.toLocaleString('tr-TR')}` : 'Borç Bulunmuyor'}</Text>
                         </View>
 
                         <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }]} onPress={generatePdfEkstre}>

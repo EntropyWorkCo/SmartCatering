@@ -21,10 +21,10 @@ import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
+import { billingService } from "@/lib/services/billingService";
 import { notificationService } from "@/lib/services/notificationService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
-import { billingService } from "@/lib/services/billingService";
 
 export default function ProfileScreen() {
     const router = useRouter();
@@ -114,8 +114,9 @@ export default function ProfileScreen() {
     };
 
     const handleLogout = async () => {
-        const { error } = await supabase.auth.signOut();
         await AsyncStorage.removeItem("softUser");
+        await AsyncStorage.removeItem("isAdmin");
+        const { error } = await supabase.auth.signOut();
         router.replace("/welcome");
     };
 
@@ -132,6 +133,7 @@ export default function ProfileScreen() {
             <View style={styles.header}>
                 <View style={{ flex: 1 }}>
                     <Text style={styles.title}>Hesabım</Text>
+                    <Text style={{ fontSize: 11, color: colors.muted, marginTop: 4 }}>[{isCompanyOwner ? "Firma Sahibi Yetkisi Aktif" : "Bireysel Mod / Yetki Yok"}]</Text>
                 </View>
                 <ThemeSwitcher />
             </View>
@@ -149,6 +151,33 @@ export default function ProfileScreen() {
                         </View>
                     </TouchableOpacity>
                 </View>
+
+                {isCompanyOwner && (
+                    <TouchableOpacity 
+                        onPress={() => router.push("/(tabs)/corporate-info")}
+                        style={{ 
+                            backgroundColor: colors.surface, 
+                            padding: 20, 
+                            borderRadius: 16, 
+                            borderWidth: 1, 
+                            borderColor: colors.surfaceBorder, 
+                            marginTop: 12, 
+                            marginBottom: 20, 
+                            flexDirection: 'row', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between',
+                            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2
+                        }}
+                    >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            <View style={{ backgroundColor: colors.primary + '15', padding: 10, borderRadius: 12 }}>
+                                <MaterialIcons name="business" size={24} color={colors.primary} />
+                            </View>
+                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>Firma Yönetim Paneli</Text>
+                        </View>
+                        <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
+                    </TouchableOpacity>
+                )}
 
                 {/* User Info Form */}
                 <View style={styles.formSection}>
@@ -207,13 +236,7 @@ export default function ProfileScreen() {
                         <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
                     </TouchableOpacity>
 
-                    {isCompanyOwner && (
-                    <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/corporate-info")}>
-                        <MaterialIcons name="business" size={24} color={colors.text} />
-                        <Text style={styles.linkText}>Kurumsal Fatura / Şirket Bilgileri</Text>
-                        <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
-                    </TouchableOpacity>
-                    )}
+
 
                     <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/support" as any)}>
                         <MaterialIcons name="support-agent" size={24} color={colors.text} />

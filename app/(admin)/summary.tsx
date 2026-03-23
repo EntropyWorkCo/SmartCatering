@@ -2,7 +2,6 @@ import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { billingService } from "@/lib/services/billingService";
-import { notificationService } from "@/lib/services/notificationService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -11,15 +10,15 @@ import { useFocusEffect, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import React, { useCallback, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -39,6 +38,7 @@ export default function SummaryScreen() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [newDebtAmount, setNewDebtAmount] = useState("");
   const [updatingDebt, setUpdatingDebt] = useState(false);
+  const [companies, setCompanies] = useState<any[]>([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -49,7 +49,16 @@ export default function SummaryScreen() {
         if (data) setRatings(data);
         setLoadingRatings(false);
       };
+      
+      const fetchCompanies = async () => {
+        const { data } = await supabase
+          .from("companies")
+          .select("*");
+        if (data) setCompanies(data);
+      };
+
       fetchRatings();
+      fetchCompanies();
     }, [])
   );
 
@@ -79,6 +88,23 @@ export default function SummaryScreen() {
         }
       > = {};
 
+      // KURUMSAL sekmesinde tüm kayıtlı şirketleri önceden listeye ekle
+      if (mainTab === "KURUMSAL") {
+        companies.forEach(company => {
+          map[company.company_name] = {
+            userId: company.user_id || "",
+            companyId: company.id,
+            name: "Firma Sahibi",
+            isCorporate: true,
+            displayName: company.company_name,
+            total: 0,
+            manualDebt: company.balance || 0,
+            count: 0,
+            orders: [],
+          };
+        });
+      }
+
       const safeOrders = orders || [];
 
       safeOrders.forEach((order) => {
@@ -97,7 +123,7 @@ export default function SummaryScreen() {
         if (!map[key]) {
           map[key] = {
             userId: order.user_id,
-            companyId: order.company_id,
+            companyId: order.companyId,
             name: order.userName || "Bilinmeyen Müşteri",
             isCorporate: isActuallyCorporate,
             displayName: isActuallyCorporate

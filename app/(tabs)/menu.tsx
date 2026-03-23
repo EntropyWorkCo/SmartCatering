@@ -1,20 +1,22 @@
+// Cache buster: forcing file re-evaluation
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useCartStore } from "@/lib/store/cartStore";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
-import { router, useFocusEffect, useNavigation } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
+import { router, useNavigation } from "expo-router";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Image,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../lib/hooks/useAuth";
@@ -25,12 +27,18 @@ export default function MenuScreen() {
   const { menu, systemPrices, loading } = useMenu(true);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const [selectedCategory, setSelectedCategory] = useState("TÜMÜ");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const cartItems = useCartStore(state => state.items);
   const orderMode = useCartStore(state => state.orderMode);
 
   const { user } = useAuth();
   const { profile, refresh } = useProfile(user?.id);
+
+  const theme = useResolvedTheme();
+  const colors = Colors[theme];
+  const styles = getStyles(colors);
+
+  const activeCategories = ["GÜNÜN MENÜSÜ", "TABLDOT", "TEK ÇEŞİTLER", "İÇECEKLER", "EKSTRALAR"];
 
   useFocusEffect(
     React.useCallback(() => {
@@ -38,10 +46,6 @@ export default function MenuScreen() {
     }, [user?.id])
   );
   const isCompany = profile?.is_company || false;
-
-  const theme = useResolvedTheme();
-  const colors = Colors[theme];
-  const styles = getStyles(colors);
 
   const TABLDOT_PACKAGES = systemPrices
     .filter(p => p.category === "TABLDOT")
@@ -55,14 +59,7 @@ export default function MenuScreen() {
         maxItems = 2;
         desc = "Seçeceğiniz 2 çeşit yemek (Örn: Çorba, Ana Yemek)";
       }
-      return {
-        id: pkg.id,
-        name: pkg.name,
-        price: pkg.price,
-        category: "PAKET",
-        maxItems,
-        desc
-      };
+      return { id: pkg.id, name: pkg.name, price: pkg.price, category: "PAKET", maxItems, desc };
     })
     .sort((a, b) => b.price - a.price);
 
@@ -70,7 +67,14 @@ export default function MenuScreen() {
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
   const [packageSelections, setPackageSelections] = useState<{ category: string, item_id: string, item_name: string }[]>([]);
 
-  const activeCategories = ["TÜMÜ", "GÜNÜN MENÜSÜ", "TABLDOT", "TEK ÇEŞİTLER", "İÇECEKLER", "EKSTRALAR"];
+  // Dışarıdan gelen yönlendirmelerde (Örn: Ana sayfa tabldot) otomatik kategoriyi açmak için
+  React.useEffect(() => {
+    if (orderMode === 'eat_now') {
+      setSelectedCategory("GÜNÜN MENÜSÜ");
+    } else if (orderMode === 'pre_order') {
+      setSelectedCategory("TABLDOT");
+    }
+  }, [orderMode]);
 
   let filteredMenu: any[] = [];
 
@@ -114,7 +118,7 @@ export default function MenuScreen() {
 
     useCartStore.getState().addItem({
       menu_item_id: item.id,
-      name: item.name,
+      name: (item.category === "PAKET" || item.category === "TABLDOT") && item.maxItems ? `${item.maxItems}'LÜ TABLDOT` : item.name,
       price: item.price,
       quantity: 1,
       is_package: item.category === "PAKET" || item.category === "TABLDOT",
@@ -145,7 +149,7 @@ export default function MenuScreen() {
 
     useCartStore.getState().addItem({
       menu_item_id: selectedPackage.id,
-      name: selectedPackage.name,
+      name: selectedPackage?.maxItems ? `${selectedPackage.maxItems}'LÜ TABLDOT` : selectedPackage.name,
       price: selectedPackage.price,
       quantity: 1,
       is_package: true,
@@ -179,6 +183,24 @@ export default function MenuScreen() {
     );
   }
 
+  const handleChangeMode = () => {
+    if (cartItems.length > 0) {
+      Alert.alert("Mod Değiştir", "Modu değiştirmek sepetinizi sıfırlayacaktır. Devam edilsin mi?", [
+        { text: "Vazgeç" },
+        { text: "Evet, Değiştir", style: "destructive", onPress: () => {
+           useCartStore.getState().clearCart();
+           const nextMode = orderMode === 'eat_now' ? 'pre_order' : 'eat_now';
+           useCartStore.getState().setOrderMode(nextMode);
+           setSelectedCategory(nextMode === 'eat_now' ? "GÜNÜN MENÜSÜ" : "TABLDOT");
+        }}
+      ]);
+    } else {
+      const nextMode = orderMode === 'eat_now' ? 'pre_order' : 'eat_now';
+      useCartStore.getState().setOrderMode(nextMode);
+      setSelectedCategory(nextMode === 'eat_now' ? "GÜNÜN MENÜSÜ" : "TABLDOT");
+    }
+  };
+
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
   return (
@@ -186,14 +208,19 @@ export default function MenuScreen() {
       <View style={styles.header}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <TouchableOpacity onPress={() => {
-            if (navigation.canGoBack()) navigation.goBack();
-            else router.push("/(tabs)/home");
+            if (selectedCategory !== null) {
+              setSelectedCategory(null);
+            } else if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              router.push("/(tabs)/home");
+            }
           }} style={{ backgroundColor: colors.surface, padding: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
             <MaterialIcons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <View>
             <Text style={styles.title}>Menü</Text>
-            <Text style={styles.subtitle}>GÜNÜN LEZZETLERİ</Text>
+            <Text style={styles.subtitle}>{selectedCategory ? selectedCategory : "KATEGORİ SEÇİNİZ"}</Text>
           </View>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -212,21 +239,56 @@ export default function MenuScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: cartItems.length > 0 ? 120 : 40 }}>
-        {/* Categories (Horizontal Scroll) - En Üste Taşındı */}
-        <View style={styles.categoryScrollContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-            {activeCategories.map(cat => (
-              <TouchableOpacity
-                key={cat}
-                style={[styles.categoryBtn, selectedCategory === cat && styles.categoryBtnActive]}
-                onPress={() => setSelectedCategory(cat)}
-              >
-                <Text style={[styles.categoryText, selectedCategory === cat && styles.categoryTextActive]}>{cat}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+      {orderMode && (
+        <View style={{ 
+          backgroundColor: orderMode === 'eat_now' ? '#fffbeb' : '#ecfdf5', 
+          paddingVertical: 10, paddingHorizontal: 20, 
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          borderBottomWidth: 1, borderBottomColor: orderMode === 'eat_now' ? '#fde68a' : '#a7f3d0'
+        }}>
+          <Text style={{ fontSize: 13, fontWeight: 'bold', color: orderMode === 'eat_now' ? '#d97706' : '#059669' }}>
+            {orderMode === 'eat_now' ? '🍽️ MOD: ŞİMDİ YE' : '📅 MOD: SİPARİŞ VER'}
+          </Text>
+          <TouchableOpacity 
+            onPress={handleChangeMode}
+            style={{ 
+              backgroundColor: '#fff', 
+              paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+              borderWidth: 1, borderColor: orderMode === 'eat_now' ? '#fde68a' : '#a7f3d0',
+              shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1
+            }}
+          >
+            <Text style={{ fontSize: 11, fontWeight: '900', color: orderMode === 'eat_now' ? '#d97706' : '#059669' }}>DEĞİŞTİR</Text>
+          </TouchableOpacity>
         </View>
+      )}
+
+      {selectedCategory === null ? (
+        <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
+          {activeCategories.map(cat => (
+            <TouchableOpacity 
+              key={cat} 
+              style={{ backgroundColor: colors.surface, padding: 20, borderRadius: 24, borderWidth: 1, borderColor: colors.surfaceBorder, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}
+              onPress={() => setSelectedCategory(cat)}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                 <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.cardHighlight, alignItems: 'center', justifyContent: 'center' }}>
+                      <MaterialIcons name={
+                          cat === "GÜNÜN MENÜSÜ" ? "restaurant-menu" :
+                          cat === "TABLDOT" ? "breakfast-dining" :
+                          cat === "TEK ÇEŞİTLER" ? "lunch-dining" :
+                          cat === "İÇECEKLER" ? "local-drink" : "add-circle-outline"
+                      } size={20} color={colors.primary} />
+                 </View>
+                 <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>{cat}</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: cartItems.length > 0 ? 120 : 40 }}>
+           {/* Dinamik Olarak Kategori Barını Gizlediğimiz İçin Burada Kaldırdık */}
 
         {/* Günün Menüsü (Always at top or dedicated tab) */}
         {((selectedCategory === "TÜMÜ" || selectedCategory === "GÜNÜN MENÜSÜ") && dailyMenu.length > 0) && (
@@ -371,14 +433,16 @@ export default function MenuScreen() {
         {TABLDOT_PACKAGES.length > 0 && (selectedCategory === "TÜMÜ" || selectedCategory === "TABLDOT") && (
           <View style={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 }}>
             <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 12 }}>Avantajlı Tabldot Menü</Text>
-            {TABLDOT_PACKAGES.map(pkg => (
+            {TABLDOT_PACKAGES.map(pkg => {
+              const cleanLabel = pkg.maxItems === 4 ? "4'LÜ TABLDOT" : pkg.maxItems === 3 ? "3'LÜ TABLDOT" : "2'Lİ TABLDOT";
+              return (
               <TouchableOpacity key={pkg.id} style={{ backgroundColor: colors.surface, borderColor: colors.surfaceBorder, borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 12 }} onPress={() => handleAddToCart(pkg)}>
                 <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                   <View style={{ backgroundColor: colors.cardHighlight, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
                     <MaterialIcons name="restaurant-menu" size={24} color={colors.primary} />
                   </View>
                   <View style={{ flex: 1, paddingRight: 8 }}>
-                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }}>{pkg.name}</Text>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }}>{cleanLabel}</Text>
                     <Text style={{ fontSize: 12, color: colors.muted, lineHeight: 16 }}>{pkg.desc}</Text>
                   </View>
                 </View>
@@ -405,10 +469,17 @@ export default function MenuScreen() {
                   )}
                 </View>
               </TouchableOpacity>
-            ))}
+              )
+            })}
           </View>
         )}
+        {selectedCategory === "TABLDOT" && TABLDOT_PACKAGES.length === 0 && (
+           <View style={{ padding: 40, alignItems: 'center' }}>
+                <Text style={{ color: colors.muted }}>Bu kategoride aktif ürün yok</Text>
+           </View>
+        )}
       </ScrollView>
+      )}
 
       {/* Floating Forward Button */}
       {totalCartCount > 0 && (
@@ -433,7 +504,7 @@ export default function MenuScreen() {
           <View style={[styles.modalContent, { backgroundColor: colors.background, height: '90%', borderTopLeftRadius: 32, borderTopRightRadius: 32 }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 24, borderBottomWidth: 1, borderColor: colors.surfaceBorder }}>
               <View>
-                <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text }}>{selectedPackage?.name}</Text>
+                <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text }}>{selectedPackage?.maxItems ? `${selectedPackage.maxItems}'LÜ TABLDOT` : selectedPackage?.name}</Text>
                 <Text style={{ fontSize: 12, color: colors.muted, marginTop: 4 }}>{selectedPackage?.maxItems} Çeşit Ürün Seçiniz</Text>
               </View>
               <TouchableOpacity onPress={() => setPackageModalVisible(false)} style={{ padding: 4 }}>

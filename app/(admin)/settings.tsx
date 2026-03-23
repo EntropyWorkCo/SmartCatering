@@ -24,8 +24,8 @@ export default function AdminSettings() {
 
     const handleLogout = async () => {
         try {
-            await supabase.auth.signOut();
             await AsyncStorage.removeItem("isAdmin");
+            await supabase.auth.signOut();
             router.replace("/welcome");
         } catch (error) {
             console.error("Logout error:", error);

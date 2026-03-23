@@ -24,7 +24,7 @@ export default function CartScreen() {
     const { items, removeItem, clearCart, getTotal } = useCartStore();
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
-    const { user } = useAuth();
+    const { user, isAdmin } = useAuth();
     const { profile } = useProfile(user?.id);
     const isCompany = profile?.is_company || false;
 
@@ -70,8 +70,11 @@ export default function CartScreen() {
                             );
 
                             clearCart();
-                            // Schedule rating notification for 15 minutes later with the specific orderId
-                            await notificationService.scheduleRatingNotification(15, adisyon.id);
+                            
+                            // Skip rating notification for admins
+                            if (!isAdmin) {
+                                await notificationService.scheduleRatingNotification(15, adisyon.id);
+                            }
 
                             Alert.alert("Başarılı", "Siparişiniz başarıyla alındı!", [
                                 { text: "Tamam", onPress: () => router.push("/(tabs)/home") }

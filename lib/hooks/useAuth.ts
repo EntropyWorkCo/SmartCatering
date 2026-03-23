@@ -1,7 +1,18 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
+let authListeners: Array<() => void> = [];
+
+export const triggerAuthRefresh = async () => {
+  await Promise.all(authListeners.map(async (fn) => {
+    try {
+      await fn();
+    } catch (e) {
+      console.error(e);
+    }
+  }));
+};
 
 export const useAuth = () => {
   const [session, setSession] = useState<any>(null);
@@ -34,17 +45,34 @@ export const useAuth = () => {
     };
 
     initAuth();
+    authListeners.push(initAuth);
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      // Oturum değiştiğinde (ör. çıkış yapıldığında) admin flag'ini de güncelle
+      if (session) {
+         setSession(session);
+      } else {
+         const softUserStr = await AsyncStorage.getItem("softUser");
+         if (softUserStr) {
+            try {
+               const softUser = JSON.parse(softUserStr);
+               setSession({ user: softUser, isSoftUser: true });
+            } catch (e) {
+               setSession(null);
+            }
+         } else {
+            setSession(null);
+         }
+      }
       const adminFlag = await AsyncStorage.getItem("isAdmin");
       setIsAdmin(adminFlag === "true");
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      authListeners = authListeners.filter(f => f !== initAuth);
+    };
   }, []);
 
   return { session, user: session?.user, loading, isAdmin };

@@ -1,5 +1,6 @@
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
+import { triggerAuthRefresh } from "@/lib/hooks/useAuth";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -108,11 +109,11 @@ export default function OtpVerifyScreen() {
                         .select("*")
                         .eq("phone", phone)
                         .single();
-
-                    if (empError || !empUser) {
+                    
+                    if (empError || !empUser || !empUser.company_id || !empUser.is_company) {
                         Alert.alert(
                             "Kayıt Bulunamadı",
-                            "Firma sahibiniz tarafından sisteme eklenmemişsiniz. Lütfen eklemesini isteyin."
+                            "Firma sahibiniz tarafından sisteme eklenmemişsiniz veya kaydınız silinmiş."
                         );
                         setLoading(false);
                         return;
@@ -120,6 +121,7 @@ export default function OtpVerifyScreen() {
 
                     await AsyncStorage.setItem("softUser", JSON.stringify(empUser));
                     await AsyncStorage.removeItem("isAdmin");
+                    await triggerAuthRefresh();
                     router.replace("/(tabs)/home");
                     return;
                 }

@@ -33,12 +33,30 @@ export default function HomeScreen() {
   );
   // Supabase uuid beklediği için standart boş uuid gönderiyoruz
   const { orders } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
-  const { menu } = useMenu(true);
+  const { menu, systemPrices } = useMenu(true);
   const cartItems = useCartStore((state) => state.items);
   const orderMode = useCartStore((state) => state.orderMode);
   const setOrderMode = useCartStore((state) => state.setOrderMode);
 
   const [modalVisible, setModalVisible] = React.useState(false);
+
+  const TABLDOT_PACKAGES = useMemo(() => {
+    return (systemPrices || [])
+      .filter(p => p.category === "TABLDOT")
+      .map(pkg => {
+        let maxItems = 4;
+        let desc = "4 çeşit yemek (Örn: Çorba, Ana Yemek, 2 Yardımcı)";
+        if (pkg.name.includes("3") || pkg.name.includes("3 ÇEŞİT")) {
+          maxItems = 3;
+          desc = "3 çeşit yemek (Örn: Çorba, Ana Yemek, Yardımcı)";
+        } else if (pkg.name.includes("2") || pkg.name.includes("2 ÇEŞİT")) {
+          maxItems = 2;
+          desc = "2 çeşit yemek (Örn: Çorba, Ana Yemek)";
+        }
+        return { id: pkg.id, name: pkg.name, price: pkg.price, category: "PAKET", maxItems, desc };
+      })
+      .sort((a, b) => b.price - a.price);
+  }, [systemPrices]);
   const [timeFilter, setTimeFilter] = React.useState<"ALL" | "DAILY" | "WEEKLY" | "MONTHLY">("ALL");
   const [quantities, setQuantities] = React.useState<{ [key: string]: number }>({});
   const [companyOrders, setCompanyOrders] = React.useState<any[]>([]);
@@ -294,53 +312,86 @@ export default function HomeScreen() {
           />
         </View>
 
+        {/* Tabldot Seçenekleri (Hızlı Ekleme) */}
+        {TABLDOT_PACKAGES.length > 0 && (
+          <View style={{ marginBottom: 32, marginTop: 16 }}>
+             <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>HIZLI TABLDOT (ŞİMDİ YE)</Text>
+             <View style={{ gap: 12 }}>
+                {TABLDOT_PACKAGES.map(pkg => {
+                    const inCartCount = cartItems.find(i => i.menu_item_id === pkg.id)?.quantity || 0;
+                    const cleanLabel = pkg.maxItems === 4 ? "4'LÜ TABLDOT" : pkg.maxItems === 3 ? "3'LÜ TABLDOT" : "2'Lİ TABLDOT";
+                    
+                    return (
+                        <View key={pkg.id} style={[styles.foodCard, { padding: 16, backgroundColor: colors.surface }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                                <View style={{ backgroundColor: colors.cardHighlight, width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
+                                    <Text style={{ fontSize: 20, fontWeight: '900', color: colors.primary }}>{pkg.maxItems}</Text>
+                                </View>
+                                <View style={{ flex: 1, paddingRight: 8 }}>
+                                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }}>{cleanLabel}</Text>
+                                    <Text style={{ fontSize: 12, color: colors.muted, lineHeight: 16 }}>{pkg.desc}</Text>
+                                </View>
+                            </View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                                {!isCompany ? <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary }}>₺{pkg.price}</Text> : <View />}
+                                {inCartCount > 0 ? (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: 8, padding: 4, gap: 8, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                                            <TouchableOpacity 
+                                                onPress={() => useCartStore.getState().decrementItem(pkg.id)} 
+                                                style={{ backgroundColor: colors.primary, width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }}>
+                                                <MaterialIcons name="remove" size={14} color="#fff" />
+                                            </TouchableOpacity>
+                                            <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.text }}>{inCartCount}</Text>
+                                            <TouchableOpacity 
+                                                onPress={() => useCartStore.getState().addItem({ menu_item_id: pkg.id, name: cleanLabel, price: pkg.price, quantity: 1, is_package: true })} 
+                                                style={{ backgroundColor: colors.primary, width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }}>
+                                                <MaterialIcons name="add" size={14} color="#fff" />
+                                            </TouchableOpacity>
+                                        </View>
+                                        <TouchableOpacity 
+                                            onPress={() => router.push("/(tabs)/cart")}
+                                            style={{ backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>ONAYLA</Text>
+                                            <MaterialIcons name="chevron-right" size={14} color="#fff" />
+                                        </TouchableOpacity>
+                                    </View>
+                                ) : (
+                                    <TouchableOpacity 
+                                        onPress={() => {
+                                            if (cartItemCount > 0 && orderMode !== 'eat_now' && orderMode !== null) {
+                                                Alert.alert("Sepet Sıfırlanacak", "Farklı modda ürünleriniz var, sepet boşaltılsın mı?", [
+                                                    { text: "Vazgeç" },
+                                                    { text: "Boşalt", style: "destructive", onPress: () => {
+                                                        useCartStore.getState().clearCart();
+                                                        setOrderMode('eat_now');
+                                                        useCartStore.getState().addItem({ menu_item_id: pkg.id, name: cleanLabel, price: pkg.price, quantity: 1, is_package: true });
+                                                    }}
+                                                ]);
+                                            } else {
+                                                setOrderMode('eat_now');
+                                                useCartStore.getState().addItem({ menu_item_id: pkg.id, name: cleanLabel, price: pkg.price, quantity: 1, is_package: true });
+                                                Alert.alert("Eklendi", `${cleanLabel} sepete eklendi.`);
+                                            }
+                                        }}
+                                        style={{ backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 }}>
+                                        <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>EKLE & YE</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        </View>
+                    );
+                })}
+             </View>
+          </View>
+        )}
+
 
 
         {/* Balance Card */}
         {/* Balance Card Kaldırıldı */}
 
         {/* Removed Last Order Highlight based on user request */}
-
-        {/* Günün Menüsü (Menu of the Day) */}
-        {dailyMenu.length > 0 && (
-          <View style={{ marginBottom: 32 }}>
-            <View style={styles.popularHeader}>
-              <Text style={styles.sectionTitle}>GÜNÜN MENÜSÜ</Text>
-              <TouchableOpacity onPress={() => router.push("/(tabs)/menu")}>
-                <Text style={styles.seeAllText}>TÜMÜNÜ GÖR</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={{ gap: 16 }}>
-              {dailyMenu.map(item => (
-                <View key={item.id} style={[styles.foodCard, item.status === 'sold_out' && { opacity: 0.6 }]}>
-                  <View style={styles.foodImageContainer}>
-                    {item.image_url ? (
-                      <Image source={{ uri: item.image_url }} style={styles.foodImage} />
-                    ) : (
-                      <MaterialIcons name={
-                        item.category === "ÇORBA" ? "soup-kitchen" : "restaurant"
-                      } size={40} color={colors.muted} />
-                    )}
-                  </View>
-                  <View style={styles.foodDetails}>
-                    <View style={{ flex: 1, paddingRight: 8 }}>
-                      <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
-                      <Text style={styles.foodCategory}>{item.category}</Text>
-                    </View>
-                    <View style={styles.foodBottomColumn}>
-                      {isCompany ? null : <Text style={styles.foodPrice}>₺{item.price}</Text>}
-                      {item.status === 'sold_out' && (
-                        <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
-                          <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
 
         {/* Removed Popular Section based on user request */}
 

@@ -100,7 +100,7 @@ export default function TabLayout() {
         options={{
           title: "Firma Ekranı",
           headerShown: false,
-          href: isCompanyOwner ? undefined : null,
+          href: null,
           tabBarIcon: ({ color }) => (
             <FontAwesome name="briefcase" size={22} color={color} />
           ),

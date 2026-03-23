@@ -90,6 +90,7 @@ export const adisyonService = {
         return {
           ...order,
           userName: user?.full_name || 'Müşteri',
+          companyId: company?.id || null,
           companyName: company?.company_name || null,
           isCorporate: !!company
         };
@@ -140,7 +141,16 @@ export const adisyonService = {
 
   async getCompanyOrders(companyId: string) {
     try {
-      // 1. Get all employees in the company
+      // 1. Get company owner id
+      const { data: company, error: companyError } = await supabase
+        .from("companies")
+        .select("user_id")
+        .eq("id", companyId)
+        .single();
+
+      if (companyError) throw companyError;
+
+      // 2. Get all employees in the company
       const { data: users, error: userError } = await supabase
         .from("users")
         .select("id")
@@ -149,9 +159,13 @@ export const adisyonService = {
       if (userError) throw userError;
 
       const userIds = users.map(u => u.id);
+      if (company?.user_id) {
+        userIds.push(company.user_id);
+      }
+
       if (userIds.length === 0) return [];
 
-      // 2. Fetch adisyons for these user IDs
+      // 3. Fetch adisyons for these user IDs
       const { data: adisyons, error: adisyonError } = await supabase
         .from("adisyon")
         .select(`
