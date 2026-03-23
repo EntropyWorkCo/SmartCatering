@@ -74,7 +74,7 @@ export default function MenuScreen() {
     } else if (orderMode === 'pre_order') {
       setSelectedCategory("TABLDOT");
     }
-  }, [orderMode]);
+  }, []);
 
   let filteredMenu: any[] = [];
 
@@ -191,13 +191,13 @@ export default function MenuScreen() {
            useCartStore.getState().clearCart();
            const nextMode = orderMode === 'eat_now' ? 'pre_order' : 'eat_now';
            useCartStore.getState().setOrderMode(nextMode);
-           setSelectedCategory(nextMode === 'eat_now' ? "GÜNÜN MENÜSÜ" : "TABLDOT");
+           setSelectedCategory(null);
         }}
       ]);
     } else {
       const nextMode = orderMode === 'eat_now' ? 'pre_order' : 'eat_now';
       useCartStore.getState().setOrderMode(nextMode);
-      setSelectedCategory(nextMode === 'eat_now' ? "GÜNÜN MENÜSÜ" : "TABLDOT");
+      setSelectedCategory(null);
     }
   };
 

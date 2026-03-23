@@ -327,7 +327,10 @@ export default function HomeScreen() {
         {/* Tabldot Seçenekleri (Hızlı Ekleme) */}
         {TABLDOT_PACKAGES.length > 0 && (
           <View style={{ marginBottom: 32, marginTop: 16 }}>
-             <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>HIZLI TABLDOT (ŞİMDİ YE)</Text>
+             <Text style={[styles.sectionTitle, { marginBottom: 4 }]}>HIZLI TABLDOT (ŞİMDİ YE)</Text>
+             <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 16, paddingHorizontal: 6, lineHeight: 16 }}>
+                 * Restoranda yiyecekseniz <Text style={{fontWeight: 'bold', color: colors.text}}>4'LÜ TABLDOT</Text>, <Text style={{fontWeight: 'bold', color: colors.text}}>3'LÜ TABLDOT</Text> veya <Text style={{fontWeight: 'bold', color: colors.text}}>2'Lİ TABLDOT</Text> menülerinden birini seçebilirsiniz.
+             </Text>
              <View style={{ gap: 12 }}>
                 {TABLDOT_PACKAGES.map(pkg => {
                     const inCartCount = cartItems.find(i => i.menu_item_id === pkg.id)?.quantity || 0;
@@ -344,52 +347,55 @@ export default function HomeScreen() {
                                     <Text style={{ fontSize: 12, color: colors.muted, lineHeight: 16 }}>{pkg.desc}</Text>
                                 </View>
                             </View>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 12 }}>
                                 {!isCompany ? <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary }}>₺{pkg.price}</Text> : <View />}
-                                {inCartCount > 0 ? (
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: 8, padding: 4, gap: 8, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                                <View style={{ alignItems: 'flex-end' }}>
+                                    <Text style={{ fontSize: 12, fontWeight: '900', color: colors.primary, marginBottom: 8, textTransform: 'uppercase' }}>{cleanLabel}</Text>
+                                    {inCartCount > 0 ? (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: 8, padding: 4, gap: 8, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                                                <TouchableOpacity 
+                                                    onPress={() => useCartStore.getState().decrementItem(pkg.id)} 
+                                                    style={{ backgroundColor: colors.primary, width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }}>
+                                                    <MaterialIcons name="remove" size={14} color="#fff" />
+                                                </TouchableOpacity>
+                                                <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.text }}>{inCartCount}</Text>
+                                                <TouchableOpacity 
+                                                    onPress={() => useCartStore.getState().addItem({ menu_item_id: pkg.id, name: cleanLabel, price: pkg.price, quantity: 1, is_package: true })} 
+                                                    style={{ backgroundColor: colors.primary, width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }}>
+                                                    <MaterialIcons name="add" size={14} color="#fff" />
+                                                </TouchableOpacity>
+                                            </View>
                                             <TouchableOpacity 
-                                                onPress={() => useCartStore.getState().decrementItem(pkg.id)} 
-                                                style={{ backgroundColor: colors.primary, width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }}>
-                                                <MaterialIcons name="remove" size={14} color="#fff" />
-                                            </TouchableOpacity>
-                                            <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.text }}>{inCartCount}</Text>
-                                            <TouchableOpacity 
-                                                onPress={() => useCartStore.getState().addItem({ menu_item_id: pkg.id, name: cleanLabel, price: pkg.price, quantity: 1, is_package: true })} 
-                                                style={{ backgroundColor: colors.primary, width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }}>
-                                                <MaterialIcons name="add" size={14} color="#fff" />
+                                                onPress={() => router.push("/(tabs)/cart")}
+                                                style={{ backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>ONAYLA</Text>
+                                                <MaterialIcons name="chevron-right" size={14} color="#fff" />
                                             </TouchableOpacity>
                                         </View>
+                                    ) : (
                                         <TouchableOpacity 
-                                            onPress={() => router.push("/(tabs)/cart")}
-                                            style={{ backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                            <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>ONAYLA</Text>
-                                            <MaterialIcons name="chevron-right" size={14} color="#fff" />
+                                            onPress={() => {
+                                                if (cartItemCount > 0 && orderMode !== 'eat_now' && orderMode !== null) {
+                                                    Alert.alert("Sepet Sıfırlanacak", "Farklı modda ürünleriniz var, sepet boşaltılsın mı?", [
+                                                        { text: "Vazgeç" },
+                                                        { text: "Boşalt", style: "destructive", onPress: () => {
+                                                            useCartStore.getState().clearCart();
+                                                            setOrderMode('eat_now');
+                                                            useCartStore.getState().addItem({ menu_item_id: pkg.id, name: cleanLabel, price: pkg.price, quantity: 1, is_package: true });
+                                                        }}
+                                                    ]);
+                                                } else {
+                                                    setOrderMode('eat_now');
+                                                    useCartStore.getState().addItem({ menu_item_id: pkg.id, name: cleanLabel, price: pkg.price, quantity: 1, is_package: true });
+                                                    Alert.alert("Eklendi", `${cleanLabel} sepete eklendi.`);
+                                                }
+                                            }}
+                                            style={{ backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 }}>
+                                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>EKLE & YE</Text>
                                         </TouchableOpacity>
-                                    </View>
-                                ) : (
-                                    <TouchableOpacity 
-                                        onPress={() => {
-                                            if (cartItemCount > 0 && orderMode !== 'eat_now' && orderMode !== null) {
-                                                Alert.alert("Sepet Sıfırlanacak", "Farklı modda ürünleriniz var, sepet boşaltılsın mı?", [
-                                                    { text: "Vazgeç" },
-                                                    { text: "Boşalt", style: "destructive", onPress: () => {
-                                                        useCartStore.getState().clearCart();
-                                                        setOrderMode('eat_now');
-                                                        useCartStore.getState().addItem({ menu_item_id: pkg.id, name: cleanLabel, price: pkg.price, quantity: 1, is_package: true });
-                                                    }}
-                                                ]);
-                                            } else {
-                                                setOrderMode('eat_now');
-                                                useCartStore.getState().addItem({ menu_item_id: pkg.id, name: cleanLabel, price: pkg.price, quantity: 1, is_package: true });
-                                                Alert.alert("Eklendi", `${cleanLabel} sepete eklendi.`);
-                                            }
-                                        }}
-                                        style={{ backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 }}>
-                                        <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>EKLE & YE</Text>
-                                    </TouchableOpacity>
-                                )}
+                                    )}
+                                </View>
                             </View>
                         </View>
                     );
@@ -400,14 +406,37 @@ export default function HomeScreen() {
 
 
 
-        {/* Balance Card */}
-        {/* Balance Card Kaldırıldı */}
-
-        {/* Removed Last Order Highlight based on user request */}
-
-        {/* Removed Popular Section based on user request */}
-
-
+        {/* Balance Card for Individual Accounts */}
+        {!isCompany && (
+          <View style={[styles.balanceCard, { marginTop: 16, marginBottom: 32 }]}>
+            <MaterialIcons name="account-balance-wallet" size={120} color={colors.text === '#f8fafc' ? 'rgba(6, 78, 59, 0.05)' : 'rgba(255,255,255,0.03)'} style={styles.balanceBgIcon} />
+            <Text style={styles.balanceLabel}>GÜNCEL BORÇ DURUMU</Text>
+            <View style={styles.balanceRow}>
+              <Text style={styles.balanceCurrency}>₺</Text>
+              <Text style={styles.balanceValue}>{currentDebt.toLocaleString("tr-TR")}</Text>
+            </View>
+            
+            <View style={styles.balanceDivider} />
+            
+            <View style={styles.balanceFooter}>
+              <View>
+                <Text style={styles.lastPaymentText}>Ödenmemiş Siparişler</Text>
+                <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.text === '#f8fafc' ? '#064e3b' : '#fff', opacity: 0.9, marginTop: 4 }}>
+                  {filteredUnpaidOrders.length} Adet Sipariş
+                </Text>
+              </View>
+              {currentDebt > 0 && (
+                <TouchableOpacity 
+                  activeOpacity={0.8}
+                  onPress={generatePdf}
+                  style={{ backgroundColor: colors.text === '#f8fafc' ? '#064e3b' : '#334155', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <MaterialIcons name="picture-as-pdf" size={16} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>Döküm</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
       </ScrollView>
 
       {/* Borç Detayı Modalı Kaldırıldı */}
