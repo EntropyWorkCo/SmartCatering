@@ -150,14 +150,14 @@ export default function AdminMessages() {
                                         <View style={styles.avatar}>
                                             <MaterialIcons name="person" size={20} color={colors.primary} />
                                         </View>
-                                        <View>
-                                            <Text style={styles.userName}>{order.userName}</Text>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.userName} numberOfLines={1}>{order.userName}</Text>
                                             {order.companyName && (
-                                                <Text style={{ fontSize: 10, color: colors.primary, fontWeight: 'bold' }}>
+                                                <Text style={{ fontSize: 10, color: colors.primary, fontWeight: 'bold' }} numberOfLines={1}>
                                                     {order.companyName}
                                                 </Text>
                                             )}
-                                            <Text style={styles.orderLabel}>Sipariş: #{order.orderNumber} ({order.status})</Text>
+                                            <Text style={styles.orderLabel} numberOfLines={1}>Sipariş: #{order.orderNumber} ({order.status})</Text>
                                         </View>
                                     </View>
                                     <Text style={styles.timeText}>{order.date}</Text>
@@ -187,14 +187,14 @@ export default function AdminMessages() {
                                         <View style={styles.avatar}>
                                             <MaterialIcons name="person" size={20} color={colors.primary} />
                                         </View>
-                                        <View>
-                                            <Text style={styles.userName}>{msg.userName}</Text>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.userName} numberOfLines={1}>{msg.userName}</Text>
                                             {msg.companyName && (
-                                                <Text style={{ fontSize: 10, color: colors.primary, fontWeight: 'bold' }}>
+                                                <Text style={{ fontSize: 10, color: colors.primary, fontWeight: 'bold' }} numberOfLines={1}>
                                                     {msg.companyName}
                                                 </Text>
                                             )}
-                                            <Text style={styles.orderLabel}>Destek / Öneri Formu</Text>
+                                            <Text style={styles.orderLabel} numberOfLines={1}>Destek / Öneri Formu</Text>
                                         </View>
                                     </View>
                                     <Text style={styles.timeText}>{msg.date}</Text>
@@ -328,6 +328,8 @@ const getStyles = (colors: any) => StyleSheet.create({
     userInfo: {
         flexDirection: "row",
         alignItems: "center",
+        flex: 1,
+        paddingRight: 8,
         gap: 12,
     },
     avatar: {

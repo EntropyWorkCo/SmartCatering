@@ -139,6 +139,22 @@ export const adisyonService = {
     return data;
   },
 
+  async clearUserDebt(userId: string) {
+    const { error } = await supabase
+      .from("adisyon")
+      .update({
+        status: "PAID",
+        paid_at: new Date().toISOString()
+      })
+      .eq("user_id", userId)
+      .not("status", "in", '("CANCELLED","İptal","PAID","Ödendi","COMPLETED","Tamamlandı")');
+
+    if (error) {
+      console.error("clearUserDebt error:", error);
+      throw error;
+    }
+  },
+
   async getCompanyOrders(companyId: string) {
     try {
       // 1. Get company owner id

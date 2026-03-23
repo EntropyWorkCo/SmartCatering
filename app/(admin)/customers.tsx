@@ -16,8 +16,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context"; //Telefonun notch / status bar alanına çarpmamak için kullanılır
 
 // TODO: Replace with actual backend integration (e.g. useAdmin hook fetching users from Supabase profiles table)
-// For now, providing a mock matching the web code's structure
-//bir User interface tanımlanmış. Her müşteri için şu bilgiler tutuluyor
 interface User {
     id: string;
     name: string;
@@ -25,6 +23,8 @@ interface User {
     company?: string;
     vkn?: string | null;
     balance?: number;
+    isOwner?: boolean;
+    companyBalance?: number;
 }
 
 export default function AdminCustomers() {
@@ -63,25 +63,44 @@ export default function AdminCustomers() {
 
                     if (usersData) {
                         const formattedUsers: User[] = usersData.map((profile: any) => {
-                            // Find company if exists
-                            const userCompany = companiesData?.find((c: any) => c.user_id === profile.id);
+                            // First check if user is a company owner
+                            let isOwner = false;
+                            let userCompany = companiesData?.find((c: any) => c.user_id === profile.id);
+                            
+                            if (userCompany) {
+                                isOwner = true;
+                            } else {
+                                // If not owner, check if employee
+                                userCompany = companiesData?.find((c: any) => c.id === profile.company_id);
+                            }
 
                             // Calculate balance
                             let balance = 0;
-                            if (ordersData) {
-                                const userOrders = ordersData.filter((o: any) => 
-                                    o.user_id === profile.id && !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)
-                                );
-                                balance = userOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0);
+                            if (isOwner && userCompany) {
+                                // Firma sahibi ise şirketin güncel borcunu al
+                                balance = userCompany.balance || 0;
+                            } else if (userCompany) {
+                                // Firma çalışanı ise borcu olmaz
+                                balance = 0;
+                            } else {
+                                // Bireysel ise siparişlerden çek
+                                if (ordersData) {
+                                    const userOrders = ordersData.filter((o: any) => 
+                                        o.user_id === profile.id && !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)
+                                    );
+                                    balance = userOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0);
+                                }
                             }
 
                             return {
                                 id: profile.id,             
                                 name: profile.full_name || 'İsimsiz Müşteri',
                                 phone: profile.phone || 'Telefon Yok',
-                                company: userCompany ? userCompany.company_name : (profile.company_name || 'Bireysel Üyelik'),
+                                company: userCompany ? userCompany.company_name : 'Bireysel Üyelik',
                                 vkn: userCompany ? userCompany.tax_number : null,
-                                balance: balance
+                                balance: balance,
+                                isOwner: isOwner,
+                                companyBalance: userCompany ? (userCompany.balance || 0) : 0
                             };
                         });
                         setCustomers(formattedUsers);
@@ -110,10 +129,9 @@ export default function AdminCustomers() {
         for (const c of kurumsalCustomers) {
             const key = `${c.company}-${c.vkn || ''}`;
             if (!groups[key]) {
-                groups[key] = { companyName: c.company || 'İsimsiz Firma', vkn: c.vkn || '', totalDebt: 0, customers: [] };
+                groups[key] = { companyName: c.company || 'İsimsiz Firma', vkn: c.vkn || '', totalDebt: c.companyBalance || 0, customers: [] };
             }
             groups[key].customers.push(c);
-            groups[key].totalDebt += (c.balance || 0);
         }
         return Object.values(groups).sort((a, b) => b.totalDebt - a.totalDebt);
     }, [kurumsalCustomers]);
@@ -136,7 +154,7 @@ export default function AdminCustomers() {
 
                 <View style={styles.customerInfo}>
                     <Text style={styles.customerName} numberOfLines={1}>
-                        {customer.name}
+                        {customer.name} {customer.isOwner ? '(Firma Sahibi)' : ''}
                     </Text>
                     <Text style={styles.customerPhone}>{customer.phone}</Text>
                     {customer.company && customer.company !== "Bireysel Üyelik" && !isNested && (
@@ -148,10 +166,20 @@ export default function AdminCustomers() {
                 </View>
 
                 <View style={styles.balanceContainer}>
-                    <Text style={[styles.balanceAmount, { color: (customer.balance || 0) > 0 ? colors.text : colors.muted }]}>
-                        ₺{customer.balance?.toLocaleString("tr-TR") || 0}
-                    </Text>
-                    <Text style={styles.balanceLabel}>BORÇ</Text>
+                    {(!customer.company || customer.company === "Bireysel Üyelik" || customer.isOwner) ? (
+                        (customer.balance || 0) <= 0 ? (
+                            <Text style={[styles.balanceAmount, { color: "#4CAF50", fontSize: 12 }]}>
+                                Borç Ödendi
+                            </Text>
+                        ) : (
+                            <>
+                                <Text style={[styles.balanceAmount, { color: colors.text }]}>
+                                    ₺{customer.balance?.toLocaleString("tr-TR") || 0}
+                                </Text>
+                                <Text style={styles.balanceLabel}>BORÇ</Text>
+                            </>
+                        )
+                    ) : null}
                 </View>
             </View>
         </View>
@@ -230,10 +258,18 @@ export default function AdminCustomers() {
                                         </View>
                                         <View style={styles.accordionRightContainer}>
                                             <View style={styles.balanceContainer}>
-                                                <Text style={[styles.balanceAmount, { color: group.totalDebt > 0 ? colors.text : colors.muted }]}>
-                                                    ₺{group.totalDebt.toLocaleString("tr-TR")}
-                                                </Text>
-                                                <Text style={styles.balanceLabel}>TOPLAM BORÇ</Text>
+                                                {group.totalDebt <= 0 ? (
+                                                    <Text style={[styles.balanceAmount, { color: "#4CAF50", fontSize: 12 }]}>
+                                                        Borç Ödendi
+                                                    </Text>
+                                                ) : (
+                                                    <>
+                                                        <Text style={[styles.balanceAmount, { color: colors.text }]}>
+                                                            ₺{group.totalDebt.toLocaleString("tr-TR")}
+                                                        </Text>
+                                                        <Text style={styles.balanceLabel}>TOPLAM BORÇ</Text>
+                                                    </>
+                                                )}
                                             </View>
                                             <MaterialIcons
                                                 name={isExpanded ? "expand-less" : "expand-more"}

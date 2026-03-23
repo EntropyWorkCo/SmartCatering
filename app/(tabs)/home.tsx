@@ -185,6 +185,13 @@ export default function HomeScreen() {
     return [...orders].sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime())[0];
   }, [orders]);
 
+  const activePacketOrder = useMemo(() => {
+    if (!orders || orders.length === 0) return null;
+    return [...orders]
+      .sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime())
+      .find(o => ["PAKET", "Sipariş Ver"].includes(o.order_type) && !["COMPLETED", "DELIVERED", "CANCELLED", "PAID", "Tamamlandı", "Ödendi", "İptal"].includes(o.status));
+  }, [orders]);
+
   const [localPhoto, setLocalPhoto] = React.useState<string | null>(null);
 
   useEffect(() => {
@@ -312,6 +319,11 @@ export default function HomeScreen() {
           />
         </View>
 
+        {/* Canlı Sipariş Takibi */}
+        {activePacketOrder && (
+          <LiveOrderTrackingCard order={activePacketOrder} colors={colors} />
+        )}
+
         {/* Tabldot Seçenekleri (Hızlı Ekleme) */}
         {TABLDOT_PACKAGES.length > 0 && (
           <View style={{ marginBottom: 32, marginTop: 16 }}>
@@ -428,6 +440,83 @@ const ActionCard = ({ icon, title, subtitle, bgColor, onPress, isDisabled = fals
       </View>
     </TouchableOpacity>
   );
+};
+
+const STATUS_COLORS: any = {
+  "PENDING": "#f59e0b",
+  "PREPARING": "#3b82f6",
+  "READY": "#8b5cf6",
+  "COMPLETED": "#10b981",
+};
+
+const STATUS_LABELS: any = {
+  "PENDING": "Alındı",
+  "PREPARING": "Hazırlanıyor",
+  "READY": "Yolda",
+  "COMPLETED": "Teslim",
+};
+
+const STATUS_ICONS: any = {
+  "PENDING": "receipt-long",
+  "PREPARING": "skillet",
+  "READY": "moped",
+  "COMPLETED": "done-all",
+};
+
+const LiveOrderTrackingCard = ({ order, colors }: any) => {
+    const status = order.status;
+    const steps = ["PENDING", "PREPARING", "READY", "COMPLETED"];
+    
+    // Treat unknown status as pending
+    let currentStepIndex = Math.max(0, steps.indexOf(status));
+    
+    // Fallback logic
+    const activeColor = STATUS_COLORS[status] || colors.primary;
+    const activeIcon = STATUS_ICONS[status] || "info";
+    const activeLabel = STATUS_LABELS[status] || status;
+
+    return (
+        <View style={{ backgroundColor: colors.surface, borderRadius: 24, padding: 20, marginBottom: 32, borderWidth: 1, borderColor: activeColor, shadowColor: activeColor, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <View style={{ backgroundColor: activeColor, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}>
+                        <MaterialIcons name={activeIcon} size={24} color="#fff" />
+                    </View>
+                    <View>
+                        <Text style={{ fontSize: 10, fontWeight: '900', color: colors.muted, letterSpacing: 1.5 }}>CANLI TAKİP</Text>
+                        <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginTop: 2 }}>{activeLabel}</Text>
+                    </View>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={{ fontSize: 10, color: colors.muted, fontWeight: 'bold' }}>SİPARİŞ</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '900', color: colors.text }}>#{String(order.id).substring(0,6).toUpperCase()}</Text>
+                </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 10 }}>
+                {steps.map((step, idx) => {
+                    const isActive = idx <= currentStepIndex;
+                    const isCurrent = idx === currentStepIndex;
+                    const stepColor = isActive ? activeColor : colors.surfaceBorder;
+                    return (
+                        <View key={step} style={{ flex: 1, position: 'relative', alignItems: 'center' }}>
+                            <View style={{ position: 'relative', zIndex: 2, alignItems: 'center', paddingHorizontal: 2 }}>
+                                <View style={{ height: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 4, backgroundColor: colors.surface, paddingHorizontal: 4 }}>
+                                    <View style={{ width: isCurrent ? 14 : 10, height: isCurrent ? 14 : 10, borderRadius: 10, backgroundColor: stepColor, shadowColor: stepColor, shadowOpacity: isCurrent ? 0.5 : 0, shadowRadius: 4, elevation: isCurrent ? 4 : 0 }} />
+                                </View>
+                                <Text style={{ fontSize: 9, fontWeight: isActive ? '900' : 'bold', color: isActive ? colors.text : colors.muted, textAlign: 'center', lineHeight: 12 }}>
+                                    {STATUS_LABELS[step]}
+                                </Text>
+                            </View>
+                            {idx < steps.length - 1 && (
+                                <View style={{ position: 'absolute', top: 6.5, left: '50%', right: '-50%', height: 3, backgroundColor: idx < currentStepIndex ? activeColor : colors.surfaceBorder, zIndex: 1 }} />
+                            )}
+                        </View>
+                    );
+                })}
+            </View>
+        </View>
+    );
 };
 
 const stylesBase = StyleSheet.create({

@@ -19,16 +19,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const STATUS_COLORS: any = {
   "PENDING": "#f39c12",
   "PREPARING": "#3498db",
-  "ON_WAY": "#9b59b6",
-  "DELIVERED": "#2ecc71",
+  "READY": "#9b59b6",
+  "COMPLETED": "#2ecc71",
   "CANCELLED": "#e74c3c",
 };
 
 const STATUS_LABELS: any = {
   "PENDING": "Sipariş Alındı",
   "PREPARING": "Mutfakta",
-  "ON_WAY": "Yolda",
-  "DELIVERED": "Teslim Edildi",
+  "READY": "Yolda",
+  "COMPLETED": "Teslim Edildi",
   "CANCELLED": "İptal Edildi",
 };
 
@@ -42,7 +42,7 @@ export default function AdminDashboard() {
 
   const activePacketOrders = useMemo(() => {
     return (orders || [])
-      .filter(o => o.order_type === "PAKET" && !["DELIVERED", "CANCELLED", "PAID"].includes(o.status))
+      .filter(o => ["PAKET", "Sipariş Ver"].includes(o.order_type) && !["COMPLETED", "CANCELLED", "PAID"].includes(o.status))
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [orders]);
 
@@ -117,16 +117,16 @@ export default function AdminDashboard() {
                 )}
                 {order.status === "PREPARING" && (
                   <TouchableOpacity 
-                    style={[styles.actionBtn, { backgroundColor: STATUS_COLORS.ON_WAY }]}
-                    onPress={() => updateOrderStatus(order.id, "ON_WAY")}
+                    style={[styles.actionBtn, { backgroundColor: STATUS_COLORS.READY }]}
+                    onPress={() => updateOrderStatus(order.id, "READY")}
                   >
                     <Text style={styles.actionBtnText}>Yola Çıkar</Text>
                   </TouchableOpacity>
                 )}
-                {order.status === "ON_WAY" && (
+                {order.status === "READY" && (
                   <TouchableOpacity 
-                    style={[styles.actionBtn, { backgroundColor: STATUS_COLORS.DELIVERED }]}
-                    onPress={() => updateOrderStatus(order.id, "DELIVERED")}
+                    style={[styles.actionBtn, { backgroundColor: STATUS_COLORS.COMPLETED }]}
+                    onPress={() => updateOrderStatus(order.id, "COMPLETED")}
                   >
                     <Text style={styles.actionBtnText}>Teslim Edildi</Text>
                   </TouchableOpacity>

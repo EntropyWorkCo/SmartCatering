@@ -1,6 +1,7 @@
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
+import { adisyonService } from "@/lib/services/adisyonService";
 import { billingService } from "@/lib/services/billingService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
@@ -23,7 +24,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function SummaryScreen() {
-  const { orders, loading, updateOrderStatus } = useAdisyon();
+  const { orders, loading, updateOrderStatus, fetchOrders } = useAdisyon();
   const insets = useSafeAreaInsets();
   const theme = useResolvedTheme();
   const colors = Colors[theme];
@@ -108,7 +109,21 @@ export default function SummaryScreen() {
       const safeOrders = orders || [];
 
       safeOrders.forEach((order) => {
-        const isActuallyCorporate = !!order.companyName;
+        // Find if user is a company owner locally
+        const ownedCompany = companies.find(c => c.user_id === order.user_id);
+        
+        let finalCompanyName = order.companyName;
+        let finalCompanyId = order.companyId;
+        let finalManualDebt = order.companies?.balance || 0;
+        
+        // If owner, override company info
+        if (ownedCompany) {
+            finalCompanyName = ownedCompany.company_name;
+            finalCompanyId = ownedCompany.id;
+            finalManualDebt = ownedCompany.balance || 0;
+        }
+
+        const isActuallyCorporate = !!finalCompanyName;
 
         const match =
           (mainTab === "KURUMSAL" && isActuallyCorporate) ||
@@ -117,20 +132,20 @@ export default function SummaryScreen() {
         if (!match) return;
 
         const key = isActuallyCorporate
-          ? order.companyName
+          ? finalCompanyName
           : order.user_id;
 
         if (!map[key]) {
           map[key] = {
             userId: order.user_id,
-            companyId: order.companyId,
+            companyId: finalCompanyId,
             name: order.userName || "Bilinmeyen Müşteri",
             isCorporate: isActuallyCorporate,
             displayName: isActuallyCorporate
-              ? order.companyName
+              ? finalCompanyName
               : order.userName || "Bireysel Müşteri",
             total: 0,
-            manualDebt: order.companies?.balance || 0,
+            manualDebt: finalManualDebt,
             count: 0,
             orders: [],
           };
@@ -150,7 +165,7 @@ export default function SummaryScreen() {
       console.error("Gruplama hatası:", e);
       return [];
     }
-  }, [orders, mainTab]);
+  }, [orders, mainTab, companies]);
 
   const totalDebt = useMemo(
     () => groupedAccounts.reduce((acc, curr) => acc + (curr.isCorporate ? curr.manualDebt : curr.total), 0),
@@ -163,14 +178,47 @@ export default function SummaryScreen() {
     try {
       await billingService.updateCompanyBalance(selectedCompanyId, Number(newDebtAmount));
       Alert.alert("Başarılı", "Borç tutarı güncellendi.");
+      setCompanies(prev => prev.map(c => 
+        c.id === selectedCompanyId ? { ...c, balance: Number(newDebtAmount) } : c
+      ));
       setDebtModalVisible(false);
       setNewDebtAmount("");
-      // Refresh logic would go here, usually useAdisyon would re-fetch if linked
     } catch (err: any) {
       Alert.alert("Hata", "Borç güncellenirken hata oluştu: " + err.message);
     } finally {
       setUpdatingDebt(false);
     }
+  };
+
+  const handleClearDebt = (account: any) => {
+    Alert.alert(
+      "Borç Sıfırlama",
+      "Bu müşterinin/firmanın borcunu sıfırlayıp ödendi olarak işaretlemek istediğinize emin misiniz?",
+      [
+        { text: "İptal", style: "cancel" },
+        { 
+          text: "Evet, Sıfırla", 
+          style: "destructive",
+          onPress: async () => {
+             setUpdatingDebt(true);
+             try {
+               if (account.isCorporate && account.companyId) {
+                 await billingService.clearCompanyBalance(account.companyId);
+                 setCompanies(prev => prev.map(c => c.id === account.companyId ? { ...c, balance: 0 } : c));
+               } else if (account.userId) {
+                 await adisyonService.clearUserDebt(account.userId);
+                 await fetchOrders();
+               }
+               Alert.alert("Başarılı", "Borç sıfırlandı ve ödendi olarak işaretlendi.");
+             } catch (err: any) {
+               Alert.alert("Hata", "Borç sıfırlanırken hata oluştu: " + err.message);
+             } finally {
+               setUpdatingDebt(false);
+             }
+          }
+        }
+      ]
+    );
   };
 
   const handleExportPDF = async (account: any) => {
@@ -305,7 +353,17 @@ export default function SummaryScreen() {
               <View style={styles.accountTextCont}>
                 <Text style={styles.accountName}>{account.displayName}</Text>
                 <Text style={styles.accountBalance}>
-                  Güncel Borç: <Text style={{ color: colors.primary, fontWeight: 'bold' }}>₺{(account.isCorporate ? account.manualDebt : account.total).toLocaleString("tr-TR")}</Text>
+                  {(() => {
+                    const debtAmount = account.isCorporate ? account.manualDebt : account.total;
+                    if (debtAmount <= 0) {
+                      return <Text style={{ color: "#4CAF50", fontWeight: 'bold' }}>Borç Ödendi</Text>;
+                    }
+                    return (
+                      <>
+                        Güncel Borç: <Text style={{ color: colors.primary, fontWeight: 'bold' }}>₺{debtAmount.toLocaleString("tr-TR")}</Text>
+                      </>
+                    );
+                  })()}
                 </Text>
               </View>
             </View>
@@ -315,17 +373,36 @@ export default function SummaryScreen() {
                 <Text style={styles.outlineBtnText}>Döküm İncele</Text>
               </TouchableOpacity>
 
-              {account.isCorporate && (
-                <TouchableOpacity 
-                   style={[styles.primaryBtn, { backgroundColor: colors.info }]} 
-                   onPress={() => {
-                     setSelectedCompanyId(account.companyId || "");
-                     setNewDebtAmount((account.manualDebt || 0).toString());
-                     setDebtModalVisible(true);
-                   }}
-                >
-                  <Text style={styles.primaryBtnText}>Borç Gir/Düzenle</Text>
-                </TouchableOpacity>
+              {account.isCorporate ? (
+                <>
+                  <TouchableOpacity 
+                     style={[styles.primaryBtn, { backgroundColor: "#2196F3", marginLeft: 8 }]} 
+                     onPress={() => {
+                       setSelectedCompanyId(account.companyId || "");
+                       setNewDebtAmount((account.manualDebt || 0).toString());
+                       setDebtModalVisible(true);
+                     }}
+                  >
+                    <Text style={styles.primaryBtnText}>Borç Gir</Text>
+                  </TouchableOpacity>
+                  {(account.manualDebt > 0) && (
+                    <TouchableOpacity 
+                       style={[styles.primaryBtn, { backgroundColor: "#4CAF50", marginLeft: 8 }]} 
+                       onPress={() => handleClearDebt(account)}
+                    >
+                      <Text style={styles.primaryBtnText}>Borç Ödendi</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              ) : (
+                  account.total > 0 ? (
+                    <TouchableOpacity 
+                       style={[styles.primaryBtn, { backgroundColor: "#4CAF50", marginLeft: 8 }]} 
+                       onPress={() => handleClearDebt(account)}
+                    >
+                      <Text style={styles.primaryBtnText}>Borç Ödendi</Text>
+                    </TouchableOpacity>
+                  ) : null
               )}
             </View>
           </View>
