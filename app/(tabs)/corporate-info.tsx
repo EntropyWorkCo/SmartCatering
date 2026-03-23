@@ -88,6 +88,27 @@ export default function CorporateInfoScreen() {
     }, [profile]);
 
     useEffect(() => {
+        if (!actualCompanyId) return;
+
+        const channel = supabase
+            .channel(`company-updates-${actualCompanyId}`)
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "companies" },
+                (payload: any) => {
+                    if (payload.new && payload.new.id === actualCompanyId) {
+                        loadOrders();
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [actualCompanyId]);
+
+    useEffect(() => {
         if (activeTab === 'EMPLOYEES' && actualCompanyId) {
             loadEmployees();
         } else if (activeTab === 'DEBTS' && actualCompanyId) {

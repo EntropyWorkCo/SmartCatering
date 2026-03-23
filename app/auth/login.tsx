@@ -323,7 +323,7 @@ const getStyles = (colors: any) => StyleSheet.create({
         paddingHorizontal: 16,
         backgroundColor: colors.surface,
     },
-    prefix: { fontSize: 18, color: colors.primary, fontWeight: '900', marginRight: 10 },
+    prefix: { fontSize: 18, color: colors.text, fontWeight: '900', marginRight: 10 },
     inputPhone: { flex: 1, height: '100%', fontSize: 18, color: colors.text, fontWeight: 'bold', letterSpacing: 2 },
     inputText: { flex: 1, height: '100%', fontSize: 16, color: colors.text, fontWeight: '600' },
     registerFields: { gap: 0 }, // Gaps are handled by labels and inputWrappers

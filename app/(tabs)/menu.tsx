@@ -79,7 +79,7 @@ export default function MenuScreen() {
   let filteredMenu: any[] = [];
 
   // Günün Menüsü (Always separate unless filtered out entirely, but user wants it at top)
-  const dailyMenu = menu.filter(m => ["ÇORBA", "ANA YEMEK", "YARDIMCI", "TATLI"].includes(m.category));
+  const dailyMenu = menu;
 
   if (selectedCategory === "TÜMÜ") {
     filteredMenu = [
@@ -513,7 +513,7 @@ export default function MenuScreen() {
             </View>
 
             <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 100 }}>
-              {["ÇORBA", "ANA YEMEK", "YARDIMCI", "TATLI"].map(catName => {
+              {Array.from(new Set(dailyMenu.map(m => m.category))).map(catName => {
                 const catItems = dailyMenu.filter(m => m.category === catName);
                 if (catItems.length === 0) return null;
                 
@@ -530,6 +530,7 @@ export default function MenuScreen() {
                         >
                           <View style={{ flex: 1 }}>
                             <Text style={styles.modalMealName}>{item.name}</Text>
+                            {item.price > 0 && <Text style={{ fontSize: 11, color: colors.danger, marginTop: 2 }}>+ ₺{item.price} Fark</Text>}
                           </View>
                           {isSelected && <MaterialIcons name="check-circle" size={20} color={colors.primary} />}
                         </TouchableOpacity>

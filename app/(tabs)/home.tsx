@@ -73,7 +73,7 @@ export default function HomeScreen() {
   };
 
   const dailyMenu = useMemo(() => {
-    return menu.filter(m => ["ÇORBA", "ANA YEMEK", "YARDIMCI"].includes(m.category));
+    return menu.filter(m => ["ÇORBA", "ANA YEMEK", "YARDIMCI", "TATLI", "MEYVE"].includes(m.category.toUpperCase()));
   }, [menu]);
 
   useEffect(() => {
@@ -189,7 +189,7 @@ export default function HomeScreen() {
     if (!orders || orders.length === 0) return null;
     return [...orders]
       .sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime())
-      .find(o => ["PAKET", "Sipariş Ver"].includes(o.order_type) && !["COMPLETED", "DELIVERED", "CANCELLED", "PAID", "Tamamlandı", "Ödendi", "İptal"].includes(o.status));
+      .find(o => o.order_type === "Sipariş Ver" && ["PENDING", "PREPARING", "READY", "HAZIR", "HAZIRLANIYOR", "BEKLEMEDE"].includes(o.status.toUpperCase()));
   }, [orders]);
 
   const [localPhoto, setLocalPhoto] = React.useState<string | null>(null);
@@ -306,13 +306,13 @@ export default function HomeScreen() {
         {/* Quick Actions Grid (Main Order Flows) */}
         <View style={styles.gridContainer}>
           <ActionCard
-            icon="restaurant" title="ŞİMDİ YE" subtitle="Hemen Teslim"
+            icon="restaurant" title="ŞİMDİ YE" subtitle="Restoranda"
             bgColor="#f59e0b" 
             onPress={() => handlePressAction('eat_now')}
             isDisabled={cartItemCount > 0 && orderMode === 'pre_order'}
           />
           <ActionCard
-            icon="event-note" title="SİPARİŞ VER" subtitle="Önceden Planla"
+            icon="event-note" title="SİPARİŞ VER" subtitle="Paket"
             bgColor="#10b981" 
             onPress={() => handlePressAction('pre_order')}
             isDisabled={cartItemCount > 0 && orderMode === 'eat_now'}
@@ -328,6 +328,17 @@ export default function HomeScreen() {
         {TABLDOT_PACKAGES.length > 0 && (
           <View style={{ marginBottom: 32, marginTop: 16 }}>
              <Text style={[styles.sectionTitle, { marginBottom: 4 }]}>HIZLI TABLDOT (ŞİMDİ YE)</Text>
+             
+             {dailyMenu.length > 0 && (
+               <View style={{ backgroundColor: colors.surface, padding: 12, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.surfaceBorder + '80', shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 }}>
+                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                     <MaterialIcons name="restaurant" size={16} color={colors.primary} />
+                     <Text style={{ fontSize: 13, fontWeight: '900', color: colors.primary }}>BUGÜNÜN MENÜSÜ</Text>
+                 </View>
+                 <Text style={{ fontSize: 13, color: colors.text, opacity: 0.8, lineHeight: 18 }}>{dailyMenu.map(m => m.name).join("  •  ")}</Text>
+               </View>
+             )}
+
              <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 16, paddingHorizontal: 6, lineHeight: 16 }}>
                  * Restoranda yiyecekseniz <Text style={{fontWeight: 'bold', color: colors.text}}>4'LÜ TABLDOT</Text>, <Text style={{fontWeight: 'bold', color: colors.text}}>3'LÜ TABLDOT</Text> veya <Text style={{fontWeight: 'bold', color: colors.text}}>2'Lİ TABLDOT</Text> menülerinden birini seçebilirsiniz.
              </Text>

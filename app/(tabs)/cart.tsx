@@ -34,6 +34,7 @@ export default function CartScreen() {
 
     const orderMode = useCartStore((state) => state.orderMode);
     const orderType = orderMode === "eat_now" ? "Şimdi Ye" : "Sipariş Ver";
+    const [address, setAddress] = useState("");
     const [orderNote, setOrderNote] = useState("");
     const [hasGuest, setHasGuest] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,6 +50,11 @@ export default function CartScreen() {
             return;
         }
 
+        if (orderType === "Sipariş Ver" && !address.trim()) {
+            Alert.alert("Hata", "Lütfen siparişinize devam etmek için teslimat adresini giriniz.");
+            return;
+        }
+
         Alert.alert(
             "Siparişi Onayla",
             `${isCompany ? '' : `${getTotal()}₺ tutarındaki `}siparişinizi onaylıyor musunuz?\nSipariş Türü: ${orderType}`,
@@ -61,7 +67,7 @@ export default function CartScreen() {
                         setIsSubmitting(true);
                         try {
                             const noteContent = `${orderNote ? `Not: ${orderNote}` : ""}`;
-                            const note = `${hasGuest ? '[MİSAFİRLE BERABER] ' : ''}${noteContent}`.trim();
+                            const note = `[Adres: ${address}] ${hasGuest ? '[MİSAFİRLE BERABER] ' : ''}${noteContent}`.trim();
                             const adisyon = await adisyonService.createOrder(
                                 user.id,
                                 getTotal(),
@@ -168,6 +174,19 @@ export default function CartScreen() {
             {items.length > 0 && (
                 <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
                     <View style={styles.noteContainer}>
+                        {orderType === "Sipariş Ver" && (
+                            <>
+                                <Text style={[styles.orderTypeLabel, { marginBottom: 8 }]}>Teslimat Adresi:</Text>
+                                <TextInput
+                                    style={[styles.noteInput, { minHeight: 48, marginBottom: 16 }]}
+                                    placeholder="Açık adres, bina, kat, daire giriniz..."
+                                    placeholderTextColor={colors.muted}
+                                    value={address}
+                                    onChangeText={setAddress}
+                                />
+                            </>
+                        )}
+
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                             <Text style={[styles.orderTypeLabel, { marginBottom: 0 }]}>Sipariş Notu (Opsiyonel):</Text>
                             <TouchableOpacity 
@@ -175,12 +194,12 @@ export default function CartScreen() {
                                 activeOpacity={0.7}
                                 style={{
                                     flexDirection: 'row', alignItems: 'center', gap: 6,
-                                    backgroundColor: hasGuest ? colors.primary : 'transparent',
+                                    backgroundColor: hasGuest ? colors.primary + '15' : 'transparent',
                                     paddingHorizontal: 12, paddingVertical: 6,
                                     borderRadius: 12, borderWidth: 1, borderColor: hasGuest ? colors.primary : colors.surfaceBorder
                                 }}>
-                                <MaterialIcons name={hasGuest ? "people" : "person-outline"} size={16} color={hasGuest ? "#fff" : colors.text} />
-                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: hasGuest ? "#fff" : colors.text }}>Misafirim Var</Text>
+                                <MaterialIcons name={hasGuest ? "check-box" : "check-box-outline-blank"} size={18} color={hasGuest ? colors.primary : colors.muted} />
+                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: hasGuest ? colors.primary : colors.text }}>Misafirim Var</Text>
                             </TouchableOpacity>
                         </View>
                         <TextInput

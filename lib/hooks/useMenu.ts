@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { menuService } from "../services/menuService";
+import { supabase } from "../supabase";
 
 export const useMenu = (onlyActive: boolean = true) => {
   const [menu, setMenu] = useState<any[]>([]);
@@ -22,6 +23,22 @@ export const useMenu = (onlyActive: boolean = true) => {
 
   useEffect(() => {
     fetchMenu();
+
+    // Realtime Güncelleme Dinleyicisi
+    const channel = supabase
+      .channel("menu-items-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "menu_items" },
+        () => {
+          fetchMenu();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [onlyActive]);
 
   return { menu, systemPrices, loading, refetch: fetchMenu };

@@ -92,7 +92,9 @@ export const adisyonService = {
           userName: user?.full_name || 'Müşteri',
           companyId: company?.id || null,
           companyName: company?.company_name || null,
-          isCorporate: !!company
+          companyBalance: company?.balance || 0,
+          isCorporate: !!company || user?.is_company === true,
+          isOwner: company?.user_id === user?.id
         };
       });
     } catch (error: any) {

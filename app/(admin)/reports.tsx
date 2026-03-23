@@ -7,7 +7,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import * as Print from 'expo-print';
 import { router, useFocusEffect } from "expo-router";
 import * as Sharing from 'expo-sharing';
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     Alert,
     ScrollView,
@@ -156,13 +156,26 @@ const ReportMenuItem = ({ icon, label, subtitle, onClick, isLast, colors, styles
 
 const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
     const insets = useSafeAreaInsets();
-    const [filterPeriod, setFilterPeriod] = useState<"DAILY" | "WEEKLY" | "MONTHLY">("DAILY");
+    const [mainTab, setMainTab] = useState<"KURUMSAL" | "BIREYSEL">("KURUMSAL");
+    const [filterPeriod, setFilterPeriod] = useState<"DAILY" | "WEEKLY" | "MONTHLY" | "15_DAYS" | "YEARLY">("15_DAYS");
+
+    useEffect(() => {
+        if (mainTab === "KURUMSAL") {
+            setFilterPeriod("15_DAYS");
+        } else {
+            setFilterPeriod("DAILY");
+        }
+    }, [mainTab]);
 
     const stats = useMemo(() => {
         const validOrders = orders.filter((o: any) => !["CANCELLED", "İptal"].includes(o.status));
 
         const now = new Date();
         const filtered = validOrders.filter((o: any) => {
+            const isCorporate = o.isCorporate || !!o.companyName;
+            const matchTab = (mainTab === "KURUMSAL" && isCorporate) || (mainTab === "BIREYSEL" && !isCorporate);
+            if (!matchTab) return false;
+
             const orderDate = new Date(o.created_at);
 
             if (filterPeriod === "DAILY") {
@@ -172,14 +185,50 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                 return orderDate >= weekAgo;
             } else if (filterPeriod === "MONTHLY") {
                 return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
+            } else if (filterPeriod === "15_DAYS") {
+                const fifteenDaysAgo = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+                return orderDate >= fifteenDaysAgo;
+            } else if (filterPeriod === "YEARLY") {
+                return orderDate.getFullYear() === now.getFullYear();
             }
             return true;
         });
 
-        const revenue = filtered.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
-        const count = filtered.length;
-        return { revenue, count, orders: filtered };
-    }, [orders, filterPeriod]);
+        const mealsCount = filtered.reduce((acc: number, o: any) => {
+            const itemQty = o.adisyon_items?.reduce((iqAcc: number, item: any) => iqAcc + (item.quantity || 0), 0) || 0;
+            return acc + itemQty;
+        }, 0);
+
+        let revenue = 0;
+        if (mainTab === "KURUMSAL") {
+            revenue = filtered.reduce((acc: number, curr: any) => {
+                const isPaid = ["PAID", "Ödendi"].includes(curr.status);
+                return acc + (isPaid ? (curr.total_amount || 0) : 0);
+            }, 0);
+        } else {
+            revenue = filtered.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
+        }
+
+        return { revenue, count: mealsCount, orders: filtered };
+    }, [orders, mainTab, filterPeriod]);
+
+    const [expandedCompanies, setExpandedCompanies] = useState<{ [key: string]: boolean }>({});
+
+    const groupedOrders = useMemo(() => {
+        if (mainTab !== "KURUMSAL") return { "Bireysel": stats.orders };
+
+        const groups: { [key: string]: any[] } = {};
+        stats.orders.forEach((o: any) => {
+            const name = o.companyName || (o.companyId ? `Şirket #${o.companyId}` : `${o.userName} (Kurumsal)`);
+            if (!groups[name]) groups[name] = [];
+            groups[name].push(o);
+        });
+        return groups;
+    }, [stats.orders, mainTab]);
+
+    const toggleCompany = (name: string) => {
+        setExpandedCompanies(prev => ({ ...prev, [name]: !prev[name] }));
+    };
 
     const generatePdf = async () => {
         if (stats.orders.length === 0) {
@@ -188,7 +237,12 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
         }
 
         const dateStr = new Date().toLocaleDateString('tr-TR');
-        const periodName = filterPeriod === "DAILY" ? "Günlük" : filterPeriod === "WEEKLY" ? "Haftalık" : "Aylık";
+        let periodName = "";
+        if (filterPeriod === "DAILY") periodName = "Günlük";
+        else if (filterPeriod === "WEEKLY") periodName = "Haftalık";
+        else if (filterPeriod === "MONTHLY") periodName = "Aylık";
+        else if (filterPeriod === "15_DAYS") periodName = "15 Günlük";
+        else if (filterPeriod === "YEARLY") periodName = "Yıllık";
 
         const tableRows = stats.orders.map((o: any) => `
             <tr>
@@ -204,12 +258,12 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
             <html>
                 <body style="font-family: Helvetica, Arial, sans-serif; padding: 40px; color: #333;">
                     <h1 style="color: ${colors.primary}; margin-bottom: 5px;">Smart Catering</h1>
-                    <h2 style="color: #666; font-weight: normal; margin-top: 0;">${periodName} Satış Raporu</h2>
+                    <h2 style="color: #666; font-weight: normal; margin-top: 0;">${mainTab} - ${periodName} Satış Raporu</h2>
                     <p style="color: #888; font-size: 12px;">Oluşturulma Tarihi: ${dateStr}</p>
                     
                     <div style="display: flex; gap: 20px; margin: 30px 0;">
                         <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; flex: 1;">
-                            <p style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase;">Toplam Ciro</p>
+                            <p style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase;">Toplam Gelir</p>
                             <h2 style="margin: 10px 0 0 0; color: #333;">₺${stats.revenue.toLocaleString("tr-TR")}</h2>
                         </div>
                         <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; flex: 1;">
@@ -241,12 +295,9 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
             const canShare = await Sharing.isAvailableAsync();
             if (canShare) {
                 await Sharing.shareAsync(uri);
-            } else {
-                Alert.alert("Bilgi", "PDF oluşturuldu ancak bu cihazda paylaşım desteklenmiyor.");
             }
         } catch (error) {
             console.error(error);
-            Alert.alert("Hata", "PDF oluşturulurken bir sorun oluştu.");
         }
     };
 
@@ -265,25 +316,49 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                 </TouchableOpacity>
             </View>
 
+            {/* Main Tabs (Kurumsal vs Bireysel) */}
+            <View style={{ flexDirection: "row", marginHorizontal: 24, marginBottom: 12, backgroundColor: colors.surfaceBorder, padding: 4, borderRadius: 12 }}>
+                <TouchableOpacity
+                    style={[{ flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: 8 }, mainTab === "KURUMSAL" && { backgroundColor: colors.surface }]}
+                    onPress={() => setMainTab("KURUMSAL")}
+                >
+                    <Text style={[{ fontSize: 13, fontWeight: "bold", color: colors.muted }, mainTab === "KURUMSAL" && { color: colors.text }]}>KURUMSAL</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[{ flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: 8 }, mainTab === "BIREYSEL" && { backgroundColor: colors.surface }]}
+                    onPress={() => setMainTab("BIREYSEL")}
+                >
+                    <Text style={[{ fontSize: 13, fontWeight: "bold", color: colors.muted }, mainTab === "BIREYSEL" && { color: colors.text }]}>BİREYSEL</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Sub Filter Tabs */}
             <View style={styles.filterTabsContainer}>
-                <TouchableOpacity
-                    style={[styles.filterTab, filterPeriod === "DAILY" && styles.filterTabActive]}
-                    onPress={() => setFilterPeriod("DAILY")}
-                >
-                    <Text style={[styles.filterTabText, filterPeriod === "DAILY" && styles.filterTabTextActive]}>Günlük</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.filterTab, filterPeriod === "WEEKLY" && styles.filterTabActive]}
-                    onPress={() => setFilterPeriod("WEEKLY")}
-                >
-                    <Text style={[styles.filterTabText, filterPeriod === "WEEKLY" && styles.filterTabTextActive]}>Haftalık</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.filterTab, filterPeriod === "MONTHLY" && styles.filterTabActive]}
-                    onPress={() => setFilterPeriod("MONTHLY")}
-                >
-                    <Text style={[styles.filterTabText, filterPeriod === "MONTHLY" && styles.filterTabTextActive]}>Aylık</Text>
-                </TouchableOpacity>
+                {mainTab === "KURUMSAL" ? (
+                    <>
+                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "15_DAYS" && styles.filterTabActive]} onPress={() => setFilterPeriod("15_DAYS")}>
+                            <Text style={[styles.filterTabText, filterPeriod === "15_DAYS" && styles.filterTabTextActive]}>15 Gün</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "MONTHLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("MONTHLY")}>
+                            <Text style={[styles.filterTabText, filterPeriod === "MONTHLY" && styles.filterTabTextActive]}>Aylık</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "YEARLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("YEARLY")}>
+                            <Text style={[styles.filterTabText, filterPeriod === "YEARLY" && styles.filterTabTextActive]}>Yıllık</Text>
+                        </TouchableOpacity>
+                    </>
+                ) : (
+                    <>
+                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "DAILY" && styles.filterTabActive]} onPress={() => setFilterPeriod("DAILY")}>
+                            <Text style={[styles.filterTabText, filterPeriod === "DAILY" && styles.filterTabTextActive]}>Günlük</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "WEEKLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("WEEKLY")}>
+                            <Text style={[styles.filterTabText, filterPeriod === "WEEKLY" && styles.filterTabTextActive]}>Haftalık</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "MONTHLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("MONTHLY")}>
+                            <Text style={[styles.filterTabText, filterPeriod === "MONTHLY" && styles.filterTabTextActive]}>Aylık</Text>
+                        </TouchableOpacity>
+                    </>
+                )}
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -291,6 +366,7 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                     <View style={[styles.statBox, { backgroundColor: colors.infoBg, borderColor: colors.info }]}>
                         <Text style={[styles.statBoxLabel, { color: colors.info }]}>TOPLAM GELİR</Text>
                         <Text style={styles.statBoxValue}>₺{stats.revenue.toLocaleString("tr-TR")}</Text>
+                        {mainTab === "KURUMSAL" && <Text style={{ fontSize: 9, color: colors.muted }}>Sadece ödenenler dahil</Text>}
                     </View>
                     <View style={[styles.statBox, { backgroundColor: colors.cardHighlight, borderColor: colors.primary }]}>
                         <Text style={[styles.statBoxLabel, { color: colors.primary }]}>ÖĞÜN SAYISI</Text>
@@ -300,19 +376,126 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
 
                 <Text style={styles.sectionHeader}>BU DÖNEMKİ İŞLEMLER</Text>
 
-                {stats.orders.length > 0 ? (
-                    stats.orders.map((o: any) => (
-                        <View key={o.id} style={styles.orderCard}>
-                            <View>
-                                <Text style={styles.orderName}>{o.userName || 'Müşteri'}</Text>
-                                <Text style={styles.orderIdLabel}>Sipariş #{String(o.id).substring(0, 8)}</Text>
+                {Object.keys(groupedOrders).length > 0 ? (
+                    Object.keys(groupedOrders).map((companyName) => {
+                        const items = (groupedOrders as any)[companyName];
+                        const isOpen = expandedCompanies[companyName];
+                        const ownerItem = items.find((o: any) => o.isOwner);
+                        const distinctEmps = Array.from(new Set(items.map((o: any) => o.userName || 'Müşteri'))).length;
+                        const companyDebt = items[0]?.companyBalance || 0;
+                        
+                        const compMeals = items.reduce((acc: number, o: any) => acc + (o.adisyon_items?.reduce((iq: number, i: any) => iq + (i.quantity || 0), 0) || 0), 0);
+                        const compRev = items.reduce((acc: number, o: any) => {
+                            const isPaid = ["PAID", "Ödendi"].includes(o.status);
+                            return acc + (mainTab === "KURUMSAL" ? (isPaid ? (o.total_amount || 0) : 0) : (o.total_amount || 0));
+                        }, 0);
+
+                        return (
+                            <View key={companyName} style={{ marginBottom: 12 }}>
+                                {mainTab === "KURUMSAL" ? (
+                                    <TouchableOpacity 
+                                        style={{ backgroundColor: colors.surface, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.surfaceBorder, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                                        onPress={() => toggleCompany(companyName)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <View style={{ flex: 1, paddingRight: 16 }}>
+                                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>{companyName}</Text>
+                                            <Text style={{ fontSize: 12, color: colors.primary, fontWeight: 'bold', marginTop: 4 }}>{distinctEmps} Kayıtlı Çalışan</Text>
+                                        </View>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <View style={{ alignItems: 'flex-end' }}>
+                                                {companyDebt <= 0 ? (
+                                                    <Text style={{ fontSize: 12, color: '#4CAF50', fontWeight: 'bold' }}>Borç Ödendi</Text>
+                                                ) : (
+                                                    <>
+                                                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text }}>₺{companyDebt.toLocaleString("tr-TR")}</Text>
+                                                        <Text style={{ fontSize: 10, color: colors.muted, fontWeight: 'bold', marginTop: 4 }}>TOPLAM BORÇ</Text>
+                                                    </>
+                                                )}
+                                            </View>
+                                            <MaterialIcons name={isOpen ? "expand-less" : "expand-more"} size={24} color={colors.text} style={{ marginLeft: 12 }} />
+                                        </View>
+                                    </TouchableOpacity>
+                                ) : null}
+
+                                {(isOpen || mainTab === "BIREYSEL") && (
+                                    <View style={{ marginTop: mainTab === "KURUMSAL" ? 8 : 0, paddingLeft: mainTab === "KURUMSAL" ? 8 : 0 }}>
+                                        {(() => {
+                                            if (mainTab !== "KURUMSAL") {
+                                                return items.map((o: any) => (
+                                                    <View key={o.id} style={[styles.orderCard, { marginBottom: 8, padding: 16 }]}>
+                                                        <View style={{ flex: 1 }}>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                                                                <Text style={[styles.orderName, { marginBottom: 0 }]}>{o.userName || 'Müşteri'}</Text>
+                                                            </View>
+                                                            <Text style={styles.orderIdLabel}>Sipariş #${String(o.id).substring(0, 8)}</Text>
+                                                            {o.adisyon_items && (
+                                                                <View style={{ marginTop: 6 }}>
+                                                                    {o.adisyon_items.map((item: any, idx: number) => (
+                                                                        <Text key={idx} style={{ fontSize: 11, color: colors.muted }}>
+                                                                            • {item.quantity}x {item.menu_items?.name || 'Ürün'}
+                                                                        </Text>
+                                                                    ))}
+                                                                </View>
+                                                            )}
+                                                        </View>
+                                                        <View style={{ alignItems: "flex-end", justifyContent: 'center' }}>
+                                                            <Text style={[styles.orderTotal, { fontSize: 14 }]}>₺{o.total_amount?.toLocaleString("tr-TR")}</Text>
+                                                            <Text style={[styles.orderTime, ["PAID", "Ödendi"].includes(o.status) && { color: "#10b981" }]}>{o.status}</Text>
+                                                        </View>
+                                                    </View>
+                                                ));
+                                            }
+
+                                            const subGroups: { [key: string]: any } = {};
+                                            items.forEach((o: any) => {
+                                                const uName = o.userName || 'Müşteri';
+                                                if (!subGroups[uName]) {
+                                                    subGroups[uName] = { userName: uName, isOwner: o.isOwner, meals: [] };
+                                                }
+                                                if (o.adisyon_items) {
+                                                    subGroups[uName].meals.push(...o.adisyon_items);
+                                                }
+                                            });
+
+                                            const sortedEmps = Object.values(subGroups).sort((a: any, b: any) => (b.isOwner ? 1 : 0) - (a.isOwner ? 1 : 0));
+
+                                            return sortedEmps.map((emp: any, idx: number) => (
+                                                <View key={idx} style={[styles.orderCard, { marginBottom: 8, padding: 16 }]}>
+                                                    <View style={{ flex: 1 }}>
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                                                            <Text style={[styles.orderName, { marginBottom: 0 }]}>{emp.userName}</Text>
+                                                            {emp.isOwner ? (
+                                                                <View style={{ backgroundColor: colors.infoBg, borderWidth: 1, borderColor: colors.info, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 8 }}>
+                                                                    <Text style={{ color: colors.info, fontSize: 8, fontWeight: '900' }}>FİRMA SAHİBİ</Text>
+                                                                </View>
+                                                            ) : null}
+                                                            <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '900', marginLeft: 'auto' }}>{emp.meals.reduce((acc, item) => acc + (item.quantity || 0), 0)} Öğün</Text>
+                                                        </View>
+                                                        
+                                                        <View style={{ marginTop: 6 }}>
+                                                            {(() => {
+                                                                const aggItems: { [key: string]: number } = {};
+                                                                emp.meals.forEach((i: any) => {
+                                                                    const iName = i.menu_items?.name || 'Ürün';
+                                                                    aggItems[iName] = (aggItems[iName] || 0) + (i.quantity || 0);
+                                                                });
+                                                                return Object.keys(aggItems).map((iName, iIdx) => (
+                                                                    <Text key={iIdx} style={{ fontSize: 11, color: colors.muted }}>
+                                                                        • {aggItems[iName]}x {iName}
+                                                                    </Text>
+                                                                ));
+                                                            })()}
+                                                        </View>
+                                                    </View>
+                                                </View>
+                                            ));
+                                        })()}
+                                    </View>
+                                )}
                             </View>
-                            <View style={{ alignItems: "flex-end" }}>
-                                <Text style={styles.orderTotal}>₺{o.total_amount?.toLocaleString("tr-TR")}</Text>
-                                <Text style={styles.orderTime}>{o.status}</Text>
-                            </View>
-                        </View>
-                    ))
+                        );
+                    })
                 ) : (
                     <View style={styles.emptyState}>
                         <MaterialIcons name="trending-flat" size={48} color={colors.surfaceBorder} />
