@@ -21,7 +21,7 @@ import { adisyonService } from "../../lib/services/adisyonService";
 import { notificationService } from "../../lib/services/notificationService";
 
 export default function CartScreen() {
-    const { items, removeItem, clearCart, getTotal } = useCartStore();
+    const { items, removeItem, clearCart, getTotal, addItem, decrementItem } = useCartStore();
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
     const { user, isAdmin } = useAuth();
@@ -35,6 +35,7 @@ export default function CartScreen() {
     const orderMode = useCartStore((state) => state.orderMode);
     const orderType = orderMode === "eat_now" ? "Şimdi Ye" : "Sipariş Ver";
     const [orderNote, setOrderNote] = useState("");
+    const [hasGuest, setHasGuest] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleCheckout = async () => {
@@ -59,7 +60,8 @@ export default function CartScreen() {
                     onPress: async () => {
                         setIsSubmitting(true);
                         try {
-                            const note = `${orderNote ? `Not: ${orderNote}` : ""}`;
+                            const noteContent = `${orderNote ? `Not: ${orderNote}` : ""}`;
+                            const note = `${hasGuest ? '[MİSAFİRLE BERABER] ' : ''}${noteContent}`.trim();
                             const adisyon = await adisyonService.createOrder(
                                 user.id,
                                 getTotal(),
@@ -135,7 +137,22 @@ export default function CartScreen() {
                                         ))}
                                     </View>
                                 )}
-                                {isCompany ? null : <Text style={styles.itemPrice}>{item.price} ₺ x {item.quantity}</Text>}
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                    {!isCompany && <Text style={[styles.itemPrice, { marginRight: 16 }]}>{item.price} ₺</Text>}
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: 8, padding: 4, gap: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                                        <TouchableOpacity 
+                                            onPress={() => decrementItem(item.menu_item_id)} 
+                                            style={{ backgroundColor: colors.surface, width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                                            <MaterialIcons name="remove" size={16} color={colors.text} />
+                                        </TouchableOpacity>
+                                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>{item.quantity}</Text>
+                                        <TouchableOpacity 
+                                            onPress={() => addItem({ menu_item_id: item.menu_item_id, name: item.name, price: item.price, quantity: 1, is_package: item.is_package, selections: item.selections })} 
+                                            style={{ backgroundColor: colors.primary, width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                                            <MaterialIcons name="add" size={16} color="#fff" />
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
                             </View>
                             <View style={styles.itemActions}>
                                 {isCompany ? null : <Text style={styles.itemTotal}>{item.price * item.quantity} ₺</Text>}
@@ -151,7 +168,21 @@ export default function CartScreen() {
             {items.length > 0 && (
                 <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
                     <View style={styles.noteContainer}>
-                        <Text style={styles.orderTypeLabel}>Sipariş Notu (Opsiyonel):</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                            <Text style={[styles.orderTypeLabel, { marginBottom: 0 }]}>Sipariş Notu (Opsiyonel):</Text>
+                            <TouchableOpacity 
+                                onPress={() => setHasGuest(!hasGuest)}
+                                activeOpacity={0.7}
+                                style={{
+                                    flexDirection: 'row', alignItems: 'center', gap: 6,
+                                    backgroundColor: hasGuest ? colors.primary : 'transparent',
+                                    paddingHorizontal: 12, paddingVertical: 6,
+                                    borderRadius: 12, borderWidth: 1, borderColor: hasGuest ? colors.primary : colors.surfaceBorder
+                                }}>
+                                <MaterialIcons name={hasGuest ? "people" : "person-outline"} size={16} color={hasGuest ? "#fff" : colors.text} />
+                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: hasGuest ? "#fff" : colors.text }}>Misafirim Var</Text>
+                            </TouchableOpacity>
+                        </View>
                         <TextInput
                             style={styles.noteInput}
                             placeholder="Örn: Bol acılı olsun..."

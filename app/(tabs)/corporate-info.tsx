@@ -14,6 +14,7 @@ import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { adisyonService } from "@/lib/services/adisyonService";
+import { billingService } from "@/lib/services/billingService";
 import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
@@ -24,7 +25,7 @@ export default function CorporateInfoScreen() {
     const colors = Colors[theme];
     const styles = getStyles(colors);
 
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const { profile, loading: profileLoading } = useProfile(user?.id);
 
     const [activeTab, setActiveTab] = useState<'INFO' | 'EMPLOYEES' | 'DEBTS'>('INFO');
@@ -45,6 +46,9 @@ export default function CorporateInfoScreen() {
     // DEBTS State
     const [orders, setOrders] = useState<any[]>([]);
     const [ordersLoading, setOrdersLoading] = useState(false);
+    const [adminDebt, setAdminDebt] = useState<number>(0);
+    const [periodFilter, setPeriodFilter] = useState<'15_DAYS' | 'MONTHLY' | 'YEARLY'>('15_DAYS');
+    const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
 
     const [fetchedCompanyId, setFetchedCompanyId] = useState<string | null>(null);
 
@@ -69,10 +73,10 @@ export default function CorporateInfoScreen() {
     const isCompanyOwner = !!profile?.corporate_info;
 
     useEffect(() => {
-        if (!profileLoading && !isCompanyOwner) {
+        if (!authLoading && !profileLoading && !isCompanyOwner) {
             router.replace("/(tabs)/home");
         }
-    }, [profileLoading, isCompanyOwner]);
+    }, [authLoading, profileLoading, isCompanyOwner]);
 
     useEffect(() => {
         if (profile?.corporate_info) {
@@ -110,6 +114,11 @@ export default function CorporateInfoScreen() {
         try {
             const data = await adisyonService.getCompanyOrders(actualCompanyId);
             setOrders(data || []);
+            
+            if (user?.id) {
+                const balanceData = await billingService.getCompanyBalance(user.id);
+                if (balanceData) setAdminDebt(balanceData.balance || 0);
+            }
         } catch (e) {
             console.error(e);
         } finally {
@@ -219,19 +228,47 @@ export default function CorporateInfoScreen() {
         }
     };
 
-    const unpaidOrders = useMemo(() => {
-        return orders.filter((o) => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status));
-    }, [orders]);
+    const filteredOrders = useMemo(() => {
+        const thresholdDate = new Date();
+        if (periodFilter === '15_DAYS') {
+            thresholdDate.setDate(thresholdDate.getDate() - 15);
+        } else if (periodFilter === 'MONTHLY') {
+            thresholdDate.setMonth(thresholdDate.getMonth() - 1);
+        } else if (periodFilter === 'YEARLY') {
+            thresholdDate.setFullYear(thresholdDate.getFullYear() - 1);
+        }
 
-    const totalDebt = useMemo(() => unpaidOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0), [unpaidOrders]);
+        return orders.filter(o => {
+            if (["CANCELLED", "İptal"].includes(o.status)) return false;
+            const orderDate = new Date(o.created_at || o.date);
+            return orderDate >= thresholdDate;
+        });
+    }, [orders, periodFilter]);
+
+    const ordersByMonth = useMemo(() => {
+        const grouped: Record<string, any[]> = {};
+        
+        filteredOrders.forEach(order => {
+             const d = new Date(order.created_at || order.date);
+             const monthNames = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+             const key = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+             
+             if (!grouped[key]) grouped[key] = [];
+             grouped[key].push(order);
+        });
+        
+        return grouped;
+    }, [filteredOrders]);
+
+    const totalDebt = adminDebt;
 
     const generatePdfEkstre = async () => {
-        if (unpaidOrders.length === 0) {
-            return Alert.alert("Bilgi", "Mevcut borç kaydı bulunmuyor.");
+        if (filteredOrders.length === 0) {
+            return Alert.alert("Bilgi", "Seçili döneme ait sipariş kaydı bulunmuyor.");
         }
 
         const dateStr = new Date().toLocaleDateString('tr-TR');
-        const tableRows = unpaidOrders.map((o: any) => {
+        const tableRows = filteredOrders.map((o: any) => {
             const d = new Date(o.created_at || o.date);
             const dateFormatted = `${d.toLocaleDateString('tr-TR')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
             return `
@@ -287,7 +324,7 @@ export default function CorporateInfoScreen() {
     };
 
 
-    if (profileLoading) {
+    if (profileLoading || authLoading) {
         return (
             <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
                 <ActivityIndicator size="large" color={colors.primary} />
@@ -302,7 +339,7 @@ export default function CorporateInfoScreen() {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)/home")}>
+                <TouchableOpacity style={styles.backBtn} onPress={() => router.push("/profile")}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <View style={{ flex: 1 }}>
@@ -457,29 +494,69 @@ export default function CorporateInfoScreen() {
                         </TouchableOpacity>
 
                         <View style={styles.sectionCard}>
-                            <Text style={styles.sectionTitle}>Açık Adisyonlar (Çalışanlar)</Text>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Sipariş Dökümü</Text>
+                            </View>
+                            
+                            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                                <TouchableOpacity onPress={() => setPeriodFilter('15_DAYS')} style={[styles.periodTab, periodFilter === '15_DAYS' && styles.periodTabActive]}>
+                                    <Text style={[styles.periodTabText, periodFilter === '15_DAYS' && styles.periodTabTextActive]}>15 Gün</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => setPeriodFilter('MONTHLY')} style={[styles.periodTab, periodFilter === 'MONTHLY' && styles.periodTabActive]}>
+                                    <Text style={[styles.periodTabText, periodFilter === 'MONTHLY' && styles.periodTabTextActive]}>Aylık</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => setPeriodFilter('YEARLY')} style={[styles.periodTab, periodFilter === 'YEARLY' && styles.periodTabActive]}>
+                                    <Text style={[styles.periodTabText, periodFilter === 'YEARLY' && styles.periodTabTextActive]}>Yıllık</Text>
+                                </TouchableOpacity>
+                            </View>
+
                             {ordersLoading ? (
                                 <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 20 }} />
-                            ) : unpaidOrders.length === 0 ? (
-                                <Text style={{ color: colors.muted, fontStyle: 'italic', marginVertical: 12 }}>Ödenmemiş adisyon bulunmuyor.</Text>
+                            ) : filteredOrders.length === 0 ? (
+                                <Text style={{ color: colors.muted, fontStyle: 'italic', marginVertical: 12 }}>Seçili döneme ait sipariş bulunmuyor.</Text>
                             ) : (
-                                unpaidOrders.map(order => {
-                                    const date = new Date(order.created_at || order.date);
+                                Object.entries(ordersByMonth).map(([monthKey, monthOrders]) => {
+                                    const isExpanded = expandedMonths[monthKey] || false;
                                     return (
-                                        <View key={order.id} style={{ borderBottomWidth: 1, borderColor: colors.surfaceBorder, paddingVertical: 12 }}>
-                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                <Text style={{ fontWeight: 'bold', color: colors.text }}>{order.userName}</Text>
-                                            </View>
-                                            <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 8 }}>{date.toLocaleString('tr-TR')}</Text>
-                                            
-                                            {order.adisyon_items?.map((item: any) => (
-                                                <View key={item.id} style={{ flexDirection: 'row', marginBottom: 2 }}>
-                                                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.text, width: 24 }}>{item.quantity}x </Text>
-                                                    <Text style={{ fontSize: 12, color: colors.muted }}>{item.menu_items?.name || 'Yemek'}</Text>
+                                        <View key={monthKey} style={{ marginBottom: 12 }}>
+                                            <TouchableOpacity 
+                                                onPress={() => setExpandedMonths(prev => ({ ...prev, [monthKey]: !isExpanded }))}
+                                                activeOpacity={0.7}
+                                                style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.background, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: isExpanded ? colors.primary + '80' : colors.surfaceBorder }}>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                    <MaterialIcons name="date-range" size={20} color={isExpanded ? colors.primary : colors.muted} />
+                                                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: isExpanded ? colors.primary : colors.text }}>{monthKey}</Text>
                                                 </View>
-                                            ))}
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                    <Text style={{ fontSize: 12, color: colors.muted, fontWeight: 'bold' }}>{monthOrders.length} Sipariş</Text>
+                                                    <MaterialIcons name={isExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"} size={24} color={colors.muted} />
+                                                </View>
+                                            </TouchableOpacity>
+
+                                            {isExpanded && (
+                                                <View style={{ paddingLeft: 16, paddingRight: 16, paddingTop: 12, paddingBottom: 8, backgroundColor: colors.surface, borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderLeftWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: colors.surfaceBorder, marginTop: -2 }}>
+                                                    {monthOrders.map((order: any) => {
+                                                        const date = new Date(order.created_at || order.date);
+                                                        return (
+                                                            <View key={order.id} style={{ borderBottomWidth: 1, borderColor: colors.surfaceBorder, paddingVertical: 12 }}>
+                                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                                                                    <Text style={{ fontWeight: 'bold', color: colors.text }}>{order.userName}</Text>
+                                                                </View>
+                                                                <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 8 }}>{date.toLocaleString('tr-TR')}</Text>
+                                                                
+                                                                {order.adisyon_items?.map((item: any) => (
+                                                                    <View key={item.id} style={{ flexDirection: 'row', marginBottom: 2 }}>
+                                                                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.text, width: 24 }}>{item.quantity}x </Text>
+                                                                        <Text style={{ fontSize: 12, color: colors.muted }}>{item.menu_items?.name || 'Yemek'}</Text>
+                                                                    </View>
+                                                                ))}
+                                                            </View>
+                                                        )
+                                                    })}
+                                                </View>
+                                            )}
                                         </View>
-                                    )
+                                    );
                                 })
                             )}
                         </View>
@@ -627,5 +704,25 @@ const getStyles = (colors: any) => StyleSheet.create({
     td: {
         fontSize: 13,
         color: colors.text,
+    },
+    periodTab: {
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 16,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+    },
+    periodTabActive: {
+        backgroundColor: colors.primary,
+        borderColor: '#ed1c24',
+    },
+    periodTabText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: colors.muted,
+    },
+    periodTabTextActive: {
+        color: '#fff',
     }
 });

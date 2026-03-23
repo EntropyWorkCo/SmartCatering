@@ -154,9 +154,10 @@ export default function ProfileScreen() {
 
                 {isCompanyOwner && (
                     <TouchableOpacity 
-                        onPress={() => router.push("/(tabs)/corporate-info")}
+                        onPress={() => router.push("/corporate-info")}
                         style={{ 
                             backgroundColor: colors.surface, 
+
                             padding: 20, 
                             borderRadius: 16, 
                             borderWidth: 1, 
