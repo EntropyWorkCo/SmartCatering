@@ -22,19 +22,31 @@ export const useAuth = () => {
   useEffect(() => {
     const initAuth = async () => {
       // 1. Session'ı al
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setSession(session);
-      } else {
-        const softUserStr = await AsyncStorage.getItem("softUser");
-        if (softUserStr) {
-          try {
-            const softUser = JSON.parse(softUserStr);
-            setSession({ user: softUser, isSoftUser: true });
-          } catch (e) {
-            console.error("SoftUser parse error:", e);
-          }
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+            // Refresh token hatası durumunda temizlik yap
+            console.warn("Otomatik oturum tazelenemedi:", sessionError.message);
+            await supabase.auth.signOut();
+            setSession(null);
+        } else if (session) {
+            setSession(session);
+        } else {
+            const softUserStr = await AsyncStorage.getItem("softUser");
+            if (softUserStr) {
+                try {
+                const softUser = JSON.parse(softUserStr);
+                setSession({ user: softUser, isSoftUser: true });
+                } catch (e) {
+                console.error("SoftUser parse error:", e);
+                }
+            }
         }
+      } catch (error) {
+        console.error("Session init error:", error);
+        await supabase.auth.signOut();
+        setSession(null);
       }
 
       // 2. Admin rolünü storage'dan oku

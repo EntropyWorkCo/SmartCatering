@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 import * as Print from 'expo-print';
 import { useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
@@ -14,6 +14,7 @@ import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { adisyonService } from "@/lib/services/adisyonService";
+import { normalizePhone } from "@/lib/services/authService";
 import { billingService } from "@/lib/services/billingService";
 import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -167,13 +168,23 @@ export default function CorporateInfoScreen() {
 
     const handleAddEmployee = async (isGuest: boolean = false) => {
         if (!actualCompanyId) return Alert.alert("Hata", "Firma bilgisi bulunamadı.");
-        if (!newEmpName.trim() || (!isGuest && !newEmpPhone.trim())) {
-            return Alert.alert("Hata", "Lütfen gerekli alanları doldurunuz.");
+        
+        let formattedPhone = newEmpPhone.trim();
+        if (!isGuest) {
+            const normalized = normalizePhone(formattedPhone);
+            if (!normalized) {
+                return Alert.alert("Hata", "Lütfen geçerli bir telefon numarası girin (5XX...).");
+            }
+            formattedPhone = normalized;
+        }
+
+        if (!newEmpName.trim()) {
+            return Alert.alert("Hata", "Lütfen ad soyad giriniz.");
         }
 
         try {
             setEmpLoading(true);
-            await userService.addEmployee(actualCompanyId, newEmpName, isGuest ? "Misafir" : newEmpPhone, isGuest ? "guest" : "customer", true);
+            await userService.addEmployee(actualCompanyId, newEmpName, isGuest ? "Misafir" : formattedPhone, isGuest ? "guest" : "customer", true);
             setNewEmpName("");
             setNewEmpPhone("");
             await loadEmployees();
@@ -214,17 +225,22 @@ export default function CorporateInfoScreen() {
 
             setEmpLoading(true);
             const fileUri = result.assets[0].uri;
-            const fileString = await FileSystem.readAsStringAsync(fileUri, { encoding: 'utf8' });
+            const fileString = await new File(fileUri).text();
             
             Papa.parse(fileString, {
                 header: true,
                 skipEmptyLines: true,
                 complete: async (results) => {
                     try {
-                        const parsedEmployees = results.data.map((row: any) => ({
-                            fullName: row.Ad || row.Name || row.AdSoyad || "İsimsiz",
-                            phone: row.Telefon || row.Phone || ""
-                        })).filter(e => e.fullName !== "İsimsiz");
+                        const parsedEmployees = results.data.map((row: any) => {
+                            let rawPhone = (row.Telefon || row.Phone || row.Tel || "").toString();
+                            let normalized = normalizePhone(rawPhone);
+                            
+                            return {
+                                fullName: row.Ad || row.Name || row.AdSoyad || "İsimsiz",
+                                phone: normalized || rawPhone // Normalize edemezse olduğu gibi kalsın ama genellikle eder
+                            };
+                        }).filter(e => e.fullName !== "İsimsiz");
 
                         if (parsedEmployees.length === 0) {
                             Alert.alert("Hata", "CSV formatı uygun değil. Sütun adları 'Ad' veya 'AdSoyad' ve 'Telefon' olmalıdır.");
@@ -454,14 +470,20 @@ export default function CorporateInfoScreen() {
                                 value={newEmpName} 
                                 onChangeText={setNewEmpName} 
                             />
-                            <TextInput 
-                                style={styles.basicInput} 
-                                placeholder="Telefon Numarası (Sadece Çalışan İçin)" 
-                                placeholderTextColor={colors.muted} 
-                                value={newEmpPhone} 
-                                onChangeText={setNewEmpPhone} 
-                                keyboardType="phone-pad" 
-                            />
+                            <View style={styles.phoneInputWrapper}>
+                                <View style={styles.prefixBox}>
+                                    <Text style={styles.prefixText}>+90</Text>
+                                </View>
+                                <TextInput 
+                                    style={styles.phoneInput} 
+                                    placeholder="5XX XXX XX XX" 
+                                    placeholderTextColor={colors.muted} 
+                                    value={newEmpPhone} 
+                                    onChangeText={(val) => setNewEmpPhone(val.replace(/[^0-9]/g, ''))} 
+                                    keyboardType="phone-pad" 
+                                    maxLength={10}
+                                />
+                            </View>
                             <View style={{ marginTop: 8 }}>
                                 <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }]} onPress={() => handleAddEmployee(false)}>
                                     <Text style={styles.actionBtnText}>Çalışan Ekle</Text>
@@ -768,5 +790,38 @@ const getStyles = (colors: any) => StyleSheet.create({
     },
     periodTabTextActive: {
         color: '#fff',
+    },
+    phoneInputWrapper: {
+        flexDirection: 'row',
+        marginBottom: 12,
+        height: 52,
+    },
+    prefixBox: {
+        backgroundColor: colors.background,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+        borderTopLeftRadius: 12,
+        borderBottomLeftRadius: 12,
+        paddingHorizontal: 12,
+        justifyContent: 'center',
+        borderRightWidth: 0,
+    },
+    prefixText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: colors.text,
+    },
+    phoneInput: {
+        flex: 1,
+        backgroundColor: colors.background,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+        borderTopRightRadius: 12,
+        borderBottomRightRadius: 12,
+        paddingHorizontal: 14,
+        fontSize: 15,
+        color: colors.text,
+        fontWeight: 'bold',
+        letterSpacing: 1,
     }
 });

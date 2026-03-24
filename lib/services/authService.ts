@@ -49,13 +49,36 @@ export const verifyOtp = async (phone: string, code: string): Promise<boolean> =
  */
 export const normalizePhone = (phone: string): string | null => {
     let cleaned = phone.replace(/\D/g, "");
-    if (cleaned.startsWith("0")) {
+    
+    // 0 ile başlıyorsa (05XX...)
+    if (cleaned.length === 11 && cleaned.startsWith("0")) {
         cleaned = cleaned.substring(1);
     }
     
+    // Başına +90 gelmemişse (5XX...)
+    if (cleaned.length === 10 && cleaned.startsWith("5")) {
+        return `+90${cleaned}`;
+    }
+    
+    // Zaten 90 ile başlıyorsa (905XX...)
+    if (cleaned.length === 12 && cleaned.startsWith("90")) {
+        return `+${cleaned}`;
+    }
+
+    // Tam format ( +905XX... )
+    if (cleaned.length === 13 && cleaned.startsWith("90")) {
+        // Zaten + karakteri temizlendiği için length 12 olur ama eğer bir şekilde gelirse diye
+        return `+${cleaned}`;
+    }
+    
+    // Eğer temizlenmiş hali 10 hane değilse ve 5 ile başlamıyorsa geçersizdir
     if (cleaned.length !== 10 || !cleaned.startsWith("5")) {
+        // Eğer zaten +90 formatındaysa (12 hane rakam olarak)
+        if (cleaned.length === 12 && cleaned.startsWith("90")) {
+             return `+${cleaned}`;
+        }
         return null;
     }
     
-    return cleaned;
+    return `+90${cleaned}`;
 };

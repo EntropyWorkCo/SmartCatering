@@ -59,20 +59,38 @@ export default function OtpVerifyScreen() {
             }
 
             // --- Gerçek OTP (SMS servisi tam gelene dek) Doğrulandı, İşlemlere Başla ---
-            const fakeEmail = `${phone}@meydan.com`;
+            // --- Akıllı Telefon Eşleştirme (Migration Support) ---
+            const clean10 = phone.replace(/\D/g, "").slice(-10); // Son 10 hane (5XXXXXXXXX)
+            const clean0 = `0${clean10}`; // 0 ile başlayan (05XXXXXXXXX)
+            const cleanPlus90 = `+90${clean10}`; // Tam format (+905XXXXXXXXX)
+
+            // Önce bu numaraya sahip bir kullanıcı var mı (herhangi bir formatta) ona bakalım
+            const { data: existingUser } = await supabase
+                .from("users")
+                .select("*")
+                .or(`phone.eq."${clean10}",phone.eq."${clean0}",phone.eq."${cleanPlus90}"`)
+                .maybeSingle();
+
+            // Eğer kullanıcı bulunduysa, sistemdeki kayıtlı numarasını (ve formatını) kullanalım
+            const effectivePhone = existingUser ? existingUser.phone : cleanPlus90;
+            const fakeEmail = `${effectivePhone}@meydan.com`;
 
             if (mode === "register") {
-                // YENİ KAYIT İŞLEMİ
+                // KAYIT İŞLEMİ (Eğer kullanıcı zaten varsa login'e yönlendirilmeli ama OtpVerifyScreen genelde buna gelmez)
+                if (existingUser) {
+                    Alert.alert("Bilgi", "Bu numara zaten kayıtlı. Lütfen giriş yapın.");
+                    router.replace("/auth/login");
+                    return;
+                }
+
                 const isCompany = role === "owner";
-                
-                // Kayıtlar için şifreyi geçici olarak statik tutuyoruz arka planda, kullanıcıya şifre sorulmuyor.
                 const { data: authData, error: authError } = await supabase.auth.signUp({
                     email: fakeEmail,
-                    password: `${phone}OtpPassword!`, // Gelecekte sadece custom provider'lı Phone login'e çevrilebilir (Supabase Phone Auth hazır olduğunda)
+                    password: `${effectivePhone}OtpPassword!`, // Şifre kayıtlı numara formatıyla eşleşmeli
                     options: {
                         data: {
                             full_name: name,
-                            phone: phone,
+                            phone: effectivePhone, // Veritabanına yeni standart (+90) ile kaydedilecek
                             is_company: isCompany,
                             role: role,
                         },
@@ -82,15 +100,11 @@ export default function OtpVerifyScreen() {
                 if (authError) throw authError;
 
                 if (authData.user && isCompany) {
-                    const { error: companyError } = await supabase
-                        .from("companies")
-                        .upsert({
-                            user_id: authData.user.id,
-                            company_name: companyName,
-                            tax_number: vkn,
-                        });
-
-                    if (companyError) throw companyError;
+                    await supabase.from("companies").upsert({
+                        user_id: authData.user.id,
+                        company_name: companyName,
+                        tax_number: vkn,
+                    });
                 }
 
                 if (authData.session) {
@@ -98,44 +112,39 @@ export default function OtpVerifyScreen() {
                     await AsyncStorage.removeItem("isAdmin");
                     router.replace("/(tabs)/home");
                 } else {
-                    Alert.alert("Hata", "Oturum açılamadı. Lütfen giriş yapmayı deneyin.");
                     router.replace("/auth/login");
                 }
             } else {
                 // GİRİŞ PENCERESİ
+                if (!existingUser) {
+                    Alert.alert("Kayıt Bulunamadı", "Bu numarayla eşleşen hesabınız bulunamadı. Lütfen kayıt olmayı deneyin.");
+                    setLoading(false);
+                    return;
+                }
+
                 if (role === 'employee') {
-                    const { data: empUser, error: empError } = await supabase
-                        .from("users")
-                        .select("*")
-                        .eq("phone", phone)
-                        .single();
-                    
-                    if (empError || !empUser || !empUser.company_id || !empUser.is_company) {
-                        Alert.alert(
-                            "Kayıt Bulunamadı",
-                            "Firma sahibiniz tarafından sisteme eklenmemişsiniz veya kaydınız silinmiş."
-                        );
+                    // Çalışan kontrolü (Zaten existingUser içinde company_id olmalı)
+                    if (!existingUser.company_id || !existingUser.is_company) {
+                        Alert.alert("Hata", "Firma kaydınız doğrulanamadı.");
                         setLoading(false);
                         return;
                     }
 
-                    await AsyncStorage.setItem("softUser", JSON.stringify(empUser));
+                    await AsyncStorage.setItem("softUser", JSON.stringify(existingUser));
                     await AsyncStorage.removeItem("isAdmin");
                     await triggerAuthRefresh();
                     router.replace("/(tabs)/home");
                     return;
                 }
 
+                // Owner veya Individual için Auth Girişi
                 const { data, error } = await supabase.auth.signInWithPassword({
                     email: fakeEmail,
-                    password: `${phone}OtpPassword!`, 
+                    password: `${effectivePhone}OtpPassword!`, 
                 });
 
                 if (error) {
-                    Alert.alert(
-                        "Kayıt Bulunamadı",
-                        "Bu numarayla eşleşen hesabınız bulunamadı. Lütfen ilgili sekmeden kayıt olmayı deneyin."
-                    );
+                    Alert.alert("Giriş Başarısız", "Şifre veya kullanıcı formatı hatası. Lütfen tekrar deneyin.");
                     setLoading(false);
                     return;
                 }
@@ -173,7 +182,7 @@ export default function OtpVerifyScreen() {
                         <MaterialIcons name="sms" size={48} color={colors.primary} style={{ marginBottom: 20 }} />
                         <Text style={styles.title}>Doğrulama Kodu</Text>
                         <Text style={styles.subtitle}>
-                            +90 {phone} numarasına SMS olarak gelen 6 haneli kodu giriniz.
+                            {phone} numarasına SMS olarak gelen 6 haneli kodu giriniz.
                         </Text>
                     </View>
 
