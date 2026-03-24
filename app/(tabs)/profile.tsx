@@ -70,9 +70,9 @@ export default function ProfileScreen() {
             }
 
             // Borç bakiyesini çek (Kurumsal ise)
-            if (profile?.is_company) {
+            if (profile?.is_company && user?.id) {
                 try {
-                    const balanceData = await billingService.getCompanyBalance(user?.id || "");
+                    const balanceData = await billingService.getCompanyBalance(user.id);
                     if (balanceData) setBalance(balanceData.balance);
                 } catch (err) {
                     console.log("Bakiye çekilemedi:", err);

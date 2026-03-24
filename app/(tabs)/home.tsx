@@ -490,7 +490,7 @@ const STATUS_LABELS: any = {
 
 const STATUS_ICONS: any = {
   "PENDING": "receipt-long",
-  "PREPARING": "skillet",
+  "PREPARING": "restaurant",
   "READY": "moped",
   "COMPLETED": "done-all",
 };

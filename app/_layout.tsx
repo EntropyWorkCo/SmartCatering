@@ -147,7 +147,6 @@ function RootLayoutNav() {
         <Stack.Screen name="order-success" />
         <Stack.Screen name="adisyon" />
         <Stack.Screen name="account-info" />
-        <Stack.Screen name="corporate-info" />
         <Stack.Screen name="rating" />
         <Stack.Screen name="support" />
 
