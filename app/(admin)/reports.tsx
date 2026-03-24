@@ -213,18 +213,29 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
     }, [orders, mainTab, filterPeriod]);
 
     const [expandedCompanies, setExpandedCompanies] = useState<{ [key: string]: boolean }>({});
+    const [companies, setCompanies] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchCompanies = async () => {
+            const { data } = await supabase.from("companies").select("*");
+            if (data) setCompanies(data);
+        };
+        fetchCompanies();
+    }, []);
 
     const groupedOrders = useMemo(() => {
         if (mainTab !== "KURUMSAL") return { "Bireysel": stats.orders };
 
         const groups: { [key: string]: any[] } = {};
         stats.orders.forEach((o: any) => {
-            const name = o.companyName || (o.companyId ? `Şirket #${o.companyId}` : `${o.userName} (Kurumsal)`);
+            const user = o.users?.[0] || o.users;
+            const matchCompany = companies.find((c: any) => c.user_id === o.user_id || c.id === user?.company_id);
+            const name = matchCompany ? matchCompany.company_name : (o.companyName || "Bireysel");
             if (!groups[name]) groups[name] = [];
-            groups[name].push(o);
+            groups[name].push({ ...o, isOwner: matchCompany?.user_id === o.user_id });
         });
         return groups;
-    }, [stats.orders, mainTab]);
+    }, [stats.orders, mainTab, companies]);
 
     const toggleCompany = (name: string) => {
         setExpandedCompanies(prev => ({ ...prev, [name]: !prev[name] }));
@@ -333,19 +344,24 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
             </View>
 
             {/* Sub Filter Tabs */}
-            {mainTab === "BIREYSEL" && (
-                <View style={styles.filterTabsContainer}>
-                    <TouchableOpacity style={[styles.filterTab, filterPeriod === "DAILY" && styles.filterTabActive]} onPress={() => setFilterPeriod("DAILY")}>
-                        <Text style={[styles.filterTabText, filterPeriod === "DAILY" && styles.filterTabTextActive]}>Günlük</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.filterTab, filterPeriod === "WEEKLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("WEEKLY")}>
-                        <Text style={[styles.filterTabText, filterPeriod === "WEEKLY" && styles.filterTabTextActive]}>Haftalık</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.filterTab, filterPeriod === "MONTHLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("MONTHLY")}>
-                        <Text style={[styles.filterTabText, filterPeriod === "MONTHLY" && styles.filterTabTextActive]}>Aylık</Text>
-                    </TouchableOpacity>
-                </View>
-            )}
+            <View style={styles.filterTabsContainer}>
+                {mainTab === "BIREYSEL" && (
+                    <>
+                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "DAILY" && styles.filterTabActive]} onPress={() => setFilterPeriod("DAILY")}>
+                            <Text style={[styles.filterTabText, filterPeriod === "DAILY" && styles.filterTabTextActive]}>Günlük</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "WEEKLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("WEEKLY")}>
+                            <Text style={[styles.filterTabText, filterPeriod === "WEEKLY" && styles.filterTabTextActive]}>Haftalık</Text>
+                        </TouchableOpacity>
+                    </>
+                )}
+                <TouchableOpacity style={[styles.filterTab, filterPeriod === "MONTHLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("MONTHLY")}>
+                    <Text style={[styles.filterTabText, filterPeriod === "MONTHLY" && styles.filterTabTextActive]}>Aylık</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.filterTab, filterPeriod === "YEARLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("YEARLY")}>
+                    <Text style={[styles.filterTabText, filterPeriod === "YEARLY" && styles.filterTabTextActive]}>Yıllık</Text>
+                </TouchableOpacity>
+            </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.statsGrid}>
@@ -438,7 +454,7 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                                                 const uName = o.userName || 'Müşteri';
                                                 if (!subGroups[uName]) {
                                                     subGroups[uName] = { userName: uName, isOwner: o.isOwner, meals: [] };
-                                                }
+                                                } else if (o.isOwner) { subGroups[uName].isOwner = true; }
                                                 if (o.adisyon_items) {
                                                     subGroups[uName].meals.push(...o.adisyon_items);
                                                 }
