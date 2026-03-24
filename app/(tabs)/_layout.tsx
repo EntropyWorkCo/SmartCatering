@@ -94,18 +94,6 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Firma Ekranı */}
-      <Tabs.Screen
-        name="corporate-info"
-        options={{
-          title: "Firma Ekranı",
-          headerShown: false,
-          href: null,
-          tabBarIcon: ({ color }) => (
-            <FontAwesome name="briefcase" size={22} color={color} />
-          ),
-        }}
-      />
 
       {/* Profil */}
       <Tabs.Screen

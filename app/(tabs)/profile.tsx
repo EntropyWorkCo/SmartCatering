@@ -75,7 +75,7 @@ export default function ProfileScreen() {
                     const balanceData = await billingService.getCompanyBalance(user.id);
                     if (balanceData) setBalance(balanceData.balance);
                 } catch (err) {
-                    console.log("Bakiye çekilemedi:", err);
+                    console.log("Bakiye çekilemedi (UUID hatası ihtimali):", err);
                 }
             }
         };

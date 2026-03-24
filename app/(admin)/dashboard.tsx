@@ -95,9 +95,20 @@ export default function AdminDashboard() {
 
               <View style={styles.itemsList}>
                 {order.adisyon_items?.map((item: any) => (
-                  <Text key={item.id} style={styles.itemRow}>
-                    • {item.quantity}x {item.menu_items?.name}
-                  </Text>
+                  <View key={item.id} style={{ marginBottom: 8 }}>
+                    <Text style={styles.itemRow}>
+                      • {item.quantity}x {item.menu_items?.name}
+                    </Text>
+                    {item.selections && Array.isArray(item.selections) && item.selections.length > 0 && (
+                      <View style={styles.tabldotSelections}>
+                        {item.selections.map((sel: any, idx: number) => (
+                          <Text key={idx} style={styles.selectionText}>
+                            └ {sel.item_name} ({sel.category})
+                          </Text>
+                        ))}
+                      </View>
+                    )}
+                  </View>
                 ))}
                 {order.note && (
                   <View style={styles.noteBox}>
@@ -163,7 +174,9 @@ const getStyles = (colors: any) => StyleSheet.create({
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   statusText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
   itemsList: { marginBottom: 16 },
-  itemRow: { fontSize: 14, color: colors.text, marginBottom: 4 },
+  itemRow: { fontSize: 14, color: colors.text, fontWeight: 'bold' },
+  tabldotSelections: { marginLeft: 16, marginTop: 2, paddingLeft: 8, borderLeftWidth: 1, borderLeftColor: colors.surfaceBorder },
+  selectionText: { fontSize: 12, color: colors.muted, marginBottom: 2 },
   noteBox: { backgroundColor: colors.cardHighlight, padding: 10, borderRadius: 8, marginTop: 8 },
   noteText: { fontSize: 12, color: colors.muted, fontStyle: 'italic' },
   actionRow: { flexDirection: 'row', gap: 10 },
