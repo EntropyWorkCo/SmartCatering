@@ -60,6 +60,7 @@ export default function AdminMessages() {
                 .select("*, users(full_name, companies!users_company_id_fkey(company_name))")
                 .not("note", "is", null)
                 .not("note", "eq", "")
+                .not("order_type", "eq", "MANUAL_DEBT")
                 .order("created_at", { ascending: false });
 
             if (oData) {
@@ -164,7 +165,13 @@ export default function AdminMessages() {
                                 </View>
 
                                 <View style={styles.messageBox}>
-                                    <Text style={styles.messageText}>"{order.note}"</Text>
+                                    <Text style={styles.messageText}>"{order.note.replace('[MİSAFİRLE BERABER]', '').trim()}"</Text>
+                                    {order.note.includes('[MİSAFİRLE BERABER]') && (
+                                        <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                            <MaterialIcons name="person-add" size={14} color={colors.primary} />
+                                            <Text style={{ fontSize: 11, fontWeight: 'bold', color: colors.primary }}>Misafirim Var</Text>
+                                        </View>
+                                    )}
                                 </View>
                             </View>
                         ))

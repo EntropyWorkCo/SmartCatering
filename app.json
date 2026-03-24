@@ -35,7 +35,8 @@
           "photosPermission": "Menüye yemek fotoğrafı eklemek için fotoğraflarınıza erişim izni gereklidir.",
           "cameraPermission": "Menüye yemek fotoğrafı çekmek için kameranıza erişim izni gereklidir."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

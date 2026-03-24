@@ -329,15 +329,7 @@ export default function HomeScreen() {
           <View style={{ marginBottom: 32, marginTop: 16 }}>
              <Text style={[styles.sectionTitle, { marginBottom: 4 }]}>HIZLI TABLDOT (ŞİMDİ YE)</Text>
              
-             {dailyMenu.length > 0 && (
-               <View style={{ backgroundColor: colors.surface, padding: 12, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.surfaceBorder + '80', shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 }}>
-                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                     <MaterialIcons name="restaurant" size={16} color={colors.primary} />
-                     <Text style={{ fontSize: 13, fontWeight: '900', color: colors.primary }}>BUGÜNÜN MENÜSÜ</Text>
-                 </View>
-                 <Text style={{ fontSize: 13, color: colors.text, opacity: 0.8, lineHeight: 18 }}>{dailyMenu.map(m => m.name).join("  •  ")}</Text>
-               </View>
-             )}
+
 
              <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 16, paddingHorizontal: 6, lineHeight: 16 }}>
                  * Restoranda yiyecekseniz <Text style={{fontWeight: 'bold', color: colors.text}}>4'LÜ TABLDOT</Text>, <Text style={{fontWeight: 'bold', color: colors.text}}>3'LÜ TABLDOT</Text> veya <Text style={{fontWeight: 'bold', color: colors.text}}>2'Lİ TABLDOT</Text> menülerinden birini seçebilirsiniz.

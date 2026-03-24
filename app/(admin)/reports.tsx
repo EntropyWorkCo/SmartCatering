@@ -161,7 +161,7 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
 
     useEffect(() => {
         if (mainTab === "KURUMSAL") {
-            setFilterPeriod("15_DAYS");
+            setFilterPeriod("MONTHLY");
         } else {
             setFilterPeriod("DAILY");
         }
@@ -333,33 +333,19 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
             </View>
 
             {/* Sub Filter Tabs */}
-            <View style={styles.filterTabsContainer}>
-                {mainTab === "KURUMSAL" ? (
-                    <>
-                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "15_DAYS" && styles.filterTabActive]} onPress={() => setFilterPeriod("15_DAYS")}>
-                            <Text style={[styles.filterTabText, filterPeriod === "15_DAYS" && styles.filterTabTextActive]}>15 Gün</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "MONTHLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("MONTHLY")}>
-                            <Text style={[styles.filterTabText, filterPeriod === "MONTHLY" && styles.filterTabTextActive]}>Aylık</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "YEARLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("YEARLY")}>
-                            <Text style={[styles.filterTabText, filterPeriod === "YEARLY" && styles.filterTabTextActive]}>Yıllık</Text>
-                        </TouchableOpacity>
-                    </>
-                ) : (
-                    <>
-                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "DAILY" && styles.filterTabActive]} onPress={() => setFilterPeriod("DAILY")}>
-                            <Text style={[styles.filterTabText, filterPeriod === "DAILY" && styles.filterTabTextActive]}>Günlük</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "WEEKLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("WEEKLY")}>
-                            <Text style={[styles.filterTabText, filterPeriod === "WEEKLY" && styles.filterTabTextActive]}>Haftalık</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "MONTHLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("MONTHLY")}>
-                            <Text style={[styles.filterTabText, filterPeriod === "MONTHLY" && styles.filterTabTextActive]}>Aylık</Text>
-                        </TouchableOpacity>
-                    </>
-                )}
-            </View>
+            {mainTab === "BIREYSEL" && (
+                <View style={styles.filterTabsContainer}>
+                    <TouchableOpacity style={[styles.filterTab, filterPeriod === "DAILY" && styles.filterTabActive]} onPress={() => setFilterPeriod("DAILY")}>
+                        <Text style={[styles.filterTabText, filterPeriod === "DAILY" && styles.filterTabTextActive]}>Günlük</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.filterTab, filterPeriod === "WEEKLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("WEEKLY")}>
+                        <Text style={[styles.filterTabText, filterPeriod === "WEEKLY" && styles.filterTabTextActive]}>Haftalık</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.filterTab, filterPeriod === "MONTHLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("MONTHLY")}>
+                        <Text style={[styles.filterTabText, filterPeriod === "MONTHLY" && styles.filterTabTextActive]}>Aylık</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.statsGrid}>
@@ -470,7 +456,7 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                                                                     <Text style={{ color: colors.info, fontSize: 8, fontWeight: '900' }}>FİRMA SAHİBİ</Text>
                                                                 </View>
                                                             ) : null}
-                                                            <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '900', marginLeft: 'auto' }}>{emp.meals.reduce((acc, item) => acc + (item.quantity || 0), 0)} Öğün</Text>
+                                                            <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '900', marginLeft: 'auto' }}>{emp.meals.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0)} Öğün</Text>
                                                         </View>
                                                         
                                                         <View style={{ marginTop: 6 }}>

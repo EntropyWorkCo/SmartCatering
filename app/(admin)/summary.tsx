@@ -6,6 +6,7 @@ import { billingService } from "@/lib/services/billingService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
@@ -40,21 +41,12 @@ export default function SummaryScreen() {
   const [debtModalVisible, setDebtModalVisible] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [newDebtAmount, setNewDebtAmount] = useState("");
-  const [startDay, setStartDay] = useState<number | null>(null);
-  const [endDay, setEndDay] = useState<number | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toLocaleString('tr-TR', { month: 'long' }));
-  const [activePicker, setActivePicker] = useState<'START' | 'END' | null>(null);
+  const [startDate, setStartDate] = useState<Date>(new Date());
+  const [endDate, setEndDate] = useState<Date>(new Date());
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
   const [updatingDebt, setUpdatingDebt] = useState(false);
   const [companies, setCompanies] = useState<any[]>([]);
-
-  const daysInMonth = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const monthIndex = now.getMonth();
-    return new Date(year, monthIndex + 1, 0).getDate();
-  }, []);
-
-  const months = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 
   useFocusEffect(
     useCallback(() => {
@@ -193,14 +185,12 @@ export default function SummaryScreen() {
     try {
       const company = companies.find(c => c.id === selectedCompanyId);
       if (!company) throw new Error("Firma bulunamadı");
-      if (!startDay || !endDay) throw new Error("Lütfen başlangıç ve bitiş günlerini seçiniz.");
-
       // 1. Manuel Adisyon Kaydı Oluştur (Arşiv için)
       await billingService.addManualEntry(
         company.user_id, 
         Number(newDebtAmount), 
-        `${startDay} ${selectedMonth}`, 
-        `${endDay} ${selectedMonth}`, 
+        startDate.toLocaleDateString('tr-TR'), 
+        endDate.toLocaleDateString('tr-TR'), 
         'DEBT'
       );
 
@@ -486,67 +476,47 @@ export default function SummaryScreen() {
                 activeOpacity={0.7}
                 onPress={() => {
                   Keyboard.dismiss();
-                  setActivePicker(activePicker === 'START' ? null : 'START');
+                  setShowStartPicker(true);
                 }}
-                style={{ flex: 1, backgroundColor: colors.background, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: activePicker === 'START' ? colors.primary : colors.surfaceBorder }}>
-                <Text style={{ fontSize: 10, color: colors.muted, marginBottom: 4 }}>BAŞLANGIÇ GÜNÜ</Text>
-                <Text style={{ fontWeight: 'bold', color: startDay ? colors.text : colors.muted }}>{startDay || "Seç"}</Text>
+                style={{ flex: 1, backgroundColor: colors.background, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                <Text style={{ fontSize: 10, color: colors.muted, marginBottom: 4 }}>BAŞLANGIÇ TARİHİ</Text>
+                <Text style={{ fontWeight: 'bold', color: colors.text }}>{startDate.toLocaleDateString('tr-TR')}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
                 activeOpacity={0.7}
                 onPress={() => {
                   Keyboard.dismiss();
-                  setActivePicker(activePicker === 'END' ? null : 'END');
+                  setShowEndPicker(true);
                 }}
-                style={{ flex: 1, backgroundColor: colors.background, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: activePicker === 'END' ? colors.primary : colors.surfaceBorder }}>
-                <Text style={{ fontSize: 10, color: colors.muted, marginBottom: 4 }}>BİTİŞ GÜNÜ</Text>
-                <Text style={{ fontWeight: 'bold', color: endDay ? colors.text : colors.muted }}>{endDay || "Seç"}</Text>
+                style={{ flex: 1, backgroundColor: colors.background, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                <Text style={{ fontSize: 10, color: colors.muted, marginBottom: 4 }}>BİTİŞ TARİHİ</Text>
+                <Text style={{ fontWeight: 'bold', color: colors.text }}>{endDate.toLocaleDateString('tr-TR')}</Text>
               </TouchableOpacity>
             </View>
 
-            {activePicker && (
-              <View style={{ marginBottom: 20 }}>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, backgroundColor: colors.background, padding: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
-                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => (
-                    <TouchableOpacity 
-                      key={day}
-                      onPress={() => {
-                        if (activePicker === 'START') setStartDay(day);
-                        else setEndDay(day);
-                        setActivePicker(null);
-                      }}
-                      style={{ 
-                        width: '12%', 
-                        aspectRatio: 1, 
-                        justifyContent: 'center', 
-                        alignItems: 'center', 
-                        borderRadius: 8, 
-                        backgroundColor: (activePicker === 'START' ? startDay === day : endDay === day) ? colors.primary : colors.surface,
-                        borderWidth: 1,
-                        borderColor: colors.surfaceBorder
-                      }}>
-                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: (activePicker === 'START' ? startDay === day : endDay === day) ? '#fff' : colors.text }}>{day}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
+            {showStartPicker && (
+              <DateTimePicker
+                value={startDate}
+                mode="date"
+                display="default"
+                onChange={(event, selectedDate) => {
+                  setShowStartPicker(false);
+                  if (selectedDate) setStartDate(selectedDate);
+                }}
+              />
             )}
 
-            {!activePicker && (
-               <View style={{ marginBottom: 20 }}>
-                 <Text style={{ fontSize: 10, color: colors.muted, marginBottom: 8, fontWeight: 'bold' }}>AY SEÇİMİ</Text>
-                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                   {months.map(m => (
-                     <TouchableOpacity 
-                        key={m}
-                        onPress={() => setSelectedMonth(m)}
-                        style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: selectedMonth === m ? colors.primary : colors.surface, borderWidth: 1, borderColor: colors.surfaceBorder }}>
-                       <Text style={{ fontSize: 12, fontWeight: 'bold', color: selectedMonth === m ? '#fff' : colors.text }}>{m}</Text>
-                     </TouchableOpacity>
-                   ))}
-                 </ScrollView>
-               </View>
+            {showEndPicker && (
+              <DateTimePicker
+                value={endDate}
+                mode="date"
+                display="default"
+                onChange={(event, selectedDate) => {
+                  setShowEndPicker(false);
+                  if (selectedDate) setEndDate(selectedDate);
+                }}
+              />
             )}
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setDebtModalVisible(false)}>
