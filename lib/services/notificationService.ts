@@ -137,4 +137,32 @@ export const notificationService = {
             );
         }
     },
+
+    /**
+     * Sadece Admin kullanıcıların push tokenlarını getirir
+     */
+    async getAdminPushTokens(): Promise<string[]> {
+        try {
+            const { data, error } = await supabase
+                .from("users")
+                .select("push_token")
+                .eq("admin", "true")
+                .not("push_token", "is", null);
+
+            if (error) {
+                console.error("Error fetching admin push tokens:", error);
+                return [];
+            }
+
+            return data
+                .map((u) => u.push_token)
+                .filter(
+                    (token): token is string =>
+                        Boolean(token && typeof token === "string" && token.trim().length > 0)
+                );
+        } catch (error) {
+            console.error("Error in getAdminPushTokens:", error);
+            return [];
+        }
+    },
 };

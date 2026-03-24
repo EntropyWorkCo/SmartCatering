@@ -49,6 +49,29 @@ export const adisyonService = {
       throw itemsError;
     }
 
+    // 3. Bildirim Tetikleyicileri
+    try {
+        const { notificationService } = require("./notificationService");
+        
+        // - Puanlama Bildirimi Planla (15 dk sonra)
+        notificationService.scheduleRatingNotification(15, adisyon.id);
+
+        // - Admin'e Canlı Sipariş Bildirimi Gönder
+        (async () => {
+            const adminTokens = await notificationService.getAdminPushTokens();
+            if (adminTokens.length > 0) {
+               await notificationService.sendPushNotification(
+                   adminTokens,
+                   "Yeni Sipariş Alındı! 🛎️",
+                   `${isCorporate ? "Kurumsal" : "Bireysel"} müşteriden yeni bir sipariş düştü.`,
+                   { url: "/(admin)/dashboard" }
+               );
+            }
+        })();
+    } catch (e) {
+        console.warn("Otomatik bildirim hatası (Kritik değil):", e);
+    }
+
     return adisyon;
   },
 

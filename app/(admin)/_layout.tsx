@@ -1,13 +1,44 @@
 import Colors from "@/constants/Colors"; //tema renklerini tutan dosya
+import { useAuth } from "@/lib/hooks/useAuth";
 import { useResolvedTheme } from "@/lib/store/themeStore"; // kullanıcının light-dark tamasını döndürür
+import { supabase } from "@/lib/supabase"; //Cihazın işletim sistemini kontrol eder:ios,android,web
 import { MaterialIcons } from '@expo/vector-icons'; // Google Material ikonlarını kullanmanı sağlar.
 import { Tabs } from 'expo-router'; //Expo Router'ın Tab Navigation bileşeni.Yani alt menü oluşturur.
-import React from 'react';
-import { Platform } from 'react-native'; //Cihazın işletim sistemini kontrol eder:ios,android,web
+import React, { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 
 export default function AdminLayout() { //Admin panelindeki tüm sayfaların layout'unu belirler.
     const theme = useResolvedTheme();
     const colors = Colors[theme];
+    const { user } = useAuth();
+    const [unreadCount, setUnreadCount] = useState<number>(0);
+
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const fetchUnreadCount = async () => {
+            const { count, error } = await supabase
+                .from("messages")
+                .select("*", { count: "exact", head: true })
+                .eq("is_read", false)
+                .eq("is_from_admin", false); 
+            
+            if (!error) setUnreadCount(count || 0);
+        };
+
+        fetchUnreadCount();
+
+        const channel = supabase
+            .channel('admin-messages-unread')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+                fetchUnreadCount();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [user?.id]);
 
     return (
         <Tabs backBehavior="history" //Android geri tuşunun davranışını belirler.
@@ -65,6 +96,7 @@ export default function AdminLayout() { //Admin panelindeki tüm sayfaların lay
                         <MaterialIcons name="mail-outline" size={28} color={color} />
                     ),
                     tabBarShowLabel: false,
+                    tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
                 }}
             />
 

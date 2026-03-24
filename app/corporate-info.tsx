@@ -60,7 +60,7 @@ export default function CorporateInfoScreen() {
                 .from("companies")
                 .select("id")
                 .eq("user_id", user.id)
-                .single();
+                .maybeSingle();
             if (data) {
                 setFetchedCompanyId(data.id);
             } else if (error) {

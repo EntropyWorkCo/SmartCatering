@@ -3,8 +3,10 @@ import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useResolvedTheme } from "@/lib/store/themeStore";
+import { supabase } from "@/lib/supabase";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Tabs } from "expo-router";
+import React, { useEffect, useState } from "react";
 import { View } from "react-native";
 
 export default function TabLayout() {
@@ -13,6 +15,35 @@ export default function TabLayout() {
   const { user } = useAuth();
   const { profile } = useProfile(user?.id);
   const isCompanyOwner = !!profile?.corporate_info;
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fetchUnreadCount = async () => {
+      const { count, error } = await supabase
+        .from("messages")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("is_read", false)
+        .eq("is_from_admin", true); 
+      
+      if (!error) setUnreadCount(count || 0);
+    };
+
+    fetchUnreadCount();
+
+    const channel = supabase
+      .channel('user-messages-unread')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+        fetchUnreadCount();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
   return (
     <Tabs
@@ -104,6 +135,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => (
             <FontAwesome name="user" size={24} color={color} />
           ),
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
         }}
       />
     </Tabs>

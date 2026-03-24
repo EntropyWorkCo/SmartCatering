@@ -99,6 +99,21 @@ export default function AdminMessages() {
         }
     }, []);
 
+    useEffect(() => {
+        if (activeTab === "PRIVATE") {
+            const clearUnread = async () => {
+                await supabase
+                    .from("messages")
+                    .update({ is_read: true })
+                    .eq("is_from_admin", false)
+                    .eq("is_read", false);
+                
+                setPrivateMessages(prev => prev.map(m => ({ ...m, is_read: true })));
+            };
+            clearUnread();
+        }
+    }, [activeTab]);
+
     const markAsRead = async (id: string) => {
         await supabase.from("messages").update({ is_read: true }).eq("id", id);
         setPrivateMessages(prev => prev.map(m => m.id === id ? { ...m, is_read: true } : m));
