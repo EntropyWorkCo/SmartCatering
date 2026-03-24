@@ -134,15 +134,9 @@ export default function MenuScreen() {
   const handleConfirmPackage = () => {
     if (!selectedPackage) return;
     
-    // Check if one item from each required category is selected
-    const requiredCategories = ["ÇORBA", "ANA YEMEK"];
-    if (selectedPackage.maxItems >= 3) requiredCategories.push("YARDIMCI");
-    if (selectedPackage.maxItems >= 4) requiredCategories.push("TATLI"); // Or whatever the 4th is. For now, just ensure total count is maxItems and we have unique categories
-
-    const hasAll = requiredCategories.every(cat => packageSelections.some(s => s.category === cat));
-    
-    // As per user request: "Ama her çeşitten birer tane"
-    if (!hasAll || packageSelections.length !== selectedPackage.maxItems) {
+    // Check if the total number of items selected matches the package requirement
+    // togglePackageSelection already ensures that each selection is from a unique category
+    if (packageSelections.length !== selectedPackage.maxItems) {
       Alert.alert("Eksik/Fazla Seçim", `Lütfen her gruptan birer tane olmak şartıyla tam ${selectedPackage.maxItems} çeşit yemek seçiniz.`);
       return;
     }
@@ -513,7 +507,18 @@ export default function MenuScreen() {
             </View>
 
             <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 100 }}>
-              {Array.from(new Set(dailyMenu.map(m => m.category))).map(catName => {
+              {Array.from(new Set(dailyMenu.map(m => m.category)))
+                .filter(cat => cat !== "İÇECEK")
+                .sort((a, b) => {
+                  const order = ["ÇORBA", "ANA YEMEK", "YARDIMCI", "EKSTRA", "TATLI"];
+                  const indexA = order.indexOf(a);
+                  const indexB = order.indexOf(b);
+                  if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+                  if (indexA === -1) return 1;
+                  if (indexB === -1) return -1;
+                  return indexA - indexB;
+                })
+                .map(catName => {
                 const catItems = dailyMenu.filter(m => m.category === catName);
                 if (catItems.length === 0) return null;
                 
@@ -530,7 +535,6 @@ export default function MenuScreen() {
                         >
                           <View style={{ flex: 1 }}>
                             <Text style={styles.modalMealName}>{item.name}</Text>
-                            {item.price > 0 && <Text style={{ fontSize: 11, color: colors.danger, marginTop: 2 }}>+ ₺{item.price} Fark</Text>}
                           </View>
                           {isSelected && <MaterialIcons name="check-circle" size={20} color={colors.primary} />}
                         </TouchableOpacity>

@@ -35,9 +35,32 @@ export default function CartScreen() {
     const orderMode = useCartStore((state) => state.orderMode);
     const orderType = orderMode === "eat_now" ? "Şimdi Ye" : "Sipariş Ver";
     const [address, setAddress] = useState("");
+    const [phone, setPhone] = useState("");
     const [orderNote, setOrderNote] = useState("");
     const [hasGuest, setHasGuest] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Auto-fill address and phone from profile
+    React.useEffect(() => {
+        if (profile) {
+            // For corporate users
+            if (profile.corporate_info) {
+                if (profile.corporate_info.invoiceAddress && !address) {
+                    setAddress(profile.corporate_info.invoiceAddress);
+                }
+                if (profile.corporate_info.companyPhone && !phone) {
+                    setPhone(profile.corporate_info.companyPhone);
+                } else if (profile.phone && !phone) {
+                    setPhone(profile.phone);
+                }
+            } else {
+                // For individual users
+                if (profile.phone && !phone) {
+                    setPhone(profile.phone);
+                }
+            }
+        }
+    }, [profile]);
 
     const handleCheckout = async () => {
         if (!user) {
@@ -50,9 +73,15 @@ export default function CartScreen() {
             return;
         }
 
-        if (orderType === "Sipariş Ver" && !address.trim()) {
-            Alert.alert("Hata", "Lütfen siparişinize devam etmek için teslimat adresini giriniz.");
-            return;
+        if (orderType === "Sipariş Ver") {
+            if (!address.trim()) {
+                Alert.alert("Hata", "Lütfen siparişinize devam etmek için teslimat adresini giriniz.");
+                return;
+            }
+            if (!phone.trim()) {
+                Alert.alert("Hata", "Lütfen siparişinize devam etmek için iletişim telefonunu giriniz.");
+                return;
+            }
         }
 
         Alert.alert(
@@ -67,7 +96,8 @@ export default function CartScreen() {
                         setIsSubmitting(true);
                         try {
                             const noteContent = `${orderNote ? `Not: ${orderNote}` : ""}`;
-                            const note = `[Adres: ${address}] ${hasGuest ? '[MİSAFİRLE BERABER] ' : ''}${noteContent}`.trim();
+                            const addressInfo = orderType === "Sipariş Ver" ? `[Adres: ${address}] [Tel: ${phone}] ` : "";
+                            const note = `${addressInfo}${hasGuest ? '[MİSAFİRLE BERABER] ' : ''}${noteContent}`.trim();
                             const adisyon = await adisyonService.createOrder(
                                 user.id,
                                 getTotal(),
@@ -178,11 +208,21 @@ export default function CartScreen() {
                             <>
                                 <Text style={[styles.orderTypeLabel, { marginBottom: 8 }]}>Teslimat Adresi:</Text>
                                 <TextInput
-                                    style={[styles.noteInput, { minHeight: 48, marginBottom: 16 }]}
+                                    style={[styles.noteInput, { minHeight: 48, marginBottom: 12 }]}
                                     placeholder="Açık adres, bina, kat, daire giriniz..."
                                     placeholderTextColor={colors.muted}
                                     value={address}
                                     onChangeText={setAddress}
+                                    multiline
+                                />
+                                <Text style={[styles.orderTypeLabel, { marginBottom: 8 }]}>İletişim Telefonu:</Text>
+                                <TextInput
+                                    style={[styles.noteInput, { minHeight: 48, marginBottom: 16 }]}
+                                    placeholder="5XX XXX XX XX"
+                                    placeholderTextColor={colors.muted}
+                                    value={phone}
+                                    onChangeText={setPhone}
+                                    keyboardType="phone-pad"
                                 />
                             </>
                         )}

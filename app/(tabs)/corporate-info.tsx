@@ -308,9 +308,6 @@ export default function CorporateInfoScreen() {
                     <td style="padding: 12px; border-bottom: 1px solid #ddd;">
                       ${detailText}
                     </td>
-                    <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right; color: ${o.order_type === 'MANUAL_PAYMENT' ? '#10b981' : '#333'}">
-                        ${o.order_type === 'MANUAL_PAYMENT' ? '-' : ''}₺${o.total_amount?.toLocaleString("tr-TR")}
-                    </td>
                 </tr>
             `;
         }).join('');
@@ -340,7 +337,6 @@ export default function CorporateInfoScreen() {
                                 <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">TARIH</th>
                                 <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">ÇALIŞAN</th>
                                 <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">ÜRÜNLER</th>
-                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666; text-align: right;">TUTAR</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -580,9 +576,6 @@ export default function CorporateInfoScreen() {
                                                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                                                                     <Text style={{ fontWeight: 'bold', color: colors.text }}>
                                                                         {order.order_type === 'MANUAL_DEBT' ? 'Kayıtlı Borç' : order.order_type === 'MANUAL_PAYMENT' ? 'Kayıtlı Ödeme' : order.userName}
-                                                                    </Text>
-                                                                    <Text style={{ fontWeight: 'bold', color: order.order_type === 'MANUAL_PAYMENT' ? '#10b981' : colors.primary }}>
-                                                                        {order.order_type === 'MANUAL_PAYMENT' ? '-' : ''}₺{order.total_amount?.toLocaleString("tr-TR")}
                                                                     </Text>
                                                                 </View>
                                                                 <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 8 }}>{date.toLocaleString('tr-TR')}</Text>
