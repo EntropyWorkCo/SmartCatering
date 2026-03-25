@@ -165,4 +165,49 @@ export const notificationService = {
             return [];
         }
     },
+
+    /**
+     * Cihazı bildirimlere kaydeder ve bir token döndürür.
+     */
+    async registerForPushNotificationsAsync() {
+        const Notifications = require("expo-notifications");
+        const Platform = require("react-native").Platform;
+
+        let token;
+        if (Platform.OS === 'android') {
+            await Notifications.setNotificationChannelAsync('default', {
+                name: 'default',
+                importance: Notifications.AndroidImportance.MAX,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#FF231F7C',
+            });
+        }
+
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+            const { status } = await Notifications.requestPermissionsAsync();
+            finalStatus = status;
+        }
+        if (finalStatus !== 'granted') {
+            console.log('Failed to get push token for push notification!');
+            return null;
+        }
+
+        try {
+            const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+            if (!projectId) {
+                console.warn("DİKKAT: app.json içinde 'projectId' bulunamadı. Push bildirimleri (uygulama kapalıyken gelenler) çalışmayacaktır. Ancak uygulama içi uyarılar aktif kalacaktır.");
+                return null;
+            }
+            token = (await Notifications.getExpoPushTokenAsync({
+                projectId,
+            })).data;
+            console.log("Device Push Token:", token);
+        } catch (e) {
+            console.error("Error getting Expo Push Token:", e);
+        }
+
+        return token;
+    },
 };

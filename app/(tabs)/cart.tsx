@@ -62,6 +62,12 @@ export default function CartScreen() {
         }
     }, [profile]);
 
+    const handleClearCart = () => {
+        clearCart();
+        setOrderNote("");
+        setHasGuest(false);
+    };
+
     const handleCheckout = async () => {
         if (!user) {
             Alert.alert("Hata", "Sipariş verebilmek için giriş yapmalısınız.");
@@ -108,6 +114,8 @@ export default function CartScreen() {
                             );
 
                             clearCart();
+                            setOrderNote("");
+                            setHasGuest(false);
                             
                             // Skip rating notification for admins
                             if (!isAdmin) {
@@ -143,7 +151,7 @@ export default function CartScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                     <ThemeSwitcher />
                     {items.length > 0 && (
-                        <TouchableOpacity onPress={clearCart} style={styles.clearBtn}>
+                        <TouchableOpacity onPress={handleClearCart} style={styles.clearBtn}>
                             <MaterialIcons name="delete-sweep" size={24} color={colors.danger} />
                         </TouchableOpacity>
                     )}

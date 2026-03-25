@@ -2,10 +2,10 @@ import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useResolvedTheme } from "@/lib/store/themeStore";
-import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
+import * as Notifications from 'expo-notifications';
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -33,7 +33,13 @@ const STATUS_LABELS: any = {
 };
 
 export default function AdminDashboard() {
-  const { orders, loading, updateOrderStatus } = useAdisyon();
+
+  const handleNewOrder = useCallback(async (newOrder: any) => {
+    console.log("ADMİN DASHBOARD: Yeni Kayıt Tespit Edildi (Liste Yenileniyor) 🛎️");
+    // Bildirim artık TabLayout üzerinden global geliyor, burada sadece listeyi tazelemek yeterli.
+  }, []);
+
+  const { orders, loading, updateOrderStatus } = useAdisyon(undefined, handleNewOrder);
   const insets = useSafeAreaInsets();
   const theme = useResolvedTheme();
   const colors = Colors[theme];

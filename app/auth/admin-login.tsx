@@ -21,6 +21,7 @@ import { supabase } from "../../lib/supabase";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
+import { triggerAuthRefresh } from "../../lib/hooks/useAuth";
 
 export default function AdminLoginScreen() {
   const router = useRouter();
@@ -67,9 +68,8 @@ export default function AdminLoginScreen() {
 
         // Cihaz hafızasına admin girişini kaydet
         await AsyncStorage.setItem("isAdmin", "true");
-
-        // ÖNEMLİ: Expo Router bazen parantezli klasörlerde hassas olabilir.
-        // Eğer yönlenmezse burayı "/dashboard" olarak değiştirebiliriz.
+        await triggerAuthRefresh();
+        
         router.replace("/(admin)/dashboard");
       } else {
         console.warn("LOG: Yetki reddedildi! Kullanıcı admin değil.");

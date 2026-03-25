@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { adisyonService } from "../services/adisyonService";
 import { supabase } from "../supabase";
 
-export const useAdisyon = (userId?: string) => {
+export const useAdisyon = (userId?: string, onNewOrder?: (payload: any) => void) => {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -50,7 +50,10 @@ export const useAdisyon = (userId?: string) => {
       .on(
         "postgres_changes",
         channelConf,
-        () => {
+        (payload) => {
+          if (payload.eventType === 'INSERT' && !userId && onNewOrder) {
+            onNewOrder(payload.new);
+          }
           fetchOrders();
         },
       )
@@ -59,12 +62,13 @@ export const useAdisyon = (userId?: string) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId]);
+  }, [userId, onNewOrder]);
 
   return {
     orders,
     loading,
     fetchOrders,
+// ... rest same
     createOrder: adisyonService.createOrder,
     updateOrderStatus: async (orderId: string, status: string) => {
       setLoading(true);

@@ -82,8 +82,8 @@ export const menuService = {
       if (tokens && tokens.length > 0) {
         await notificationService.sendPushNotification(
           tokens,
-          "Yeni Menü Yayında! 🥘",
-          "Bugünün lezzetli menüsü hazır, hemen siparişinizi verin!",
+          "Günün Menüsü Hazır! 🍽️",
+          "Lezzetli yemeklerimiz sizi bekliyor. Hemen menüye göz atın ve siparişinizi verin!",
           { url: "/(tabs)/menu" }
         );
       }

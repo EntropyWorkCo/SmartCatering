@@ -11,8 +11,21 @@ import Constants from "expo-constants";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
-import { Platform } from "react-native";
 import "react-native-reanimated";
+import { 
+  Alert, 
+  TouchableOpacity, 
+  View, 
+  Text, 
+  SafeAreaView, 
+  StyleSheet, 
+  ActivityIndicator,
+  Platform
+} from "react-native";
+import { supabase } from "@/lib/supabase";
+import * as Notifications from "expo-notifications";
+import { useProfile } from "@/lib/hooks/useProfile";
+import { NotificationRegister } from "@/components/NotificationRegister";
 
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -89,44 +102,92 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useResolvedTheme();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const router = useRouter();
+  const lastMenuNoteRef = React.useRef<number>(0);
 
   useEffect(() => {
     // Android Expo Go SDK 53+ has issues with expo-notifications setup.
-    // We bypass it to prevent crashes, using our Alert fallback in notificationService instead.
     const isAndroidExpoGo = Platform.OS === 'android' && Constants.appOwnership === 'expo';
-    if (isAndroidExpoGo) return;
+    
+    console.log("🔔 BİLDİRİM SİSTEMİ BAŞLATILIYOR... (Admin: " + isAdmin + ")");
 
-    try {
-      const Notifications = require("expo-notifications");
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
 
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: false,
-          shouldShowBanner: true,
-        }),
-      });
+    const responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
+      const url = response.notification.request.content.data?.url;
+      if (url && typeof url === 'string') {
+        router.push(url as any);
+      }
+    });
 
-      const responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
-        const url = response.notification.request.content.data?.url;
-        if (url && typeof url === 'string') {
-          router.push(url as any);
-        }
-      });
+    // 1. Yeni Sipariş Dinleyicisi (Sadece Admin İçin)
+    let orderChannel: any;
+    if (isAdmin) {
+      orderChannel = supabase
+        .channel('admin-orders-live-root')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'adisyon' }, (payload) => {
+          console.log("🔥 YENİ SİPARİŞ TESPİT EDİLDİ (Root)");
+          
+          Notifications.scheduleNotificationAsync({
+            content: {
+              title: "Yeni Sipariş Alındı! 🛎️",
+              body: "Yeni bir paket siparişi düştü.",
+              sound: true,
+              data: { url: "/(admin)/dashboard" },
+            },
+            trigger: null,
+          }).catch(err => console.error("Notification trigger error:", err));
 
-      return () => {
-        responseListener.remove();
-      };
-    } catch (error) {
-      console.log("Notification listener setup failed (non-critical):", error);
+          Alert.alert("Yeni Sipariş! 🛎️", "Yeni bir paket siparişi sisteminize düştü.");
+        })
+        .subscribe();
     }
-  }, []);
+
+    // 2. Günün Menüsü Dinleyicisi (Herkes İçin)
+    const menuChannel = supabase
+      .channel('menu-publish-live-root')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'menu_items' }, (payload) => {
+        if (payload.new?.status === 'active') {
+          const now = Date.now();
+          if (now - lastMenuNoteRef.current > 10000) {
+            console.log("🍽️ GÜNÜN MENÜSÜ YAYINLANDI (Root)");
+            lastMenuNoteRef.current = now;
+            
+            Notifications.scheduleNotificationAsync({
+              content: {
+                title: "Günün Menüsü Hazır! 🍽️",
+                body: "Lezzetli yemeklerimiz yayına girdi. Hemen inceleyin!",
+                sound: true,
+                data: { url: "/(tabs)/menu" },
+              },
+              trigger: null,
+            }).catch(err => console.error("Menu Notification trigger error:", err));
+            
+            Alert.alert("Günün Menüsü Hazır! 🍽️", "Yeni ürünler yayına girdi, hemen göz atın!");
+          }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      responseListener.remove();
+      if (orderChannel) supabase.removeChannel(orderChannel);
+      supabase.removeChannel(menuChannel);
+    };
+  }, [user?.id, isAdmin]);
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+      <NotificationRegister />
       <Stack screenOptions={{ headerShown: false }}>
         {/* 1. SIRALAMA: Welcome en üstte olmalı ki Tab Bar dışında kalsın */}
         <Stack.Screen name="welcome" />

@@ -58,14 +58,24 @@ export const adisyonService = {
 
         // - Admin'e Canlı Sipariş Bildirimi Gönder
         (async () => {
-            const adminTokens = await notificationService.getAdminPushTokens();
-            if (adminTokens.length > 0) {
-               await notificationService.sendPushNotification(
-                   adminTokens,
-                   "Yeni Sipariş Alındı! 🛎️",
-                   `${isCorporate ? "Kurumsal" : "Bireysel"} müşteriden yeni bir sipariş düştü.`,
-                   { url: "/(admin)/dashboard" }
-               );
+            try {
+                const { data: userData } = await supabase
+                    .from("users")
+                    .select("full_name")
+                    .eq("id", userId)
+                    .single();
+
+                const adminTokens = await notificationService.getAdminPushTokens();
+                if (adminTokens.length > 0) {
+                   await notificationService.sendPushNotification(
+                       adminTokens,
+                       "Yeni Sipariş Alındı! 🛎️",
+                       `${userData?.full_name || "Bir müşteri"} yeni bir sipariş verdi.`,
+                       { url: "/(admin)/dashboard" }
+                   );
+                }
+            } catch (err) {
+                console.error("Admin bildirimi hatası:", err);
             }
         })();
     } catch (e) {

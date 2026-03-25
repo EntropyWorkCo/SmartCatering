@@ -151,6 +151,7 @@ export default function OtpVerifyScreen() {
 
                 if (data.session) {
                     await AsyncStorage.removeItem("isAdmin");
+                    await triggerAuthRefresh();
                     router.replace("/(tabs)/home");
                 }
             }
