@@ -585,7 +585,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   activeTab: { borderBottomColor: colors.primary },
   tabText: { fontSize: 13, fontWeight: "bold", color: colors.muted },
   activeTabText: { color: colors.primary },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
+  scrollContent: { paddingHorizontal: 24, paddingBottom: 100 },
   totalCard: { paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: colors.surfaceBorder, marginBottom: 16 },
   totalLabel: { color: colors.muted, fontSize: 11, fontWeight: "bold", letterSpacing: 1 },
   totalAmount: { color: colors.text, fontSize: 32, fontWeight: "900" },

@@ -2,7 +2,6 @@ import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useResolvedTheme } from "@/lib/store/themeStore";
-import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useMemo } from "react";
@@ -166,7 +165,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   quickActions: { paddingHorizontal: 24, marginBottom: 16 },
   summaryBtn: { backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12 },
   summaryBtnText: { color: '#fff', fontWeight: 'bold', marginLeft: 8 },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
+  scrollContent: { paddingHorizontal: 24, paddingBottom: 100 },
   orderCard: { backgroundColor: colors.surface, borderRadius: 20, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: colors.surfaceBorder },
   orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
   orderUser: { fontSize: 16, fontWeight: 'bold', color: colors.text },

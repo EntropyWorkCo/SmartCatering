@@ -726,7 +726,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     activeToggleBtnText: { color: colors.primary },
     infoBox: { backgroundColor: colors.surfaceBorder, padding: 12, borderRadius: 8, marginBottom: 20 },
     infoText: { fontSize: 12, color: colors.text },
-    scrollContent: { paddingHorizontal: 24, paddingBottom: 60 },
+    scrollContent: { paddingHorizontal: 24, paddingBottom: 100 },
     sectionHeader: { fontSize: 14, fontWeight: "bold", color: colors.text, marginBottom: 16 },
     formContainer: { backgroundColor: colors.surface, padding: 20, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder, marginBottom: 24 },
     formContainerInner: { paddingHorizontal: 24, paddingBottom: 40 },
