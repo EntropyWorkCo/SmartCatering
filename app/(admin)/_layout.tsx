@@ -29,11 +29,18 @@ export default function AdminLayout() { //Admin panelindeki tüm sayfaların lay
         fetchUnreadCount();
 
         const channel = supabase
-            .channel('admin-messages-unread')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+            .channel('admin-messages-unread-all') // Unique channel name
+            .on('postgres_changes', { 
+                event: '*', 
+                schema: 'public', 
+                table: 'messages' 
+            }, (payload) => {
+                console.log("Realtime message change detected for admin:", payload.eventType);
                 fetchUnreadCount();
             })
-            .subscribe();
+            .subscribe((status) => {
+                console.log("Admin message subscription status:", status);
+            });
 
         return () => {
             supabase.removeChannel(channel);
@@ -41,18 +48,18 @@ export default function AdminLayout() { //Admin panelindeki tüm sayfaların lay
     }, [user?.id]);
 
     return (
-        <Tabs backBehavior="history" //Android geri tuşunun davranışını belirler.
-        screenOptions={{ //Tüm tablar için ortak ayarlar.
-            tabBarActiveTintColor: colors.primary, //aktif ikon rengi
-            tabBarInactiveTintColor: colors.tabIconDefault, // pasif ikon rengi
-            headerShown: false, //Üst navigation header'ını kapatır.
-            tabBarStyle: { //Alt menünün tasarımını belirler.
-                backgroundColor: colors.surface, //Tab bar arka planı.
-                borderTopWidth: 1, //Tab bar üst çizgisi.
+        <Tabs backBehavior="history"
+        screenOptions={{
+            tabBarActiveTintColor: colors.primary,
+            tabBarInactiveTintColor: colors.tabIconDefault,
+            headerShown: false,
+            tabBarStyle: {
+                backgroundColor: colors.surface,
+                borderTopWidth: 1,
                 borderTopColor: colors.surfaceBorder,
-                paddingBottom: Platform.OS === "android" ? 10 : 5,
-                paddingTop: 5,  // bu ve üstündeki satır platform kontrolü android=10 , ios=5
-                height: Platform.OS === "android" ? 70 : 60 // android tab bar 70px ; ios tab bar 69px. Android navigation bar farklı
+                paddingBottom: Platform.OS === "android" ? 12 : 12,
+                paddingTop: 8,
+                height: Platform.OS === "android" ? 75 : 85,
             }
         }}>
             <Tabs.Screen //Her biri bir sayfayı temsil eder.

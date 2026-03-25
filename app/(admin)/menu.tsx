@@ -253,15 +253,10 @@ export default function AdminMenuAdd() {
 
     return (
         <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
-            <View style={styles.header}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/(admin)/dashboard")} style={{ backgroundColor: colors.surface, padding: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
-                        <MaterialIcons name="arrow-back" size={24} color={colors.text} />
-                    </TouchableOpacity>
-                    <View>
-                        <Text style={styles.title}>Menü Yönetimi</Text>
-                        <Text style={styles.subtitle}>GÜNLÜK MENÜ & FİYAT TABELASI</Text>
-                    </View>
+            <View style={[styles.header, { marginBottom: 10 }]}>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.title}>Menü Yönetimi</Text>
+                    <Text style={styles.subtitle}>GÜNLÜK MENÜ & FİYAT TABELASI</Text>
                 </View>
                 <ThemeSwitcher />
             </View>
@@ -422,10 +417,15 @@ export default function AdminMenuAdd() {
                 {/* 3. GÜNÜN MENÜSÜ TAB */}
                 {mainTab === "TODAY" && (
                     <View style={{ marginTop: 10 }}>
-                        {todayMenu.some((item: any) => item.status === 'draft') && (
+                        {todayMenu.some((item: any) => item.status === 'draft') ? (
                             <TouchableOpacity style={styles.publishBtnBox} onPress={handlePublishMenu}>
-                                <Text style={styles.publishBtnBoxText}>YAYINLA VE MÜŞTERİYE BİLDİRİM GÖNDER</Text>
+                                <Text style={styles.publishBtnBoxText}>🚀 BUGÜNÜN MENÜSÜNÜ YAYINLA</Text>
                             </TouchableOpacity>
+                        ) : (
+                            <View style={[styles.publishBtnBox, { backgroundColor: colors.surfaceBorder, opacity: 0.5 }]}>
+                                <Text style={[styles.publishBtnBoxText, { color: colors.muted }]}>YAYINLANACAK TASLAK YOK</Text>
+                                <Text style={{ fontSize: 9, color: colors.muted }}>Yemek Havuzu'ndan yemek ekleyiniz</Text>
+                            </View>
                         )}
 
                         {todayMenu.length > 0 ? (

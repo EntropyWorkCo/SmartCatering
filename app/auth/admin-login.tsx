@@ -16,6 +16,7 @@ import {
 // Backend Servislerimiz
 import Logo from "@/components/Logo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { triggerAuthRefresh } from "../../lib/hooks/useAuth";
 import { userService } from "../../lib/services/userService";
 import { supabase } from "../../lib/supabase";
 
@@ -68,6 +69,9 @@ export default function AdminLoginScreen() {
 
         // Cihaz hafızasına admin girişini kaydet
         await AsyncStorage.setItem("isAdmin", "true");
+        
+        // ÖNEMLİ: Auth store'u güncelle ki RootLayout isAdmin'i doğru görsün
+        await triggerAuthRefresh();
 
         // ÖNEMLİ: Expo Router bazen parantezli klasörlerde hassas olabilir.
         // Eğer yönlenmezse burayı "/dashboard" olarak değiştirebiliriz.
@@ -179,26 +183,6 @@ const getStyles = (colors: any) => StyleSheet.create({
     borderColor: colors.surfaceBorder,
   },
   content: { flex: 1, alignItems: "center", justifyContent: "center" },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    backgroundColor: colors.primary,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
-    elevation: 8,
-  },
-  logoText: {
-    color: "#fff",
-    fontSize: 42,
-    fontWeight: "900",
-    fontStyle: "italic",
-  },
   headerTextContainer: { alignItems: "center", marginBottom: 32 },
   title: { fontSize: 32, fontWeight: "900", color: colors.text, marginBottom: 6 },
   subtitle: {
