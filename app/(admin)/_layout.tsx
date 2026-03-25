@@ -61,7 +61,7 @@ export default function AdminLayout() { //Admin panelindeki tüm sayfaların lay
                 paddingTop: 8,
                 height: Platform.OS === "android" ? 75 : 85,
             }
-        }}>
+        }} >
             <Tabs.Screen //Her biri bir sayfayı temsil eder.
                 name="dashboard"
                 options={{
