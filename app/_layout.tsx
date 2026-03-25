@@ -9,7 +9,6 @@ import {
 } from "@react-navigation/native";
 import Constants from "expo-constants";
 import { useFonts } from "expo-font";
-import * as Notifications from "expo-notifications";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useState } from "react";
@@ -95,8 +94,14 @@ function RootLayoutNav() {
     
     console.log("🔔 BİLDİRİM SİSTEMİ BAŞLATILIYOR... (Admin: " + isAdmin + ", ExpoGo: " + isAndroidExpoGo + ")");
 
+    let responseListener: any;
+    let orderChannel: any;
+    let menuChannel: any;
+
     if (!isAndroidExpoGo) {
       try {
+        const Notifications = require("expo-notifications");
+
         Notifications.setNotificationHandler({
           handleNotification: async () => ({
             shouldShowAlert: true,
@@ -106,45 +111,42 @@ function RootLayoutNav() {
             shouldShowList: true,
           }),
         });
-      } catch (err) {
-        console.warn("Notification handler set failed:", err);
-      }
-    }
 
-    const responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
-      const url = response.notification.request.content.data?.url;
-      if (url && typeof url === 'string') {
-        router.push(url as any);
-      }
-    });
-
-    // 1. Yeni Sipariş Dinleyicisi (Sadece Admin İçin)
-    let orderChannel: any;
-    if (isAdmin) {
-      orderChannel = supabase
-        .channel('admin-orders-live-root')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'adisyon' }, (payload) => {
-          console.log("🔥 YENİ SİPARİŞ TESPİT EDİLDİ (Root)");
-          
-          if (!isAndroidExpoGo) {
-            Notifications.scheduleNotificationAsync({
-              content: {
-                title: "Yeni Sipariş Alındı! 🛎️",
-                body: "Yeni bir paket siparişi düştü.",
-                sound: true,
-                data: { url: "/(admin)/dashboard" },
-              },
-              trigger: null,
-            }).catch(err => console.error("Notification trigger error:", err));
+        responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
+          const url = response.notification.request.content.data?.url;
+          if (url && typeof url === 'string') {
+            router.push(url as any);
           }
+        });
 
-          Alert.alert("Yeni Sipariş! 🛎️", "Yeni bir paket siparişi sisteminize düştü.");
-        })
-        .subscribe();
+        // 1. Yeni Sipariş Dinleyicisi (Sadece Admin İçin)
+        if (isAdmin) {
+          orderChannel = supabase
+            .channel('admin-orders-live-root')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'adisyon' }, (payload) => {
+              console.log("🔥 YENİ SİPARİŞ TESPİT EDİLDİ (Root)");
+              
+              Notifications.scheduleNotificationAsync({
+                content: {
+                  title: "Yeni Sipariş Alındı! 🛎️",
+                  body: "Yeni bir paket siparişi düştü.",
+                  sound: true,
+                  data: { url: "/(admin)/dashboard" },
+                },
+                trigger: null,
+              }).catch((err: any) => console.error("Notification trigger error:", err));
+
+              Alert.alert("Yeni Sipariş! 🛎️", "Yeni bir paket siparişi sisteminize düştü.");
+            })
+            .subscribe();
+        }
+      } catch (err) {
+        console.warn("Notification system initialization failed:", err);
+      }
     }
 
     // 2. Günün Menüsü Dinleyicisi (Herkes İçin)
-    const menuChannel = supabase
+    menuChannel = supabase
       .channel('menu-publish-live-root')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'menu_items' }, (payload) => {
         if (payload.new?.status === 'active') {
@@ -154,6 +156,7 @@ function RootLayoutNav() {
             lastMenuNoteRef.current = now;
             
             if (!isAndroidExpoGo) {
+              const Notifications = require("expo-notifications");
               Notifications.scheduleNotificationAsync({
                 content: {
                   title: "Günün Menüsü Hazır! 🍽️",
@@ -162,7 +165,7 @@ function RootLayoutNav() {
                   data: { url: "/(tabs)/menu" },
                 },
                 trigger: null,
-              }).catch(err => console.error("Menu Notification trigger error:", err));
+              }).catch((err: any) => console.error("Menu Notification trigger error:", err));
             }
             
             Alert.alert("Günün Menüsü Hazır! 🍽️", "Yeni ürünler yayına girdi, hemen göz atın!");
@@ -172,9 +175,9 @@ function RootLayoutNav() {
       .subscribe();
 
     return () => {
-      responseListener.remove();
+      if (responseListener) responseListener.remove();
       if (orderChannel) supabase.removeChannel(orderChannel);
-      supabase.removeChannel(menuChannel);
+      if (menuChannel) supabase.removeChannel(menuChannel);
     };
   }, [user?.id, isAdmin]);
 
