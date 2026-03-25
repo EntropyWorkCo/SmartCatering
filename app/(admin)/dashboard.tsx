@@ -172,7 +172,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   quickActions: { paddingHorizontal: 24, marginBottom: 16 },
   summaryBtn: { backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12 },
   summaryBtnText: { color: '#fff', fontWeight: 'bold', marginLeft: 8 },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
+  scrollContent: { paddingHorizontal: 24, paddingBottom: 100 },
   orderCard: { backgroundColor: colors.surface, borderRadius: 20, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: colors.surfaceBorder },
   orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
   orderUser: { fontSize: 16, fontWeight: 'bold', color: colors.text },

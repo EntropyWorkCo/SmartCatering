@@ -89,7 +89,7 @@ export default function AdminReports() {
         return <FeedbackView onBack={() => setView("MAIN")} ratings={ratings} colors={colors} styles={styles} />;
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/(admin)/dashboard")} style={styles.backButton}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
@@ -313,7 +313,7 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
     };
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={onBack} style={styles.backButton}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
@@ -527,7 +527,7 @@ const PerformanceDashboard = ({ onBack, ratings, colors, styles }: any) => {
     };
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={onBack} style={styles.backButton}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
@@ -582,7 +582,7 @@ const FeedbackView = ({ onBack, ratings, colors, styles }: any) => {
     const insets = useSafeAreaInsets();
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={onBack} style={styles.backButton}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
@@ -659,7 +659,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     backButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.surfaceBorder, marginRight: 16 },
     title: { fontSize: 24, fontWeight: "900", color: colors.text },
     sectionHeader: { fontSize: 10, fontWeight: "900", color: colors.muted, textTransform: "uppercase", letterSpacing: 1.5, marginLeft: 24, marginBottom: 12, marginTop: 8 },
-    scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
+    scrollContent: { paddingHorizontal: 24, paddingBottom: 100 },
     menuContainer: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.surfaceBorder, overflow: "hidden" },
     menuItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 20 },
     menuItemBorder: { borderBottomWidth: 1, borderBottomColor: colors.surfaceBorder },

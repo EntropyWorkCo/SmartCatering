@@ -79,7 +79,7 @@ export default function AdminChangeCode() {
     };
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/(admin)/dashboard")} style={styles.backButton}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
@@ -163,7 +163,7 @@ const getStyles = (colors: any) => StyleSheet.create({  // tema destekli stil si
     title: { fontSize: 24, fontWeight: "900", color: colors.text }, // başlık
     scrollContent: { // scroll content
         paddingHorizontal: 24, // yatay boşluk
-        paddingBottom: 40, // alt boşluk
+        paddingBottom: 100, // alt boşluk
     },
     formContainer: {
         marginBottom: 24, // form ile alt kenar boşluğu

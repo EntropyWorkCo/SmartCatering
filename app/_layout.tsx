@@ -5,12 +5,11 @@ import {
     DefaultTheme,
     ThemeProvider,
 } from "@react-navigation/native";
-import { useFonts } from "expo-font";
-// import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
+import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import "react-native-reanimated";
 import { 
   Alert, 
@@ -31,21 +30,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 
 export { ErrorBoundary } from "expo-router";
 
-/*
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
-*/
-
-// initialRouteName kaldırıldı veya "welcome" yapıldı
-// unstable_settings iOS'ta kaydırma (swipe) ile welcome'a dönme sorununa yol açabileceği için kaldırıldı.
-
+// Keep splash screen visible until we're ready
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -57,45 +42,50 @@ export default function RootLayout() {
   const { user, loading: authLoading, isAdmin } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     if (error) throw error;
   }, [error]);
 
-  useEffect(() => {
-    if (loaded && !authLoading) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded, authLoading]);
-
-  // Auth Guard: Watch for changes in user / segment
+  // Auth Guard & Initial Redirection logic
   useEffect(() => {
     if (!loaded || authLoading) return;
 
     const inAuthGroup = segments[0] === "auth" || segments[0] === "welcome";
+    const isModalOrRating = segments[0] === "modal" || segments[0] === "rating";
 
-    // Eğer kullanıcı giriş yapmamışsa ve kayıt/giriş sayfalarında değilse
-    if (
-      !user &&
-      !inAuthGroup &&
-      segments[0] !== "modal" &&
-      segments[0] !== "rating"
-    ) {
-      router.replace("/welcome");
+    // Determine target path
+    let targetPath = "";
+    
+    if (!user && !inAuthGroup && !isModalOrRating) {
+      targetPath = "/welcome";
+    } else if (user && inAuthGroup) {
+      targetPath = isAdmin ? "/(admin)/dashboard" : "/(tabs)";
     }
-    // Eğer kullanıcı zaten giriş yapmışsa ve kayıt/giriş sayfalarındaysa
-    else if (user && inAuthGroup) {
-      // Admin ise yönetici paneline yolla
-      if (isAdmin) {
-        router.replace("/(admin)/dashboard");
-      } else {
-        // Yoksa müşteri paneline yolla
-        router.replace("/(tabs)");
-      }
+
+    if (targetPath) {
+      router.replace(targetPath as any);
+    } else {
+      // If we are already on the correct path, we are ready
+      setIsReady(true);
     }
   }, [user, isAdmin, segments, authLoading, loaded]);
 
-  if (!loaded || authLoading) return null;
+  // Hide Splash Screen only when EVERYTHING is ready
+  useEffect(() => {
+    if (loaded && !authLoading && isReady) {
+      // Small delay to ensure the target screen has had a chance to render its first frame
+      const timer = setTimeout(() => {
+        SplashScreen.hideAsync();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [loaded, authLoading, isReady]);
+
+  if (!loaded || authLoading) {
+    return null;
+  }
 
   return <RootLayoutNav />;
 }
