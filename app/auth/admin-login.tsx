@@ -14,6 +14,7 @@ import {
     View,
 } from "react-native";
 // Backend Servislerimiz
+import Logo from "@/components/Logo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { userService } from "../../lib/services/userService";
 import { supabase } from "../../lib/supabase";
@@ -107,9 +108,7 @@ export default function AdminLoginScreen() {
 
         <View style={styles.content}>
           {/* Logo */}
-          <View style={styles.logoContainer}>
-            <Text style={styles.logoText}>M</Text>
-          </View>
+          <Logo size="large" style={{ marginBottom: 32 }} />
 
           {/* Başlıklar */}
           <View style={styles.headerTextContainer}>

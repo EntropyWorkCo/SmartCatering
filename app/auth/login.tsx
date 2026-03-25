@@ -1,3 +1,4 @@
+import Logo from "@/components/Logo";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -126,7 +127,7 @@ export default function LoginTabsScreen() {
                         <ThemeSwitcher />
                     </View>
 
-                    <Text style={styles.brand}>MEYDAN LOKANTA</Text>
+                    <Logo size="medium" style={{ alignSelf: 'flex-start', marginBottom: 20 }} />
                     <Text style={styles.title}>Kullanıcı Girişi</Text>
 
                     {/* Sekmeler (Tabs) */}

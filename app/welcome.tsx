@@ -1,3 +1,4 @@
+import Logo from "@/components/Logo";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -20,9 +21,7 @@ export default function WelcomeScreen() {
       </View>
       <View style={styles.content}>
         <View style={styles.header}>
-          <View style={styles.logoCircle}>
-            <MaterialIcons name="restaurant-menu" size={40} color={colors.primary} />
-          </View>
+          <Logo size="large" style={{ marginBottom: 20 }} />
           <Text style={styles.title}>Hoş Geldiniz</Text>
           <Text style={styles.subtitle}>
             Lütfen devam etmek için giriş tipini seçin
@@ -67,7 +66,7 @@ export default function WelcomeScreen() {
 
         <View style={styles.footer}>
           <Text style={styles.footerBrand}>KURUMSAL</Text>
-          <Text style={styles.footerLogo}>MEYDAN LOKANTA</Text>
+          <Logo size="small" />
           <Text style={styles.footerDesc}>
             Catering & Cafeteria Management v2.0
           </Text>
