@@ -199,15 +199,7 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
             return acc + itemQty;
         }, 0);
 
-        let revenue = 0;
-        if (mainTab === "KURUMSAL") {
-            revenue = filtered.reduce((acc: number, curr: any) => {
-                const isPaid = ["PAID", "Ödendi"].includes(curr.status);
-                return acc + (isPaid ? (curr.total_amount || 0) : 0);
-            }, 0);
-        } else {
-            revenue = filtered.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
-        }
+        const revenue = filtered.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
 
         return { revenue, count: mealsCount, orders: filtered };
     }, [orders, mainTab, filterPeriod]);
@@ -232,7 +224,11 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
             const matchCompany = companies.find((c: any) => c.user_id === o.user_id || c.id === user?.company_id);
             const name = matchCompany ? matchCompany.company_name : (o.companyName || "Bireysel");
             if (!groups[name]) groups[name] = [];
-            groups[name].push({ ...o, isOwner: matchCompany?.user_id === o.user_id });
+            groups[name].push({ 
+                ...o, 
+                isOwner: matchCompany?.user_id === o.user_id,
+                companyBalance: matchCompany?.balance || 0 
+            });
         });
         return groups;
     }, [stats.orders, mainTab, companies]);
@@ -248,21 +244,27 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
         }
 
         const dateStr = new Date().toLocaleDateString('tr-TR');
+        const now = new Date();
+        let startD = new Date();
         let periodName = "";
-        if (filterPeriod === "DAILY") periodName = "Günlük";
-        else if (filterPeriod === "WEEKLY") periodName = "Haftalık";
-        else if (filterPeriod === "MONTHLY") periodName = "Aylık";
-        else if (filterPeriod === "15_DAYS") periodName = "15 Günlük";
-        else if (filterPeriod === "YEARLY") periodName = "Yıllık";
+        
+        if (filterPeriod === "DAILY") { periodName = "Günlük"; startD = now; }
+        else if (filterPeriod === "WEEKLY") { periodName = "Haftalık"; startD = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); }
+        else if (filterPeriod === "MONTHLY") { periodName = "Aylık"; startD = new Date(now.getFullYear(), now.getMonth(), 1); }
+        else if (filterPeriod === "15_DAYS") { periodName = "15 Günlük"; startD = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000); }
+        else if (filterPeriod === "YEARLY") { periodName = "Yıllık"; startD = new Date(now.getFullYear(), 0, 1); }
+        
+        const dateRangeStr = `${startD.toLocaleDateString('tr-TR')} - ${now.toLocaleDateString('tr-TR')}`;
 
         const groups = groupedOrders as any;
         const groupHtml = Object.keys(groups).map(companyName => {
             const items = groups[companyName];
             const compMeals = items.reduce((acc: number, o: any) => acc + (o.adisyon_items?.reduce((iq: number, i: any) => iq + (i.quantity || 0), 0) || 0), 0);
-            const compRev = items.reduce((acc: number, o: any) => {
-                const isPaid = ["PAID", "Ödendi"].includes(o.status);
-                return acc + (mainTab === "KURUMSAL" ? (isPaid ? (o.total_amount || 0) : 0) : (o.total_amount || 0));
-            }, 0);
+            
+            // Seçili tarihler altındaki şirket tüketim toplamı (Ödenmiş/Ödenmemiş hepsi)
+            const compTotal = items.reduce((acc: number, o: any) => acc + (o.total_amount || 0), 0);
+
+            const companyDebt = items[0]?.companyBalance || 0;
 
             const rows = items.map((o: any) => `
                 <tr>
@@ -278,9 +280,17 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                 <div style="margin-bottom: 40px; page-break-inside: avoid;">
                     <div style="background-color: #f8fafc; border-left: 5px solid ${colors.primary}; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
                         <h2 style="margin: 0; color: #1e293b; font-size: 18px;">${companyName}</h2>
-                        <div style="text-align: right;">
-                             <div style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold;">FİRMA TOPLAMI</div>
-                             <div style="font-size: 16px; color: ${colors.primary}; font-weight: 900;">₺${compRev.toLocaleString("tr-TR")}</div>
+                        <div style="display: flex; gap: 20px; text-align: right;">
+                             <div>
+                                 <div style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold;">BU DÖNEMKİ TÜKETİM</div>
+                                 <div style="font-size: 16px; color: ${colors.primary}; font-weight: 900;">₺${compTotal.toLocaleString("tr-TR")}</div>
+                             </div>
+                             ${mainTab === "KURUMSAL" ? `
+                             <div style="border-left: 1px solid #e2e8f0; padding-left: 20px;">
+                                 <div style="font-size: 10px; color: ${companyDebt <= 0 ? '#10b981' : '#ef4444'}; text-transform: uppercase; font-weight: bold;">${companyDebt <= 0 ? 'BORÇ DURUMU' : 'GÜNCEL BORÇ'}</div>
+                                 <div style="font-size: 16px; color: ${companyDebt <= 0 ? '#10b981' : '#ef4444'}; font-weight: 900;">${companyDebt <= 0 ? 'ÖDENDİ' : `₺${companyDebt.toLocaleString("tr-TR")}`}</div>
+                             </div>
+                             ` : ''}
                         </div>
                     </div>
                     <table style="width: 100%; border-collapse: collapse;">
@@ -314,6 +324,7 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                             <p style="margin: 5px 0 0 0; color: #64748b; font-size: 14px; font-weight: bold;">Satış & Tahsilat Raporu</p>
                         </div>
                         <div style="text-align: right;">
+                            <div style="font-size: 12px; color: #64748b;">Tarih Aralığı: <strong style="color: #1e293b;">${dateRangeStr}</strong></div>
                             <div style="font-size: 12px; color: #64748b;">Rapor Türü: <strong style="color: #1e293b;">${mainTab} - ${periodName}</strong></div>
                             <div style="font-size: 12px; color: #64748b;">Oluşturuldu: <strong style="color: #1e293b;">${dateStr}</strong></div>
                         </div>
@@ -321,9 +332,9 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                     
                     <div style="display: flex; gap: 20px; margin-bottom: 50px;">
                         <div style="background: ${colors.primary}08; padding: 25px; border-radius: 16px; flex: 1; border: 1px solid ${colors.primary}15;">
-                            <div style="font-size: 11px; color: ${colors.primary}; text-transform: uppercase; font-weight: 900; letter-spacing: 1px; margin-bottom: 10px;">TOPLAM GELİR</div>
+                            <div style="font-size: 11px; color: ${colors.primary}; text-transform: uppercase; font-weight: 900; letter-spacing: 1px; margin-bottom: 10px;">DÖNEM CİROSU</div>
                             <div style="font-size: 32px; font-weight: 900; color: #1e293b;">₺${stats.revenue.toLocaleString("tr-TR")}</div>
-                            <div style="font-size: 10px; color: #64748b; margin-top: 5px;">* Sadece <strong>Ödendi</strong> durumundaki kayıtlar dahildir.</div>
+                            <div style="font-size: 10px; color: #64748b; margin-top: 5px;">Seçili dönemdeki <strong>tüm</strong> tüketimlerin kümülatif toplamı.</div>
                         </div>
                         <div style="background: #f8fafc; padding: 25px; border-radius: 16px; flex: 1; border: 1px solid #e2e8f0;">
                             <div style="font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 900; letter-spacing: 1px; margin-bottom: 10px;">TOPLAM ÖĞÜN</div>
@@ -408,9 +419,9 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.statsGrid}>
                     <View style={[styles.statBox, { backgroundColor: colors.infoBg, borderColor: colors.info }]}>
-                        <Text style={[styles.statBoxLabel, { color: colors.info }]}>TOPLAM GELİR</Text>
+                        <Text style={[styles.statBoxLabel, { color: colors.info }]}>DÖNEM CİROSU</Text>
                         <Text style={styles.statBoxValue}>₺{stats.revenue.toLocaleString("tr-TR")}</Text>
-                        {mainTab === "KURUMSAL" && <Text style={{ fontSize: 9, color: colors.muted }}>Sadece ödenenler dahil</Text>}
+                        {mainTab === "KURUMSAL" && <Text style={{ fontSize: 9, color: colors.muted }}>Seçili tarihlerdeki tüm tüketim</Text>}
                     </View>
                     <View style={[styles.statBox, { backgroundColor: colors.cardHighlight, borderColor: colors.primary }]}>
                         <Text style={[styles.statBoxLabel, { color: colors.primary }]}>ÖĞÜN SAYISI</Text>
@@ -429,10 +440,7 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                         const companyDebt = items[0]?.companyBalance || 0;
                         
                         const compMeals = items.reduce((acc: number, o: any) => acc + (o.adisyon_items?.reduce((iq: number, i: any) => iq + (i.quantity || 0), 0) || 0), 0);
-                        const compRev = items.reduce((acc: number, o: any) => {
-                            const isPaid = ["PAID", "Ödendi"].includes(o.status);
-                            return acc + (mainTab === "KURUMSAL" ? (isPaid ? (o.total_amount || 0) : 0) : (o.total_amount || 0));
-                        }, 0);
+                        const compTotal = items.reduce((acc: number, o: any) => acc + (o.total_amount || 0), 0);
 
                         return (
                             <View key={companyName} style={{ marginBottom: 12 }}>
@@ -444,7 +452,9 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                                     >
                                         <View style={{ flex: 1, paddingRight: 16 }}>
                                             <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>{companyName}</Text>
-                                            <Text style={{ fontSize: 12, color: colors.primary, fontWeight: 'bold', marginTop: 4 }}>{distinctEmps} Kayıtlı Çalışan</Text>
+                                            <Text style={{ fontSize: 12, color: colors.primary, fontWeight: 'bold', marginTop: 4 }}>
+                                                {distinctEmps} Çalışan | Dönem Cirosu: ₺{compTotal.toLocaleString("tr-TR")}
+                                            </Text>
                                         </View>
                                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                             <View style={{ alignItems: 'flex-end' }}>
