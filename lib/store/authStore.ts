@@ -60,13 +60,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
 
-      // 2. Get Admin Status
-      const adminFlag = await AsyncStorage.getItem("isAdmin");
+      // 2. Get Admin Status from Database (Preferred) or Storage (Fallback)
+      let isAdmin = false;
+      if (finalSession?.user && !(finalSession as any).isSoftUser) {
+        // use userService.checkIsAdmin if it's available without circular dependency
+        // Since we are in the store, we can use supabase directly or import userService
+        const { data: adminData } = await supabase.rpc("is_admin");
+        isAdmin = !!adminData;
+        await AsyncStorage.setItem("isAdmin", isAdmin ? "true" : "false");
+      } else {
+        const adminFlag = await AsyncStorage.getItem("isAdmin");
+        isAdmin = adminFlag === "true";
+      }
       
       set({ 
         session: finalSession, 
         user: finalSession?.user || null,
-        isAdmin: adminFlag === "true",
+        isAdmin: isAdmin,
         loading: false,
         initialized: true
       });
@@ -85,12 +95,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           }
         }
 
-        const adminFlag = await AsyncStorage.getItem("isAdmin");
+        let isNowAdmin = false;
+        if (currentSession?.user && !(currentSession as any).isSoftUser) {
+          const { data: adminData } = await supabase.rpc("is_admin");
+          isNowAdmin = !!adminData;
+          await AsyncStorage.setItem("isAdmin", isNowAdmin ? "true" : "false");
+        } else {
+          const adminFlag = await AsyncStorage.getItem("isAdmin");
+          isNowAdmin = adminFlag === "true";
+        }
         
         set({ 
           session: currentSession, 
           user: currentSession?.user || null,
-          isAdmin: adminFlag === "true",
+          isAdmin: isNowAdmin,
           loading: false
         });
       });

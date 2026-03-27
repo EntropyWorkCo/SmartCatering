@@ -109,7 +109,6 @@ export default function OtpVerifyScreen() {
 
                 if (authData.session) {
                     Alert.alert("Başarılı", "Hesabınız oluşturuldu!");
-                    await AsyncStorage.removeItem("isAdmin");
                     router.replace("/(tabs)/home");
                 } else {
                     router.replace("/auth/login");
@@ -131,7 +130,6 @@ export default function OtpVerifyScreen() {
                     }
 
                     await AsyncStorage.setItem("softUser", JSON.stringify(existingUser));
-                    await AsyncStorage.removeItem("isAdmin");
                     await triggerAuthRefresh();
                     router.replace("/(tabs)/home");
                     return;
@@ -150,7 +148,6 @@ export default function OtpVerifyScreen() {
                 }
 
                 if (data.session) {
-                    await AsyncStorage.removeItem("isAdmin");
                     await triggerAuthRefresh();
                     router.replace("/(tabs)/home");
                 }
