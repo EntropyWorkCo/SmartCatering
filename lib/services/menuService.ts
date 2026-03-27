@@ -57,7 +57,7 @@ export const menuService = {
   async deleteMenuItem(id: string) {
     const { error } = await supabase
       .from("menu_items")
-      .delete()
+      .update({ status: 'archived', is_active: false })
       .eq("id", id);
     if (error) throw error;
   },
@@ -153,6 +153,7 @@ export const menuService = {
       .from("menu_items")
       .select("*")
       .neq("status", "sistem_fiyati")
+      .neq("status", "archived")
       .order("created_at", { ascending: false });
     if (error) throw error;
     return data;
