@@ -47,15 +47,18 @@ export const notificationService = {
     /**
      * Belirli bir kullanıcının veya tüm kullanıcıların (admin için) push tokenlarını getirir
      */
-    async getPushTokens(userId?: string): Promise<string[]> {
+    async getPushTokens(userId?: string, excludeAdmins: boolean = true): Promise<string[]> {
         try {
-            let query = supabase
-                .from("users")
-                .select("push_token")
+            let query = (supabase
+                .from("users") as any)
+                .select("push_token, admin")
                 .not("push_token", "is", null);
 
             if (userId) {
                 query = query.eq("id", userId);
+            } else if (excludeAdmins) {
+                // Varsayılan olarak admin olmayanların (müşterilerin) tokenlarını getir
+                query = query.neq("admin", "true");
             }
 
             const { data, error } = await query;
@@ -65,10 +68,10 @@ export const notificationService = {
                 return [];
             }
 
-            return data
-                .map((user) => user.push_token)
+            return (data as any[])
+                .map((user: any) => user.push_token)
                 .filter(
-                    (token): token is string =>
+                    (token: any): token is string =>
                         Boolean(token && typeof token === "string" && token.trim().length > 0)
                 );
         } catch (error) {

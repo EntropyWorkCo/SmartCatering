@@ -11,7 +11,7 @@ import Constants from "expo-constants";
 import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import {
     Alert,
     Platform
@@ -154,7 +154,7 @@ function RootLayoutNav() {
             console.log("🍽️ GÜNÜN MENÜSÜ YAYINLANDI (Root)");
             lastMenuNoteRef.current = now;
             
-            if (!isAndroidExpoGo) {
+            if (!isAndroidExpoGo && !isAdmin) {
               const Notifications = require("expo-notifications");
               Notifications.scheduleNotificationAsync({
                 content: {
@@ -167,7 +167,9 @@ function RootLayoutNav() {
               }).catch((err: any) => console.error("Menu Notification trigger error:", err));
             }
             
-            Alert.alert("Günün Menüsü Hazır! 🍽️", "Yeni ürünler yayına girdi, hemen göz atın!");
+            if (!isAdmin) {
+              Alert.alert("Günün Menüsü Hazır! 🍽️", "Yeni ürünler yayına girdi, hemen göz atın!");
+            }
           }
         }
       })
