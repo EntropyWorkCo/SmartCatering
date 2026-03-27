@@ -151,18 +151,19 @@ export const adisyonService = {
 
     if (error) throw error;
 
-    // "Hazır" durumuna geçtiğinde kullanıcıya bildirim gönder
-    if (status === 'READY' || status === 'Hazır' || status === 'HAZIR') {
+    // Sadece "Sipariş Ver" (Paket) modunda olanlar için "Yola Çıktı" bildirimi gönder
+    const isDelivery = data.order_type === 'Sipariş Ver' || data.order_type === 'PAKET';
+
+    if ((status === 'READY' || status === 'Hazır' || status === 'HAZIR') && isDelivery) {
       try {
         const userId = data.user_id;
         const { notificationService } = require("./notificationService");
         const tokens = await notificationService.getPushTokens(userId);
         if (tokens.length > 0) {
-          const typeLabel = 'Siparişiniz';
           await notificationService.sendPushNotification(
             tokens,
-            `🍽️ ${typeLabel} Hazır!`,
-            `Siparişiniz hazırlandı ve sizi bekliyor. Afiyet olsun!`,
+            `Siparişiniz Yola Çıktı! 🛵`,
+            `Yemeğiniz hazırlandı ve şu an yola çıktı. Afiyet olsun!`,
             { type: "order_ready", orderId: data.id }
           );
         }
