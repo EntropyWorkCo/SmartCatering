@@ -201,9 +201,10 @@ export default function AdminMenuAdd() {
                 text: "Sil", style: "destructive", onPress: async () => {
                     try {
                         await menuService.deleteMenuItem(id);
+                        Alert.alert("Başarılı", "Yemek havuzdan kaldırıldı.");
                         refetch();
                     } catch (error: any) {
-                        Alert.alert("Hata", "Silme işlemi başarısız: " + error.message);
+                        Alert.alert("Hata", "İşlem başarısız: " + error.message);
                     }
                 }
             }
