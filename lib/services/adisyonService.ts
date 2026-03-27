@@ -108,7 +108,7 @@ export const adisyonService = {
     try {
       const { data, error } = await supabase
         .from("adisyon")
-        .select("*, adisyon_items(*, menu_items(name)), users(*, companies!users_company_id_fkey(*))")
+        .select("*, adisyon_items(*, menu_items(name)), users(*)")
         .order("created_at", { ascending: false });
 
       if (error) {

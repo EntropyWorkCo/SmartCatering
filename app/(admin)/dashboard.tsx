@@ -41,6 +41,8 @@ export default function AdminDashboard() {
 
   const { orders, loading, updateOrderStatus } = useAdisyon(undefined, handleNewOrder);
   const insets = useSafeAreaInsets();
+  
+  console.log("🏁 ADMIN DASHBOARD STATUS:", { loading, ordersCount: orders?.length });
   const theme = useResolvedTheme();
   const colors = Colors[theme];
   const styles = getStyles(colors);
@@ -55,7 +57,7 @@ export default function AdminDashboard() {
   if (loading && activePacketOrders.length === 0) {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={{ color: colors.text }}>Siparişler yükleniyor...</Text>
       </View>
     );
   }

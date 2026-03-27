@@ -42,7 +42,6 @@ export default function RootLayout() {
   const { user, loading: authLoading, isAdmin } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     if (error) throw error;
@@ -54,34 +53,34 @@ export default function RootLayout() {
 
     const inAuthGroup = segments[0] === "auth" || segments[0] === "welcome";
     const isModalOrRating = segments[0] === "modal" || segments[0] === "rating";
+    
+    console.log("🛠️ ROOT AUTH GUARD:", { segments, userId: user?.id, isAdmin, inAuthGroup });
 
     // Determine target path
     let targetPath = "";
     
     if (!user && !inAuthGroup && !isModalOrRating) {
       targetPath = "/welcome";
-    } else if (user && inAuthGroup) {
+    } else if (user && (inAuthGroup || segments.length < 1)) {
       targetPath = isAdmin ? "/(admin)/dashboard" : "/(tabs)";
     }
 
     if (targetPath) {
+      console.log("🚀 REDIRECTING TO:", targetPath);
       router.replace(targetPath as any);
-    } else {
-      // If we are already on the correct path, we are ready
-      setIsReady(true);
     }
   }, [user, isAdmin, segments, authLoading, loaded]);
 
-  // Hide Splash Screen only when EVERYTHING is ready
+  // Hide Splash Screen only when fonts and auth state are loaded
   useEffect(() => {
-    if (loaded && !authLoading && isReady) {
-      // Small delay to ensure the target screen has had a chance to render its first frame
+    if (loaded && !authLoading) {
+      // Give a tiny bit of time for the initial navigation to settle
       const timer = setTimeout(() => {
         SplashScreen.hideAsync();
-      }, 100);
+      }, 200);
       return () => clearTimeout(timer);
     }
-  }, [loaded, authLoading, isReady]);
+  }, [loaded, authLoading]);
 
   if (!loaded || authLoading) {
     return null;

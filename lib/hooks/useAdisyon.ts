@@ -17,12 +17,8 @@ export const useAdisyon = (userId?: string, onNewOrder?: (payload: any) => void)
         data = await adisyonService.getAllOrders();
       }
       setOrders(data || []);
-    } catch (error: any) {
-      if (error?.code === '42501') {
-        console.warn("Adisyon tablosunda okuma izni (SELECT RLS) yok. Sipariş geçmişi boş gösteriliyor.");
-      } else {
-        console.log("fetchOrders silently caught error:", error?.message || error);
-      }
+    } catch (error) {
+      console.error("🏁 fetchOrders ERROR:", error);
       setOrders([]);
     } finally {
       setLoading(false);
