@@ -249,82 +249,93 @@ export default function SummaryScreen() {
 
   const handleExportPDF = async (account: any) => {
     try {
+      const dateStr = new Date().toLocaleDateString('tr-TR');
       const html = `
         <!DOCTYPE html>
         <html>
           <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
             <style>
-              body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 20px; color: #333; }
-              .header { text-align: center; border-bottom: 2px solid #ed1c24; padding-bottom: 10px; margin-bottom: 20px; }
-              .title { font-size: 24px; font-weight: bold; color: #ed1c24; margin: 0; }
-              .meta { margin-bottom: 30px; }
-              .meta-item { margin-bottom: 5px; font-size: 14px; }
-              .section-title { font-size: 16px; font-weight: bold; background: #f8f8f8; padding: 8px; margin: 20px 0 10px 0; border-left: 4px solid #ed1c24; }
-              table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-              th { text-align: left; font-size: 12px; color: #666; padding: 8px; border-bottom: 1px solid #eee; }
-              td { padding: 10px 8px; border-bottom: 1px solid #eee; font-size: 13px; }
-              .total-row { background: #fff; font-weight: bold; font-size: 18px; }
-              .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; }
+              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
+              .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; }
+              .brand { color: ${colors.primary}; margin: 0; font-size: 24px; font-weight: 900; letter-spacing: -1px; }
+              .report-type { margin: 5px 0 0 0; color: #64748b; font-size: 14px; font-weight: bold; }
+              .meta-right { text-align: right; }
+              .meta-text { font-size: 12px; color: #64748b; }
+              .meta-text strong { color: #1e293b; }
+              .account-info { background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 30px; border: 1px solid #e2e8f0; }
+              .info-label { font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold; margin-bottom: 5px; }
+              .info-value { font-size: 18px; font-weight: bold; color: #1e293b; }
+              .section-title { font-size: 12px; font-weight: 900; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin: 30px 0 15px 0; }
+              table { width: 100%; border-collapse: collapse; }
+              th { text-align: left; font-size: 10px; color: #64748b; padding: 12px 10px; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; }
+              td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
+              .total-box { margin-top: 40px; padding: 25px; border-radius: 16px; background: ${colors.primary}08; border: 1px solid ${colors.primary}15; display: flex; justify-content: space-between; align-items: center; }
+              .total-label { font-size: 14px; font-weight: bold; color: #1e293b; }
+              .total-value { font-size: 28px; font-weight: 900; color: ${colors.primary}; }
+              .manual-note { margin-top: 5px; font-size: 12px; color: #ef4444; font-weight: bold; }
+              .footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid #f1f5f9; text-align: center; color: #94a3b8; font-size: 10px; }
             </style>
           </head>
           <body>
             <div class="header">
-              <p class="title">SMART CATERING</p>
-              <p style="margin:5px 0; font-size:14px; color:#666;">Hizmet Detay & Borç Ekstresi</p>
-              ${account.orders.some((o: any) => o.order_type === 'MANUAL_DEBT') 
-                ? `<p style="margin:2px 0; font-size:12px; color:#ed1c24; font-weight:bold;">${account.orders.find((o: any) => o.order_type === 'MANUAL_DEBT')?.note} Tarih Aralığı Hizmet Detayı</p>`
-                : ''
-              }
+              <div>
+                <h1 class="brand">Smart Catering</h1>
+                <p class="report-type">Hizmet Detay & Borç Ekstresi</p>
+              </div>
+              <div class="meta-right">
+                <div class="meta-text">Tarih: <strong>${dateStr}</strong></div>
+              </div>
             </div>
 
-            <div class="meta">
-              <div class="meta-item"><strong>Müşteri:</strong> ${account.displayName}</div>
-              <div class="meta-item"><strong>Tarih:</strong> ${new Date().toLocaleDateString('tr-TR')}</div>
+            <div class="account-info">
+              <div class="info-label">Müşteri / Firma Bilgisi</div>
+              <div class="info-value">${account.displayName}</div>
             </div>
 
-            <div class="section-title">HİZMET DETAYLARI / ÖDEMELER</div>
+            <h2 class="section-title">Hizmet ve İşlem Detayları</h2>
             <table>
               <thead>
                 <tr>
-                  <th>Tarih</th>
-                  <th>Detay</th>
-                  <th style="text-align:right">Tutar</th>
+                  <th style="width: 100px;">Tarih</th>
+                  <th>Açıklama / Detay</th>
+                  <th style="text-align:right; width: 120px;">Tutar</th>
                 </tr>
               </thead>
               <tbody>
                 ${account.orders.map((o: any) => {
                   const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
-                  const manualLabel = o.order_type === 'MANUAL_DEBT' ? '<strong>Borç Kaydı</strong>' : '<strong>Ödeme Kaydı</strong>';
+                  const manualLabel = o.order_type === 'MANUAL_DEBT' ? '<span style="color:#f97316;">Borç Kaydı</span>' : '<span style="color:#10b981;">Ödeme Kaydı</span>';
                   const detail = isManual 
-                    ? `${manualLabel} (Aralık: ${o.note})`
-                    : (o.adisyon_items?.map((i: any) => `${i.menu_items?.name || 'Ürün'}`).join(', ') || 'Detay yok');
+                    ? `<strong>${manualLabel}</strong><br/><small style="color:#94a3b8;">Dönem: ${o.note}</small>`
+                    : (o.adisyon_items?.map((i: any) => `${i.menu_items?.name || 'Ürün'}`).join(', ') || 'İşlem detayı');
                   
                   return `
                     <tr>
                       <td>${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
                       <td>${detail}</td>
-                      <td style="text-align:right; color: ${o.order_type === 'MANUAL_PAYMENT' ? '#10b981' : '#333'}">
+                      <td style="text-align:right; font-weight: bold; color: ${o.order_type === 'MANUAL_PAYMENT' ? '#10b981' : '#1e293b'}">
                         ${o.order_type === 'MANUAL_PAYMENT' ? '-' : ''}₺${o.total_amount?.toLocaleString('tr-TR')}
                       </td>
                     </tr>
                   `;
                 }).join('')}
-                <tr class="total-row">
-                  <td colspan="2" style="border:none; padding-top:20px">TOPLAM BORÇ TUTARI</td>
-                  <td style="text-align:right; border:none; padding-top:20px">
-                    ${(account.isCorporate ? account.manualDebt : account.total) <= 0 
-                      ? '<span style="color: #10b981;">BORÇ ÖDENDİ</span>' 
-                      : `<span style="color: #ed1c24;">₺${(account.isCorporate ? account.manualDebt : account.total).toLocaleString('tr-TR')}</span>`
-                    }
-                  </td>
-                </tr>
               </tbody>
             </table>
 
+            <div class="total-box">
+              <div class="total-label">GÜNCEL TOPLAM BORÇ</div>
+              <div class="total-value">
+                ${(account.isCorporate ? account.manualDebt : account.total) <= 0 
+                  ? '<span style="color: #10b981;">ÖDENDİ</span>' 
+                  : `₺${(account.isCorporate ? account.manualDebt : account.total).toLocaleString('tr-TR')}`
+                }
+              </div>
+            </div>
+
             <div class="footer">
-              <p>Bu belge bilgilendirme amaçlıdır. Ödeme detayları için işletme ile iletişime geçiniz.</p>
-              <p><strong>Smart Catering İşletme Yönetimi</strong></p>
+              <p>Bu belge bilgilendirme amaçlı otomatik olarak oluşturulmuştur.</p>
+              &copy; ${new Date().getFullYear()} Smart Catering | Mutfak Yönetim Paneli
             </div>
           </body>
         </html>

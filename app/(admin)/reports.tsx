@@ -255,48 +255,89 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
         else if (filterPeriod === "15_DAYS") periodName = "15 Günlük";
         else if (filterPeriod === "YEARLY") periodName = "Yıllık";
 
-        const tableRows = stats.orders.map((o: any) => `
-            <tr>
-                <td style="padding: 12px; border-bottom: 1px solid #ddd;">${o.id.toString().substring(0, 8)}</td>
-                <td style="padding: 12px; border-bottom: 1px solid #ddd;">${o.userName || 'Müşteri'}</td>
-                <td style="padding: 12px; border-bottom: 1px solid #ddd;">${new Date(o.created_at).toLocaleDateString()}</td>
-                <td style="padding: 12px; border-bottom: 1px solid #ddd;">₺${o.total_amount?.toLocaleString("tr-TR")}</td>
-                <td style="padding: 12px; border-bottom: 1px solid #ddd;">${o.status}</td>
-            </tr>
-        `).join('');
+        const groups = groupedOrders as any;
+        const groupHtml = Object.keys(groups).map(companyName => {
+            const items = groups[companyName];
+            const compMeals = items.reduce((acc: number, o: any) => acc + (o.adisyon_items?.reduce((iq: number, i: any) => iq + (i.quantity || 0), 0) || 0), 0);
+            const compRev = items.reduce((acc: number, o: any) => {
+                const isPaid = ["PAID", "Ödendi"].includes(o.status);
+                return acc + (mainTab === "KURUMSAL" ? (isPaid ? (o.total_amount || 0) : 0) : (o.total_amount || 0));
+            }, 0);
 
-        const html = `
-            <html>
-                <body style="font-family: Helvetica, Arial, sans-serif; padding: 40px; color: #333;">
-                    <h1 style="color: ${colors.primary}; margin-bottom: 5px;">Smart Catering</h1>
-                    <h2 style="color: #666; font-weight: normal; margin-top: 0;">${mainTab} - ${periodName} Satış Raporu</h2>
-                    <p style="color: #888; font-size: 12px;">Oluşturulma Tarihi: ${dateStr}</p>
-                    
-                    <div style="display: flex; gap: 20px; margin: 30px 0;">
-                        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; flex: 1;">
-                            <p style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase;">Toplam Gelir</p>
-                            <h2 style="margin: 10px 0 0 0; color: #333;">₺${stats.revenue.toLocaleString("tr-TR")}</h2>
-                        </div>
-                        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; flex: 1;">
-                            <p style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase;">Toplam Öğün</p>
-                            <h2 style="margin: 10px 0 0 0; color: #333;">${stats.count} Adet</h2>
+            const rows = items.map((o: any) => `
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px;">#${o.id.toString().substring(0, 8)}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px;">${o.userName || 'Müşteri'}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px;">${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px; text-align:right;">₺${o.total_amount?.toLocaleString("tr-TR")}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 10px; color: ${["PAID", "Ödendi"].includes(o.status) ? "#10b981" : "#f97316"}; font-weight: bold;">${o.status}</td>
+                </tr>
+            `).join('');
+
+            return `
+                <div style="margin-bottom: 40px; page-break-inside: avoid;">
+                    <div style="background-color: #f8fafc; border-left: 5px solid ${colors.primary}; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                        <h2 style="margin: 0; color: #1e293b; font-size: 18px;">${companyName}</h2>
+                        <div style="text-align: right;">
+                             <div style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold;">FİRMA TOPLAMI</div>
+                             <div style="font-size: 16px; color: ${colors.primary}; font-weight: 900;">₺${compRev.toLocaleString("tr-TR")}</div>
                         </div>
                     </div>
-
-                    <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                    <table style="width: 100%; border-collapse: collapse;">
                         <thead>
-                            <tr style="background-color: #f8f9fa; text-align: left;">
-                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">SIPARIS NO</th>
-                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">MUSTERI</th>
-                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">TARIH</th>
-                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">TUTAR</th>
-                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">DURUM</th>
+                            <tr style="text-align: left;">
+                                <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">ID</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">KULLANICI</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">TARİH</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase; text-align:right;">TUTAR</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">DURUM</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${tableRows}
+                            ${rows}
                         </tbody>
                     </table>
+                    <div style="margin-top: 10px; font-size: 11px; color: #64748b; font-style: italic;">
+                       Bu firmanın toplam <strong>${compMeals} adet</strong> öğün kaydı bulunmaktadır.
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const html = `
+            <!DOCTYPE html>
+            <html>
+                <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px;">
+                        <div>
+                            <h1 style="color: ${colors.primary}; margin: 0; font-size: 28px; font-weight: 900; letter-spacing: -1px;">Smart Catering</h1>
+                            <p style="margin: 5px 0 0 0; color: #64748b; font-size: 14px; font-weight: bold;">Satış & Tahsilat Raporu</p>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 12px; color: #64748b;">Rapor Türü: <strong style="color: #1e293b;">${mainTab} - ${periodName}</strong></div>
+                            <div style="font-size: 12px; color: #64748b;">Oluşturuldu: <strong style="color: #1e293b;">${dateStr}</strong></div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 20px; margin-bottom: 50px;">
+                        <div style="background: ${colors.primary}08; padding: 25px; border-radius: 16px; flex: 1; border: 1px solid ${colors.primary}15;">
+                            <div style="font-size: 11px; color: ${colors.primary}; text-transform: uppercase; font-weight: 900; letter-spacing: 1px; margin-bottom: 10px;">TOPLAM GELİR</div>
+                            <div style="font-size: 32px; font-weight: 900; color: #1e293b;">₺${stats.revenue.toLocaleString("tr-TR")}</div>
+                            <div style="font-size: 10px; color: #64748b; margin-top: 5px;">* Sadece <strong>Ödendi</strong> durumundaki kayıtlar dahildir.</div>
+                        </div>
+                        <div style="background: #f8fafc; padding: 25px; border-radius: 16px; flex: 1; border: 1px solid #e2e8f0;">
+                            <div style="font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 900; letter-spacing: 1px; margin-bottom: 10px;">TOPLAM ÖĞÜN</div>
+                            <div style="font-size: 32px; font-weight: 900; color: #1e293b;">${stats.count} <span style="font-size: 16px; color: #64748b;">Adet</span></div>
+                            <div style="font-size: 10px; color: #64748b; margin-top: 5px;">Bu dönemde servis edilen toplam miktar.</div>
+                        </div>
+                    </div>
+
+                    ${groupHtml}
+
+                    <div style="margin-top: 60px; padding-top: 20px; border-top: 1px solid #f1f5f9; text-align: center; color: #94a3b8; font-size: 10px;">
+                        Bu belge Smart Catering İşletme Otomasyonu tarafından otomatik olarak oluşturulmuştur.<br/>
+                        &copy; ${new Date().getFullYear()} Smart Catering | Tüm Hakları Saklıdır.
+                    </div>
                 </body>
             </html>
         `;
@@ -309,6 +350,7 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
             }
         } catch (error) {
             console.error(error);
+            Alert.alert("Hata", "PDF oluşturulurken bir sorun oluştu.");
         }
     };
 
