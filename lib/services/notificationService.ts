@@ -170,8 +170,13 @@ export const notificationService = {
      * Cihazı bildirimlere kaydeder ve bir token döndürür.
      */
     async registerForPushNotificationsAsync() {
+        const { Platform } = require("react-native");
+        if (Platform.OS === 'android' && isExpoGo) {
+            console.log("Skipping push registration on Android Expo Go (Restricted)");
+            return null;
+        }
+
         const Notifications = require("expo-notifications");
-        const Platform = require("react-native").Platform;
 
         let token;
         if (Platform.OS === 'android') {
