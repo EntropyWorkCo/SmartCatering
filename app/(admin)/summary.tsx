@@ -22,7 +22,8 @@ import {
     TextInput,
     TouchableOpacity,
     TouchableWithoutFeedback,
-    View
+    View,
+    RefreshControl
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -48,6 +49,16 @@ export default function SummaryScreen() {
   const [updatingDebt, setUpdatingDebt] = useState(false);
   const [companies, setCompanies] = useState<any[]>([]);
 
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    if (fetchOrders) await fetchOrders();
+    setRefreshTrigger(prev => prev + 1);
+    setRefreshing(false);
+  }, [fetchOrders]);
+
   useFocusEffect(
     useCallback(() => {
       const fetchRatings = async () => {
@@ -67,7 +78,7 @@ export default function SummaryScreen() {
 
       fetchRatings();
       fetchCompanies();
-    }, [])
+    }, [refreshTrigger])
   );
 
   const averageRating = useMemo(() => {
@@ -384,7 +395,11 @@ export default function SummaryScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} title="Yenileniyor..." titleColor={colors.text} colors={[colors.primary]} progressBackgroundColor="#ffffff" progressViewOffset={30} />}
+      >
         <View style={styles.totalCard}>
           <Text style={styles.totalLabel}>TOPLAM BEKLEYEN BORÇ</Text>
           <Text style={styles.totalAmount}>₺{totalDebt.toLocaleString("tr-TR")}</Text>

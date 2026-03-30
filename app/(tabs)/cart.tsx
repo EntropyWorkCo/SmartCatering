@@ -118,9 +118,7 @@ export default function CartScreen() {
                             setHasGuest(false);
                             
                             // Skip rating notification for admins
-                            if (!isAdmin) {
-                                await notificationService.scheduleRatingNotification(15, adisyon.id);
-                            }
+                            // NOTE: Rating notification scheduling is now exclusively handled in adisyonService.createOrder 
 
                             Alert.alert("Başarılı", "Siparişiniz başarıyla alındı!", [
                                 { text: "Tamam", onPress: () => router.push("/(tabs)/home") }

@@ -13,7 +13,8 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
+    RefreshControl
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -48,6 +49,13 @@ export default function ProfileScreen() {
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
     const [saving, setSaving] = useState(false);
     const [balance, setBalance] = useState<number | null>(null);
+
+    const [refreshing, setRefreshing] = useState(false);
+    const onRefresh = React.useCallback(() => {
+        setRefreshing(true);
+        refresh();
+        setTimeout(() => setRefreshing(false), 1500);
+    }, [refresh]);
 
     // Initialize state once profile is loaded
     React.useEffect(() => {
@@ -138,7 +146,11 @@ export default function ProfileScreen() {
                 <ThemeSwitcher />
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+                contentContainerStyle={styles.scrollContent} 
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} title="Yenileniyor..." titleColor={colors.text} colors={[colors.primary]} progressBackgroundColor="#ffffff" progressViewOffset={30} />}
+            >
                 {/* Profile Image Section */}
                 <View style={styles.imageSection}>
                     <TouchableOpacity onPress={handlePickImage} style={styles.imageContainer}>

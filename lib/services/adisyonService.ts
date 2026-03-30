@@ -53,8 +53,10 @@ export const adisyonService = {
     try {
         const { notificationService } = require("./notificationService");
         
-        // - Puanlama Bildirimi Planla (15 dk sonra)
-        notificationService.scheduleRatingNotification(15, adisyon.id);
+        // - Puanlama Bildirimi Planla (Sadece Şimdi Ye)
+        if (orderType === "Şimdi Ye") {
+            notificationService.scheduleRatingNotification(15, adisyon.id);
+        }
 
         // - Admin'e Canlı Sipariş Bildirimi Gönder
         (async () => {
@@ -164,11 +166,29 @@ export const adisyonService = {
             tokens,
             `Siparişiniz Yola Çıktı! 🛵`,
             `Yemeğiniz hazırlandı ve şu an yola çıktı. Afiyet olsun!`,
-            { type: "order_ready", orderId: data.id }
+            { url: "/(tabs)/past-orders" }
           );
         }
       } catch (err) {
         console.error("Bildirim gönderme hatası:", err);
+      }
+    }
+
+    if ((status === 'COMPLETED' || status === 'TAMAMLANDI') && isDelivery) {
+      try {
+        const userId = data.user_id;
+        const { notificationService } = require("./notificationService");
+        const tokens = await notificationService.getPushTokens(userId);
+        if (tokens.length > 0) {
+          await notificationService.sendPushNotification(
+            tokens,
+            "Yemeğiniz nasıldı? 🍽️",
+            "Siparişiniz teslim edildi! Değerlendirerek bize yardımcı olmak ister misiniz?",
+            { url: `/(tabs)/order-rating?orderId=${data.id}` }
+          );
+        }
+      } catch (err) {
+        console.error("Değerlendirme bildirim gönderme hatası:", err);
       }
     }
 

@@ -16,7 +16,8 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
+    RefreshControl
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../lib/hooks/useAuth";
@@ -66,6 +67,13 @@ export default function MenuScreen() {
   const [packageModalVisible, setPackageModalVisible] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
   const [packageSelections, setPackageSelections] = useState<{ category: string, item_id: string, item_name: string }[]>([]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    refresh(); // Profile
+    setTimeout(() => setRefreshing(false), 1500);
+  }, [refresh]);
 
   // Dışarıdan gelen yönlendirmelerde (Örn: Ana sayfa tabldot) otomatik kategoriyi açmak için
   React.useEffect(() => {
@@ -258,7 +266,10 @@ export default function MenuScreen() {
       )}
 
       {selectedCategory === null ? (
-        <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
+        <ScrollView 
+          contentContainerStyle={{ padding: 24, gap: 16 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} title="Yenileniyor..." titleColor={colors.text} colors={[colors.primary]} progressBackgroundColor="#ffffff" progressViewOffset={30} />}
+        >
           {activeCategories.map(cat => (
             <TouchableOpacity 
               key={cat} 
@@ -281,7 +292,11 @@ export default function MenuScreen() {
           ))}
         </ScrollView>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: cartItems.length > 0 ? 120 : 40 }}>
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={{ paddingBottom: cartItems.length > 0 ? 120 : 40 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} title="Yenileniyor..." titleColor={colors.text} colors={[colors.primary]} progressBackgroundColor="#ffffff" progressViewOffset={30} />}
+        >
            {/* Dinamik Olarak Kategori Barını Gizlediğimiz İçin Burada Kaldırdık */}
 
         {/* Günün Menüsü (Always at top or dedicated tab) */}

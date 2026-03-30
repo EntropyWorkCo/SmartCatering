@@ -17,7 +17,8 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
+    RefreshControl
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -42,6 +43,13 @@ export default function AdminMenuAdd() {
     const router = useRouter();
 
     const [isSaving, setIsSaving] = useState(false);
+    
+    const [refreshing, setRefreshing] = useState(false);
+    const onRefresh = React.useCallback(async () => {
+        setRefreshing(true);
+        await refetch();
+        setRefreshing(false);
+    }, [refetch]);
 
     const theme = useResolvedTheme();
     const colors = Colors[theme];
@@ -299,7 +307,11 @@ export default function AdminMenuAdd() {
                 </ScrollView>
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+                contentContainerStyle={styles.scrollContent} 
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} title="Yenileniyor..." titleColor={colors.text} colors={[colors.primary]} progressBackgroundColor="#ffffff" progressViewOffset={30} />}
+            >
 
                 {/* 1. YENİ YEMEK EKLE TAB */}
                 {mainTab === "ADD_MEAL" && (

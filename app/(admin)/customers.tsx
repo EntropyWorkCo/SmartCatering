@@ -12,6 +12,7 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    RefreshControl
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context"; //Telefonun notch / status bar alanına çarpmamak için kullanılır
 
@@ -32,6 +33,15 @@ export default function AdminCustomers() {
     const [searchTerm, setSearchTerm] = useState(""); //arama terimi
     const [mainTab, setMainTab] = useState<"BIREYSEL" | "KURUMSAL">("KURUMSAL"); //ana sekmeleri tutar
     const [expandedCompanies, setExpandedCompanies] = useState<Record<string, boolean>>({}); //şirketlerin açılıp kapandığı accordion durumu
+
+    const [refreshing, setRefreshing] = useState(false);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    const onRefresh = React.useCallback(() => {
+        setRefreshing(true);
+        setRefreshTrigger(prev => prev + 1);
+        setTimeout(() => setRefreshing(false), 1500);
+    }, []);
 
     const insets = useSafeAreaInsets();
     const theme = useResolvedTheme(); //aktif temayı döndürür. (light-dark)
@@ -111,7 +121,7 @@ export default function AdminCustomers() {
             };
 
             fetchCustomers();
-        }, [])
+        }, [refreshTrigger])
     );
 
     const filteredCustomers = customers.filter(
@@ -228,7 +238,11 @@ export default function AdminCustomers() {
                 />
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+                contentContainerStyle={styles.scrollContent} 
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} title="Yenileniyor..." titleColor={colors.text} colors={[colors.primary]} progressBackgroundColor="#ffffff" progressViewOffset={30} />}
+            >
                 {mainTab === "BIREYSEL" && (
                     bireyselCustomers.length > 0 ? (
                         bireyselCustomers.map(customer => renderCustomerCard(customer, false))

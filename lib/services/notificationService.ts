@@ -24,6 +24,7 @@ export const notificationService = {
                 title,
                 body,
                 data: data || {},
+                priority: "high",
             };
 
             const response = await fetch("https://exp.host/--/api/v2/push/send", {

@@ -132,7 +132,7 @@ function RootLayoutNav() {
                   sound: true,
                   data: { url: "/(admin)/dashboard" },
                 },
-                trigger: null,
+                trigger: { seconds: 1 },
               }).catch((err: any) => console.error("Notification trigger error:", err));
 
               Alert.alert("Yeni Sipariş! 🛎️", "Yeni bir paket siparişi sisteminize düştü.");
@@ -163,7 +163,7 @@ function RootLayoutNav() {
                   sound: true,
                   data: { url: "/(tabs)/menu" },
                 },
-                trigger: null,
+                trigger: { seconds: 1 },
               }).catch((err: any) => console.error("Menu Notification trigger error:", err));
             }
             

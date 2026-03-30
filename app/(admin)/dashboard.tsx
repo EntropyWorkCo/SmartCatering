@@ -12,7 +12,8 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
+  RefreshControl
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -39,8 +40,15 @@ export default function AdminDashboard() {
     // Bildirim artık TabLayout üzerinden global geliyor, burada sadece listeyi tazelemek yeterli.
   }, []);
 
-  const { orders, loading, updateOrderStatus } = useAdisyon(undefined, handleNewOrder);
+  const { orders, loading, updateOrderStatus, fetchOrders } = useAdisyon(undefined, handleNewOrder);
   const insets = useSafeAreaInsets();
+  
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    if (fetchOrders) await fetchOrders();
+    setRefreshing(false);
+  }, [fetchOrders]);
   
   console.log("🏁 ADMIN DASHBOARD STATUS:", { loading, ordersCount: orders?.length });
   const theme = useResolvedTheme();
@@ -82,7 +90,11 @@ export default function AdminDashboard() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} title="Yenileniyor..." titleColor={colors.text} colors={[colors.primary]} progressBackgroundColor="#ffffff" progressViewOffset={30} />}
+      >
         {activePacketOrders.length === 0 ? (
           <View style={styles.emptyContainer}>
             <MaterialIcons name="delivery-dining" size={64} color={colors.surfaceBorder} />

@@ -4,7 +4,7 @@ import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useRef } from "react";
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ThemeSwitcher from "@/components/ThemeSwitcher";
@@ -39,6 +39,13 @@ export default function HomeScreen() {
   const setOrderMode = useCartStore((state) => state.setOrderMode);
 
   const [modalVisible, setModalVisible] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    refresh(); // Profile data
+    setTimeout(() => setRefreshing(false), 1500);
+  }, [refresh]);
 
   const TABLDOT_PACKAGES = useMemo(() => {
     return (systemPrices || [])
@@ -275,7 +282,11 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} title="Yenileniyor..." titleColor={colors.text} colors={[colors.primary]} progressBackgroundColor="#ffffff" progressViewOffset={30} />}
+      >
 
         {/* Header */}
         <View style={styles.header}>
