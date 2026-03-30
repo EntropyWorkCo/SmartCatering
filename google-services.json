@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1074305568675",
+    "project_id": "smartcatering-cb235",
+    "storage_bucket": "smartcatering-cb235.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1074305568675:android:90cc0e633d4faae72a5416",
+        "android_client_info": {
+          "package_name": "com.anonymous.mobileapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwvbtnUBxAa8SzIQk0wjYVKfeJrX9GZ8g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

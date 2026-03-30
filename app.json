@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "mobile-app",
-    "slug": "mobile-app",
+    "slug": "smart-catering",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -16,11 +16,16 @@
       "supportsTablet": true
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.anonymous.mobileapp"
     },
     "web": {
       "bundler": "metro",
@@ -36,10 +41,18 @@
           "cameraPermission": "Menüye yemek fotoğrafı çekmek için kameranıza erişim izni gereklidir."
         }
       ],
+      "expo-notifications",
       "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "015fe52a-f654-4607-8023-0504fa4302b2"
+      }
+    },
+    "owner": "senatuncer"
   }
 }
