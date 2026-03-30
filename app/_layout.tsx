@@ -96,6 +96,7 @@ function RootLayoutNav() {
     let responseListener: any;
     let orderChannel: any;
     let menuChannel: any;
+    let customerOrderChannel: any;
 
     if (!isAndroidExpoGo) {
       try {
@@ -132,7 +133,7 @@ function RootLayoutNav() {
                   sound: true,
                   data: { url: "/(admin)/dashboard" },
                 },
-                trigger: { seconds: 1 },
+                trigger: null,
               }).catch((err: any) => console.error("Notification trigger error:", err));
 
               Alert.alert("Yeni Sipariş! 🛎️", "Yeni bir paket siparişi sisteminize düştü.");
@@ -163,7 +164,7 @@ function RootLayoutNav() {
                   sound: true,
                   data: { url: "/(tabs)/menu" },
                 },
-                trigger: { seconds: 1 },
+                trigger: null,
               }).catch((err: any) => console.error("Menu Notification trigger error:", err));
             }
             
@@ -175,10 +176,56 @@ function RootLayoutNav() {
       })
       .subscribe();
 
+    // 3. Sipariş Durumu Dinleyicisi (Müşteri İçin)
+    // Sadece Expo Go içindeyken bu yerel bildirimleri tetikliyoruz (Çünkü Expo Go iOS'ta Remote Push desteklemiyor).
+    // Prodüksiyonda (gerçek uygulamada) bildirimler arkaplandan (notificationService) gelecektir.
+    const isExpoGo = Constants.appOwnership === 'expo';
+    if (isExpoGo && !isAdmin && user?.id) {
+      customerOrderChannel = supabase
+        .channel('customer-orders-live-root')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'adisyon', filter: `user_id=eq.${user.id}` }, (payload) => {
+          const oldStatus = payload.old?.status;
+          const newStatus = payload.new?.status;
+          const orderType = payload.new?.order_type;
+          
+          if (oldStatus !== newStatus && (orderType === 'Sipariş Ver' || orderType === 'PAKET')) {
+            const Notifications = require("expo-notifications");
+            
+            // Yola Çıktı Bildirimi
+            if (newStatus === 'READY' || newStatus === 'HAZIR' || newStatus === 'Hazır') {
+              Notifications.scheduleNotificationAsync({
+                content: {
+                  title: "Siparişiniz Yola Çıktı! 🛵",
+                  body: "Yemeğiniz hazırlandı ve şu an yola çıktı. Afiyet olsun!",
+                  sound: true,
+                  data: { url: "/(tabs)/past-orders" },
+                },
+                trigger: null,
+              }).catch(console.error);
+            }
+            
+            // Teslim Edildi Bildirimi
+            if (newStatus === 'COMPLETED' || newStatus === 'TAMAMLANDI') {
+              Notifications.scheduleNotificationAsync({
+                content: {
+                  title: "Siparişiniz Teslim Edildi ✅",
+                  body: "Afiyet olsun! Bugünkü siparişinizi değerlendirmek ister misiniz?",
+                  sound: true,
+                  data: { url: `/(tabs)/order-rating?orderId=${payload.new.id}` },
+                },
+                trigger: null,
+              }).catch(console.error);
+            }
+          }
+        })
+        .subscribe();
+    }
+
     return () => {
       if (responseListener) responseListener.remove();
       if (orderChannel) supabase.removeChannel(orderChannel);
       if (menuChannel) supabase.removeChannel(menuChannel);
+      if (customerOrderChannel) supabase.removeChannel(customerOrderChannel);
     };
   }, [user?.id, isAdmin]);
 
