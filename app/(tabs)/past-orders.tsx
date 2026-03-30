@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ThemeSwitcher from "@/components/ThemeSwitcher";
@@ -24,15 +24,8 @@ export default function PastOrdersScreen() {
 
     // EĞER KULLANICI HENÜZ YÜKLENMEDİYSE null GÖNDER Kİ ADMİN MODU TETİKLENMESİN
     // Supabase uuid beklediği için standart boş uuid gönderiyoruz
-    const { orders, loading, fetchOrders } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
+    const { orders, loading } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
     const [timeFilter, setTimeFilter] = useState<"ALL" | "DAILY" | "WEEKLY" | "MONTHLY">("ALL");
-    const [refreshing, setRefreshing] = useState(false);
-
-    const onRefresh = useCallback(async () => {
-        setRefreshing(true);
-        if (fetchOrders) await fetchOrders();
-        setRefreshing(false);
-    }, [fetchOrders]);
 
     const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
     const [itemRatings, setItemRatings] = useState<{ [key: string]: number }>({});
@@ -116,19 +109,7 @@ export default function PastOrdersScreen() {
                 ))}
             </View>
 
-            <ScrollView 
-                contentContainerStyle={styles.scrollContent} 
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl 
-                        refreshing={refreshing} 
-                        onRefresh={onRefresh} 
-                        tintColor={colors.primary} 
-                        colors={[colors.primary]} 
-                        progressBackgroundColor={colors.surface}
-                    />
-                }
-            >
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {sortedOrders.length === 0 ? (
                     <View style={styles.emptyState}>
                         <MaterialIcons name="history" size={64} color={colors.surfaceBorder} />
@@ -140,8 +121,7 @@ export default function PastOrdersScreen() {
                 ) : (
                     sortedOrders.map((order, idx) => {
                         const date = new Date(order.created_at || order.date);
-                        const uppercaseStatus = String(order.status).toUpperCase();
-                        const isCompleted = uppercaseStatus === 'COMPLETED' || uppercaseStatus === 'TAMAMLANDI' || uppercaseStatus === 'TESLİM EDİLDİ';
+                        const isCompleted = true; // Show evaluate button for all past orders
 
                         return (
                             <View key={order.id || idx} style={styles.orderCard}>

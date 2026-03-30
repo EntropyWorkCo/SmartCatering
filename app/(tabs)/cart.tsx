@@ -117,7 +117,10 @@ export default function CartScreen() {
                             setOrderNote("");
                             setHasGuest(false);
                             
-                            // Rating notification handled securely in adisyonService.createOrder
+                            // Skip rating notification for admins
+                            if (!isAdmin) {
+                                await notificationService.scheduleRatingNotification(15, adisyon.id);
+                            }
 
                             Alert.alert("Başarılı", "Siparişiniz başarıyla alındı!", [
                                 { text: "Tamam", onPress: () => router.push("/(tabs)/home") }

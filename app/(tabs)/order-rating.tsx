@@ -129,35 +129,7 @@ export default function OrderRatingScreen() {
 
     if (!order) return null;
 
-    const uppercaseStatus = String(order.status).toUpperCase();
-    const isReadyForRating = uppercaseStatus === 'COMPLETED' || uppercaseStatus === 'TAMAMLANDI' || uppercaseStatus === 'TESLİM EDİLDİ';
-
     const date = new Date(order.created_at || order.date);
-
-    if (!isReadyForRating) {
-        return (
-            <SafeAreaView style={styles.container} edges={['top']}>
-                <View style={styles.header}>
-                    <TouchableOpacity style={styles.backBtn} onPress={() => router.replace("/(tabs)/past-orders")}>
-                        <MaterialIcons name="arrow-back" size={24} color={colors.text} />
-                    </TouchableOpacity>
-                    <View style={{ flex: 1 }}>
-                        <Text style={styles.title}>Değerlendir</Text>
-                    </View>
-                    <ThemeSwitcher />
-                </View>
-                <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 24, paddingBottom: 60 }]}>
-                    <MaterialIcons name="hourglass-empty" size={64} color="#f59e0b" />
-                    <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text, marginTop: 16, textAlign: 'center' }}>
-                        Değerlendirme Aktif Değil
-                    </Text>
-                    <Text style={{ fontSize: 15, color: colors.muted, marginTop: 8, textAlign: 'center', lineHeight: 22 }}>
-                        Siparişinizi henüz teslim almadığınız için değerlendirme yapamazsınız. Yemeğiniz teslim edildiğinde bu ekran açılacaktır.
-                    </Text>
-                </View>
-            </SafeAreaView>
-        );
-    }
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>

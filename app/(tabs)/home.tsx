@@ -3,8 +3,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
-import React, { useEffect, useMemo, useRef, useCallback, useState } from "react";
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, RefreshControl } from "react-native";
+import React, { useEffect, useMemo, useRef } from "react";
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ThemeSwitcher from "@/components/ThemeSwitcher";
@@ -32,25 +32,13 @@ export default function HomeScreen() {
     }, [user?.id])
   );
   // Supabase uuid beklediği için standart boş uuid gönderiyoruz
-  const { orders, fetchOrders } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
-  const { menu, systemPrices, refetch: refetchMenu } = useMenu(true);
+  const { orders } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
+  const { menu, systemPrices } = useMenu(true);
   const cartItems = useCartStore((state) => state.items);
   const orderMode = useCartStore((state) => state.orderMode);
   const setOrderMode = useCartStore((state) => state.setOrderMode);
 
-  const [modalVisible, setModalVisible] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      if (refresh) refresh();
-      if (fetchOrders) await fetchOrders();
-      if (refetchMenu) await refetchMenu();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refresh, fetchOrders, refetchMenu]);
+  const [modalVisible, setModalVisible] = React.useState(false);
 
   const TABLDOT_PACKAGES = useMemo(() => {
     return (systemPrices || [])
@@ -287,19 +275,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent} 
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh} 
-            tintColor={colors.primary} 
-            colors={[colors.primary]} 
-            progressBackgroundColor={colors.surface}
-          />
-        }
-      >
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         {/* Header */}
         <View style={styles.header}>
