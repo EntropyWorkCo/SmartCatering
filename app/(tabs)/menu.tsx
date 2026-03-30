@@ -16,7 +16,8 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
+    RefreshControl
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../lib/hooks/useAuth";
@@ -24,15 +25,26 @@ import { useMenu } from "../../lib/hooks/useMenu";
 import { useProfile } from "../../lib/hooks/useProfile";
 
 export default function MenuScreen() {
-  const { menu, systemPrices, loading } = useMenu(true);
+  const { menu, systemPrices, loading, refetch } = useMenu(true);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const cartItems = useCartStore(state => state.items);
   const orderMode = useCartStore(state => state.orderMode);
 
   const { user } = useAuth();
   const { profile, refresh } = useProfile(user?.id);
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (refetch) await refetch();
+      if (typeof refresh === 'function') refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetch, refresh]);
 
   const theme = useResolvedTheme();
   const colors = Colors[theme];
@@ -258,7 +270,18 @@ export default function MenuScreen() {
       )}
 
       {selectedCategory === null ? (
-        <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
+        <ScrollView 
+          contentContainerStyle={{ padding: 24, gap: 16, flexGrow: 1 }}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh} 
+              tintColor={colors.primary} 
+              colors={[colors.primary]} 
+              progressBackgroundColor={colors.surface}
+            />
+          }
+        >
           {activeCategories.map(cat => (
             <TouchableOpacity 
               key={cat} 
@@ -281,7 +304,19 @@ export default function MenuScreen() {
           ))}
         </ScrollView>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: cartItems.length > 0 ? 120 : 40 }}>
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={{ paddingBottom: cartItems.length > 0 ? 120 : 40, flexGrow: 1 }}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh} 
+              tintColor={colors.primary} 
+              colors={[colors.primary]} 
+              progressBackgroundColor={colors.surface}
+            />
+          }
+        >
            {/* Dinamik Olarak Kategori Barını Gizlediğimiz İçin Burada Kaldırdık */}
 
         {/* Günün Menüsü (Always at top or dedicated tab) */}

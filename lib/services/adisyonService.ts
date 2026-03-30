@@ -52,10 +52,8 @@ export const adisyonService = {
     // 3. Bildirim Tetikleyicileri
     try {
         const { notificationService } = require("./notificationService");
+        // Sipariş başlangıcında yerel 15dk gecikmeli bildirim kurmak yerine, artık sipariş durumu COMPLETED olduğunda anında Push atıyoruz.
         
-        // - Puanlama Bildirimi Planla (15 dk sonra)
-        notificationService.scheduleRatingNotification(15, adisyon.id);
-
         // - Admin'e Canlı Sipariş Bildirimi Gönder
         (async () => {
             try {
@@ -151,25 +149,48 @@ export const adisyonService = {
 
     if (error) throw error;
 
-    // Sadece "Sipariş Ver" (Paket) modunda olanlar için "Yola Çıktı" bildirimi gönder
-    const isDelivery = data.order_type === 'Sipariş Ver' || data.order_type === 'PAKET';
-
-    if ((status === 'READY' || status === 'Hazır' || status === 'HAZIR') && isDelivery) {
-      try {
-        const userId = data.user_id;
-        const { notificationService } = require("./notificationService");
-        const tokens = await notificationService.getPushTokens(userId);
-        if (tokens.length > 0) {
+    try {
+      const userId = data.user_id;
+      const { notificationService } = require("./notificationService");
+      // Adminler de kendi hesabıyla test ederken bildirimleri alabilsin diye excludeAdmins parametresi false geçildi.
+      const tokens = await notificationService.getPushTokens(userId, false);
+      
+      if (tokens.length > 0) {
+        const uppercaseStatus = String(status).toUpperCase();
+        
+        // 1. Sipariş Alındı (PREPARING)
+        if (uppercaseStatus === 'PREPARING' || uppercaseStatus === 'HAZIRLANIYOR' || uppercaseStatus === 'ONAYLANDI') {
           await notificationService.sendPushNotification(
             tokens,
-            `Siparişiniz Yola Çıktı! 🛵`,
-            `Yemeğiniz hazırlandı ve şu an yola çıktı. Afiyet olsun!`,
-            { type: "order_ready", orderId: data.id }
+            `Siparişiniz Alındı 👨‍🍳`,
+            `Şefimiz yemeğinizi hazırlamaya başladı.`,
+            { type: "order_preparing", orderId: data.id }
+          );
+        } 
+        // 2. Yola Çıktı (READY + Delivery Order Type)
+        else if (uppercaseStatus === 'READY' || uppercaseStatus === 'HAZIR') {
+          const isDelivery = String(data.order_type).toUpperCase().includes('SİPARİŞ') || String(data.order_type).toUpperCase().includes('SIPARIS') || String(data.order_type).toUpperCase().includes('PAKET') || data.order_type === 'Sipariş Ver';
+          if (isDelivery) {
+            await notificationService.sendPushNotification(
+              tokens,
+              `Siparişiniz Yola Çıktı! 🛵`,
+              `Yemeğiniz hazırlandı ve şu an yola çıktı. Afiyet olsun!`,
+              { type: "order_ready", orderId: data.id }
+            );
+          }
+        } 
+        // 3. Teslim Edildi (COMPLETED) ve Değerlendirme Uyarı
+        else if (uppercaseStatus === 'COMPLETED' || uppercaseStatus === 'TAMAMLANDI') {
+          await notificationService.sendPushNotification(
+            tokens,
+            `Siparişiniz Teslim Edildi ✅`,
+            `Afiyet olsun! Bugünkü siparişinizi değerlendirerek bize yardımcı olmak ister misiniz?`,
+            { url: `/(tabs)/order-rating?orderId=${data.id}` }
           );
         }
-      } catch (err) {
-        console.error("Bildirim gönderme hatası:", err);
       }
+    } catch (err) {
+      console.error("Bildirim gönderme hatası:", err);
     }
 
     return data;

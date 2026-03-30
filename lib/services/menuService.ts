@@ -78,7 +78,8 @@ export const menuService = {
     if (error) throw error;
 
     try {
-      const tokens = await notificationService.getPushTokens();
+      // Kendiniz (Admin) test ederken bildirimi alabilsin diye excludeAdmins parametresi false geçildi.
+      const tokens = await notificationService.getPushTokens(undefined, false);
       if (tokens && tokens.length > 0) {
         await notificationService.sendPushNotification(
           tokens,
