@@ -153,13 +153,30 @@ export const adisyonService = {
 
     if (error) throw error;
 
-    // Sadece "Sipariş Ver" (Paket) modunda olanlar için "Yola Çıktı" bildirimi gönder
+    const userId = data.user_id;
+    const { notificationService } = require("./notificationService");
     const isDelivery = data.order_type === 'Sipariş Ver' || data.order_type === 'PAKET';
 
+    // 1. Durum: Hazırlanıyor (Müşteriye "Siparişiniz Alındı" bilgisi)
+    if (status === 'PREPARING' || status === 'HAZIRLANIYOR') {
+      try {
+        const tokens = await notificationService.getPushTokens(userId);
+        if (tokens.length > 0) {
+          await notificationService.sendPushNotification(
+            tokens,
+            "Siparişiniz Alındı 👨‍🍳",
+            "Yemeğiniz hazırlanmaya başladı. Afiyet olsun!",
+            { url: "/(tabs)/past-orders" }
+          );
+        }
+      } catch (err) {
+        console.error("Hazırlanıyor bildirimi hatası:", err);
+      }
+    }
+
+    // 2. Durum: Yola Çıktı (Sadece Paket/Sipariş Ver modunda)
     if ((status === 'READY' || status === 'Hazır' || status === 'HAZIR') && isDelivery) {
       try {
-        const userId = data.user_id;
-        const { notificationService } = require("./notificationService");
         const tokens = await notificationService.getPushTokens(userId);
         if (tokens.length > 0) {
           await notificationService.sendPushNotification(
@@ -170,20 +187,19 @@ export const adisyonService = {
           );
         }
       } catch (err) {
-        console.error("Bildirim gönderme hatası:", err);
+        console.error("Yola çıktı bildirimi hatası:", err);
       }
     }
 
-    if ((status === 'COMPLETED' || status === 'TAMAMLANDI') && isDelivery) {
+    // 3. Durum: Teslim Edildi (Müşteriye Puanlama Hatırlatması)
+    if (status === 'COMPLETED' || status === 'TAMAMLANDI') {
       try {
-        const userId = data.user_id;
-        const { notificationService } = require("./notificationService");
         const tokens = await notificationService.getPushTokens(userId);
         if (tokens.length > 0) {
           await notificationService.sendPushNotification(
             tokens,
-            "Yemeğiniz nasıldı? 🍽️",
-            "Siparişiniz teslim edildi! Değerlendirerek bize yardımcı olmak ister misiniz?",
+            "Siparişiniz Teslim Edildi ✅",
+            "Afiyet olsun! Bugünkü siparişinizi değerlendirmek ister misiniz?",
             { url: `/(tabs)/order-rating?orderId=${data.id}` }
           );
         }

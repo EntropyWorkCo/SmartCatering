@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View, RefreshControl } from "react-native";
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ThemeSwitcher from "@/components/ThemeSwitcher";
@@ -24,7 +24,7 @@ export default function PastOrdersScreen() {
 
     // EĞER KULLANICI HENÜZ YÜKLENMEDİYSE null GÖNDER Kİ ADMİN MODU TETİKLENMESİN
     // Supabase uuid beklediği için standart boş uuid gönderiyoruz
-    const { orders, loading } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
+    const { orders, loading, fetchOrders } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
     const [timeFilter, setTimeFilter] = useState<"ALL" | "DAILY" | "WEEKLY" | "MONTHLY">("ALL");
 
     const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
@@ -34,11 +34,14 @@ export default function PastOrdersScreen() {
     const [ratedOrders, setRatedOrders] = useState<string[]>([]);
 
     const [refreshing, setRefreshing] = useState(false);
-    const onRefresh = useCallback(() => {
+    const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        // Supabase trigger refresh via loading state simulation or real-time naturally handles it.
-        setTimeout(() => setRefreshing(false), 1500);
-    }, []);
+        try {
+            if (fetchOrders) await fetchOrders();
+        } finally {
+            setRefreshing(false);
+        }
+    }, [fetchOrders]);
 
     useFocusEffect(
         useCallback(() => {

@@ -51,10 +51,13 @@ export default function ProfileScreen() {
     const [balance, setBalance] = useState<number | null>(null);
 
     const [refreshing, setRefreshing] = useState(false);
-    const onRefresh = React.useCallback(() => {
+    const onRefresh = React.useCallback(async () => {
         setRefreshing(true);
-        refresh();
-        setTimeout(() => setRefreshing(false), 1500);
+        try {
+            await refresh();
+        } finally {
+            setRefreshing(false);
+        }
     }, [refresh]);
 
     // Initialize state once profile is loaded

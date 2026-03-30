@@ -25,7 +25,7 @@ import { useMenu } from "../../lib/hooks/useMenu";
 import { useProfile } from "../../lib/hooks/useProfile";
 
 export default function MenuScreen() {
-  const { menu, systemPrices, loading } = useMenu(true);
+  const { menu, systemPrices, loading, refetch: refetchMenu } = useMenu(true);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -69,11 +69,15 @@ export default function MenuScreen() {
   const [packageSelections, setPackageSelections] = useState<{ category: string, item_id: string, item_name: string }[]>([]);
 
   const [refreshing, setRefreshing] = useState(false);
-  const onRefresh = React.useCallback(() => {
+  const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
-    refresh(); // Profile
-    setTimeout(() => setRefreshing(false), 1500);
-  }, [refresh]);
+    try {
+      if (typeof refresh === 'function') refresh(); // Profile
+      if (refetchMenu) await refetchMenu();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refresh, refetchMenu]);
 
   // Dışarıdan gelen yönlendirmelerde (Örn: Ana sayfa tabldot) otomatik kategoriyi açmak için
   React.useEffect(() => {

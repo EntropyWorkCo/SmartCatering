@@ -4,7 +4,7 @@ import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useRef } from "react";
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, RefreshControl } from "react-native";
+import { Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ThemeSwitcher from "@/components/ThemeSwitcher";
@@ -32,8 +32,8 @@ export default function HomeScreen() {
     }, [user?.id])
   );
   // Supabase uuid beklediği için standart boş uuid gönderiyoruz
-  const { orders } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
-  const { menu, systemPrices } = useMenu(true);
+  const { orders, fetchOrders } = useAdisyon(authLoading ? "00000000-0000-0000-0000-000000000000" : user?.id || "00000000-0000-0000-0000-000000000000");
+  const { menu, systemPrices, refetch: refetchMenu } = useMenu(true);
   const cartItems = useCartStore((state) => state.items);
   const orderMode = useCartStore((state) => state.orderMode);
   const setOrderMode = useCartStore((state) => state.setOrderMode);
@@ -41,11 +41,16 @@ export default function HomeScreen() {
   const [modalVisible, setModalVisible] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
 
-  const onRefresh = React.useCallback(() => {
+  const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
-    refresh(); // Profile data
-    setTimeout(() => setRefreshing(false), 1500);
-  }, [refresh]);
+    try {
+      if (typeof refresh === 'function') refresh(); // Profile data
+      if (refetchMenu) await refetchMenu();
+      if (fetchOrders) await fetchOrders();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refresh, refetchMenu, fetchOrders]);
 
   const TABLDOT_PACKAGES = useMemo(() => {
     return (systemPrices || [])
