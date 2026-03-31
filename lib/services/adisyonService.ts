@@ -58,28 +58,30 @@ export const adisyonService = {
             notificationService.scheduleRatingNotification(15, adisyon.id);
         }
 
-        // - Admin'e Canlı Sipariş Bildirimi Gönder
-        (async () => {
-            try {
-                const { data: userData } = await supabase
-                    .from("users")
-                    .select("full_name")
-                    .eq("id", userId)
-                    .single();
+        // - Admin'e Canlı Sipariş Bildirimi Gönder (Sadece Paket ve Sipariş Ver için)
+        if (orderType !== "Şimdi Ye") {
+            (async () => {
+                try {
+                    const { data: userData } = await supabase
+                        .from("users")
+                        .select("full_name")
+                        .eq("id", userId)
+                        .single();
 
-                const adminTokens = await notificationService.getAdminPushTokens();
-                if (adminTokens.length > 0) {
-                   await notificationService.sendPushNotification(
-                       adminTokens,
-                       "Yeni Sipariş Alındı! 🛎️",
-                       `${userData?.full_name || "Bir müşteri"} yeni bir sipariş verdi.`,
-                       { url: "/(admin)/dashboard" }
-                   );
+                    const adminTokens = await notificationService.getAdminPushTokens();
+                    if (adminTokens.length > 0) {
+                       await notificationService.sendPushNotification(
+                           adminTokens,
+                           "Yeni Sipariş Alındı! 🛎️",
+                           `${userData?.full_name || "Bir müşteri"} yeni bir sipariş verdi.`,
+                           { url: "/(admin)/dashboard" }
+                       );
+                    }
+                } catch (err) {
+                    console.error("Admin bildirimi hatası:", err);
                 }
-            } catch (err) {
-                console.error("Admin bildirimi hatası:", err);
-            }
-        })();
+            })();
+        }
     } catch (e) {
         console.warn("Otomatik bildirim hatası (Kritik değil):", e);
     }

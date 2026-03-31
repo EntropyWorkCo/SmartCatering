@@ -45,7 +45,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (sessionError) {
         console.warn("Auth initialization session error:", sessionError.message);
-        await supabase.auth.signOut();
+        // If the refresh token is invalid or not found, we should sign out to clear local state
+        if (sessionError.message.includes("Refresh Token") || sessionError.status === 400) {
+          await supabase.auth.signOut();
+          await AsyncStorage.removeItem("isAdmin");
+          await AsyncStorage.removeItem("softUser");
+        }
         finalSession = null;
       } else if (!session) {
         // Check for soft user if no supabase session

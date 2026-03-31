@@ -3,9 +3,9 @@ import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
+    DarkTheme,
+    DefaultTheme,
+    ThemeProvider,
 } from "@react-navigation/native";
 import Constants from "expo-constants";
 import { useFonts } from "expo-font";
@@ -13,8 +13,8 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import {
-  Alert,
-  Platform
+    Alert,
+    Platform
 } from "react-native";
 import "react-native-reanimated";
 
@@ -124,6 +124,11 @@ function RootLayoutNav() {
           orderChannel = supabase
             .channel('admin-orders-live-root')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'adisyon' }, (payload) => {
+              const orderType = payload.new?.order_type;
+              
+              // Sadece Paket/Sipariş Ver (Şimdi Ye hariç) bildirim gönder
+              if (orderType === "Şimdi Ye") return;
+
               console.log("🔥 YENİ SİPARİŞ TESPİT EDİLDİ (Root)");
               
               Notifications.scheduleNotificationAsync({
