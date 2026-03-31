@@ -3,9 +3,9 @@ import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
-    DarkTheme,
-    DefaultTheme,
-    ThemeProvider,
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
 } from "@react-navigation/native";
 import Constants from "expo-constants";
 import { useFonts } from "expo-font";
@@ -13,8 +13,8 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import {
-    Alert,
-    Platform
+  Alert,
+  Platform
 } from "react-native";
 import "react-native-reanimated";
 
@@ -104,7 +104,7 @@ function RootLayoutNav() {
 
         Notifications.setNotificationHandler({
           handleNotification: async () => ({
-            shouldShowAlert: true,
+            shouldShowAlert: true, // Legacy, kept for compatibility but others preferred
             shouldPlaySound: true,
             shouldSetBadge: false,
             shouldShowBanner: true,
@@ -177,48 +177,57 @@ function RootLayoutNav() {
       .subscribe();
 
     // 3. Sipariş Durumu Dinleyicisi (Müşteri İçin)
-    // Sadece Expo Go içindeyken bu yerel bildirimleri tetikliyoruz (Çünkü Expo Go iOS'ta Remote Push desteklemiyor).
-    // Prodüksiyonda (gerçek uygulamada) bildirimler arkaplandan (notificationService) gelecektir.
-    const isExpoGo = Constants.appOwnership === 'expo';
-    if (isExpoGo && !isAdmin && user?.id) {
+    // Uygulama açıkken (foreground) sipariş durumunu takip eder ve kullanıcıyı bilgilendirir.
+    if (user?.id) {
+      console.log("📡 Müşteri sipariş dinleyicisi başlatılıyor... User:", user.id);
       customerOrderChannel = supabase
-        .channel('customer-orders-live-root')
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'adisyon', filter: `user_id=eq.${user.id}` }, (payload) => {
-          const oldStatus = payload.old?.status;
-          const newStatus = payload.new?.status;
-          const orderType = payload.new?.order_type;
+        .channel(`customer-orders-${user.id}`)
+        .on('postgres_changes', { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'adisyon', 
+          filter: `user_id=eq.${user.id}` 
+        }, (payload) => {
+          const newStatus = (payload.new?.status || '').toString().toUpperCase();
+          const orderType = payload.new?.order_type || '';
           
-          if (oldStatus !== newStatus && (orderType === 'Sipariş Ver' || orderType === 'PAKET')) {
-            const Notifications = require("expo-notifications");
-            
-            // Yola Çıktı Bildirimi
-            if (newStatus === 'READY' || newStatus === 'HAZIR' || newStatus === 'Hazır') {
-              Notifications.scheduleNotificationAsync({
-                content: {
-                  title: "Siparişiniz Yola Çıktı! 🛵",
-                  body: "Yemeğiniz hazırlandı ve şu an yola çıktı. Afiyet olsun!",
-                  sound: true,
-                  data: { url: "/(tabs)/past-orders" },
-                },
-                trigger: null,
-              }).catch(console.error);
+          console.log("🔔 SİPARİŞ EVENTİ:", { status: newStatus, type: orderType });
+          
+          const isReady = ['READY', 'HAZIR'].includes(newStatus);
+          const isCompleted = ['COMPLETED', 'TAMAMLANDI'].includes(newStatus);
+          
+          // Sadece paket servis ve dışarıdan siparişler için bildirim/uyarı göster
+          const isDeliveryType = ['Sipariş Ver', 'PAKET'].includes(orderType);
+
+          if (isDeliveryType) {
+            // First show the Alert (Safe for all environments)
+            // Bu kısım uygulama içinde pop-up uyarısını ve yönlendirmeyi yönetir.
+            // Bildirim balonunu (banner) artık remote push (notificationService) yönettiği için buradan kaldırdık.
+            if (isReady) {
+              Alert.alert("Siparişiniz Yola Çıktı! 🛵", "Yemeğiniz hazırlandı ve şu an yola çıktı. Afiyet olsun!");
             }
             
-            // Teslim Edildi Bildirimi
-            if (newStatus === 'COMPLETED' || newStatus === 'TAMAMLANDI') {
-              Notifications.scheduleNotificationAsync({
-                content: {
-                  title: "Siparişiniz Teslim Edildi ✅",
-                  body: "Afiyet olsun! Bugünkü siparişinizi değerlendirmek ister misiniz?",
-                  sound: true,
-                  data: { url: `/(tabs)/order-rating?orderId=${payload.new.id}` },
-                },
-                trigger: null,
-              }).catch(console.error);
+            if (isCompleted) {
+              Alert.alert(
+                "Siparişiniz Teslim Edildi ✅",
+                "Siparişiniz teslim edildi, değerlendirmek ister misiniz?",
+                [
+                  { text: "Daha Sonra", style: "cancel" },
+                  { 
+                    text: "Değerlendir", 
+                    onPress: () => {
+                      console.log("Değerlendirme sayfasına yönlendiriliyor:", payload.new.id);
+                      router.push(`/(tabs)/order-rating?orderId=${payload.new.id}` as any);
+                    }
+                  }
+                ]
+              );
             }
           }
         })
-        .subscribe();
+        .subscribe((status) => {
+          console.log(`📡 Sipariş kanalı durumu (${user.id}):`, status);
+        });
     }
 
     return () => {

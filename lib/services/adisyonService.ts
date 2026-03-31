@@ -179,12 +179,16 @@ export const adisyonService = {
       try {
         const tokens = await notificationService.getPushTokens(userId);
         if (tokens.length > 0) {
+          /* 
+          // NOT: Bu bildirim artık mevcut Firebase backend tarafından yönetiliyor. 
+          // Çifte bildirim olmaması için buradan kaldırıldı.
           await notificationService.sendPushNotification(
             tokens,
             `Siparişiniz Yola Çıktı! 🛵`,
             `Yemeğiniz hazırlandı ve şu an yola çıktı. Afiyet olsun!`,
             { url: "/(tabs)/past-orders" }
           );
+          */
         }
       } catch (err) {
         console.error("Yola çıktı bildirimi hatası:", err);
@@ -196,12 +200,16 @@ export const adisyonService = {
       try {
         const tokens = await notificationService.getPushTokens(userId);
         if (tokens.length > 0) {
+          /* 
+          // NOT: Bu bildirim artık mevcut Firebase backend tarafından yönetiliyor. 
+          // Çifte bildirim olmaması için buradan kaldırıldı.
           await notificationService.sendPushNotification(
             tokens,
             "Siparişiniz Teslim Edildi ✅",
             "Afiyet olsun! Bugünkü siparişinizi değerlendirmek ister misiniz?",
             { url: `/(tabs)/order-rating?orderId=${data.id}` }
           );
+          */
         }
       } catch (err) {
         console.error("Değerlendirme bildirim gönderme hatası:", err);

@@ -25,6 +25,7 @@ export const notificationService = {
                 body,
                 data: data || {},
                 priority: "high",
+                channelId: "default",
             };
 
             const response = await fetch("https://exp.host/--/api/v2/push/send", {
@@ -175,8 +176,10 @@ export const notificationService = {
      */
     async registerForPushNotificationsAsync() {
         const { Platform } = require("react-native");
-        if (Platform.OS === 'android' && isExpoGo) {
-            console.log("Skipping push registration on Android Expo Go (Restricted)");
+        const isAndroidExpoGo = Platform.OS === 'android' && Constants.appOwnership === 'expo';
+
+        if (isAndroidExpoGo) {
+            console.log("Skipping push registration on Android Expo Go (Not supported on SDK 53+)");
             return null;
         }
 
