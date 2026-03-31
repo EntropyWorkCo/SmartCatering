@@ -180,6 +180,7 @@ export const notificationService = {
 
         if (isAndroidExpoGo) {
             console.log("Skipping push registration on Android Expo Go (Not supported on SDK 53+)");
+            // NOTE: Bu sadece Android Expo Go için geçerli, APK ve iOS için değil.
             return null;
         }
 
@@ -189,6 +190,7 @@ export const notificationService = {
         if (Platform.OS === 'android') {
             await Notifications.setNotificationChannelAsync('default', {
                 name: 'default',
+                description: 'Sipariş bildirimleri',
                 importance: Notifications.AndroidImportance.MAX,
                 vibrationPattern: [0, 250, 250, 250],
                 lightColor: '#FF231F7C',
@@ -201,23 +203,30 @@ export const notificationService = {
             const { status } = await Notifications.requestPermissionsAsync();
             finalStatus = status;
         }
+        
         if (finalStatus !== 'granted') {
-            console.log('Failed to get push token for push notification!');
+            console.warn('Bildirim izni verilmedi (push token alınamayacak)');
             return null;
         }
 
         try {
-            const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+            // Robust method to get projectId across all Expo environments (EAS, Go, Standalone)
+            const projectId = 
+                Constants?.expoConfig?.extra?.eas?.projectId ?? 
+                Constants?.easConfig?.projectId ?? 
+                "015fe52a-f654-4607-8023-0504fa4302b2"; // Fallback from app.json
+
             if (!projectId) {
-                console.warn("DİKKAT: app.json içinde 'projectId' bulunamadı. Push bildirimleri (uygulama kapalıyken gelenler) çalışmayacaktır. Ancak uygulama içi uyarılar aktif kalacaktır.");
+                console.warn("DİKKAT: ProjectId çekilemedi. Expo Push Token oluşturulamıyor.");
                 return null;
             }
+
             token = (await Notifications.getExpoPushTokenAsync({
                 projectId,
             })).data;
-            console.log("Device Push Token:", token);
+            console.log("Başarıyla alınan Push Token:", token);
         } catch (e) {
-            console.error("Error getting Expo Push Token:", e);
+            console.error("Expo Push Token hatası:", e);
         }
 
         return token;
