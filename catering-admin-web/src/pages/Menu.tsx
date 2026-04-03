@@ -8,42 +8,46 @@ import {
   Soup, 
   Star,
   Save,
-  CheckCircle2,
-  AlertCircle,
   Loader2,
-  X,
   PlusCircle,
   Image as ImageIcon,
   FileDown,
   Upload,
-  CheckSquare,
-  Square
+  Ban,
+  Check,
+  AlertCircle
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { menuService } from "../lib/services/menuService";
 
 const CATEGORIES = [
+  { id: "ÇORBA", label: "Çorba", icon: Soup },
   { id: "ANA YEMEK", label: "Ana Yemek", icon: Utensils },
   { id: "YARDIMCI", label: "Yardımcı", icon: Star },
-  { id: "ÇORBA", label: "Çorba", icon: Soup },
   { id: "EKSTRA", label: "Ekstra", icon: PlusCircle },
   { id: "İÇECEK", label: "İçecek", icon: Coffee },
 ];
 
 export default function MenuManagement() {
-  const [activeTab, setActiveTab] = useState<"TODAY" | "POOL" | "ADD">("TODAY");
+  const [activeTab, setActiveTab] = useState<"ADD" | "POOL" | "TODAY" | "FIXED">("TODAY");
   const [menu, setMenu] = useState<any[]>([]);
+  const [systemPrices, setSystemPrices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
   // Bulk Add State
-  const [bulkItems, setBulkItems] = useState([
-    { id: "1", name: "", category: "ANA YEMEK", price: "180" }
+  const [bulkItems, setBulkItems] = useState<any[]>([
+    { id: "1", name: "", category: "ANA YEMEK", price: "180", image_url: null, image_base64: null }
   ]);
 
   // Bulk Selection State
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+
+  // Edit Modal State
+  const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     fetchMenu();
@@ -52,8 +56,12 @@ export default function MenuManagement() {
   const fetchMenu = async () => {
     try {
       setLoading(true);
-      const data = await menuService.getAllMenu();
-      setMenu(data || []);
+      const [allMenu, sysPrices] = await Promise.all([
+        menuService.getAllMenu(),
+        menuService.getSystemPrices()
+      ]);
+      setMenu(allMenu || []);
+      setSystemPrices(sysPrices || []);
     } catch (error) {
       console.error("Menu fetch error:", error);
     } finally {
@@ -94,7 +102,7 @@ export default function MenuManagement() {
   };
 
   const handleAddBulkRow = () => {
-    setBulkItems([...bulkItems, { id: Date.now().toString(), name: "", category: "ANA YEMEK", price: "180" }]);
+    setBulkItems([...bulkItems, { id: Date.now().toString(), name: "", category: "ANA YEMEK", price: "180", image_url: null, image_base64: null }]);
   };
 
   const handleSaveBulk = async () => {
@@ -104,9 +112,9 @@ export default function MenuManagement() {
     try {
       setLoading(true);
       for (const item of validItems) {
-        await menuService.addMenuItem(item.name, item.category, Number(item.price));
+        await menuService.addMenuItem(item.name, item.category, Number(item.price), item.image_url, item.image_base64);
       }
-      setBulkItems([{ id: "1", name: "", category: "ANA YEMEK", price: "180" }]);
+      setBulkItems([{ id: "1", name: "", category: "ANA YEMEK", price: "180", image_url: null, image_base64: null }]);
       setActiveTab("POOL");
       fetchMenu();
     } catch (error) {
@@ -138,7 +146,9 @@ export default function MenuManagement() {
             id: `excel-${Date.now()}-${idx}`,
             name: String(row[0]),
             category: (String(row[1]).toUpperCase().replace(" ", "_")) as any || "ANA YEMEK",
-            price: String(row[2] || "180")
+            price: String(row[2] || "180"),
+            image_url: null,
+            image_base64: null
           }));
 
         if (newItems.length === 0) {
@@ -214,20 +224,45 @@ export default function MenuManagement() {
     }
   };
 
-  const toggleSelectAll = () => {
-    if (selectedIds.length === filteredMenu.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(filteredMenu.map(i => i.id));
+  const handleEditClick = (item: any) => {
+    setEditingItem({ ...item });
+    setEditModalVisible(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingItem || !editingItem.name) return;
+    try {
+      setProcessing(true);
+      await menuService.updateMenuItem(editingItem.id, {
+        name: editingItem.name,
+        category: editingItem.category,
+        price: Number(editingItem.price),
+        image_url: editingItem.image_url
+      });
+      setEditModalVisible(false);
+      setEditingItem(null);
+      fetchMenu();
+    } catch (error) {
+      console.error("Update error:", error);
+      alert("Güncelleme yapılamadı.");
+    } finally {
+      setProcessing(false);
     }
   };
 
-  const toggleSelect = (id: string) => {
-    if (selectedIds.includes(id)) {
-      setSelectedIds(selectedIds.filter(i => i !== id));
-    } else {
-      setSelectedIds([...selectedIds, id]);
-    }
+  const handleBulkImageChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
+      const newItems = [...bulkItems];
+      newItems[index].image_url = reader.result as string; 
+      newItems[index].image_base64 = base64;
+      setBulkItems(newItems);
+    };
+    reader.readAsDataURL(file);
   };
 
   const filteredMenu = menu.filter(item => 
@@ -235,7 +270,6 @@ export default function MenuManagement() {
   );
 
   const todayMenu = filteredMenu.filter(item => ["draft", "active", "sold_out"].includes(item.status));
-  const poolMenu = filteredMenu;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -245,24 +279,30 @@ export default function MenuManagement() {
           <p className="text-slate-500 mt-1">Günün menüsünü ve yemek havuzunu buradan yönetin.</p>
         </div>
         
-        <div className="flex items-center bg-white p-1 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex items-center bg-white p-1 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto max-w-full">
           <button 
-            onClick={() => setActiveTab("TODAY")}
-            className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'TODAY' ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'text-slate-500 hover:bg-slate-50'}`}
+            onClick={() => setActiveTab("ADD")}
+            className={`px-6 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'ADD' ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'text-slate-500 hover:bg-slate-50'}`}
           >
-            Günün Menüsü
+            Yeni Yemek Ekle
           </button>
           <button 
             onClick={() => setActiveTab("POOL")}
-            className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'POOL' ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`px-6 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'POOL' ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'text-slate-500 hover:bg-slate-50'}`}
           >
             Yemek Havuzu
           </button>
           <button 
-            onClick={() => setActiveTab("ADD")}
-            className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'ADD' ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'text-slate-500 hover:bg-slate-50'}`}
+            onClick={() => setActiveTab("TODAY")}
+            className={`px-6 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'TODAY' ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'text-slate-500 hover:bg-slate-50'}`}
           >
-            Hızlı Ekle
+            Günün Menüsü
+          </button>
+          <button 
+            onClick={() => setActiveTab("FIXED")}
+            className={`px-6 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'FIXED' ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            Sabit Fiyat Listesi
           </button>
         </div>
       </div>
@@ -296,47 +336,109 @@ export default function MenuManagement() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="space-y-12">
                 {todayMenu.length === 0 ? (
-                  <div className="col-span-full py-20 text-center bg-white rounded-3xl border border-slate-100 border-dashed">
+                  <div className="py-20 text-center bg-white rounded-3xl border border-slate-100 border-dashed">
                       <Utensils className="w-16 h-16 text-slate-200 mx-auto mb-4" />
                       <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Günün Menüsü Boş</p>
                       <button onClick={() => setActiveTab("POOL")} className="text-accent underline font-bold mt-2 hover:text-accent/80">Havuzdan ekleyin</button>
                   </div>
                 ) : (
-                  todayMenu.map(item => (
-                    <div key={item.id} className={`bg-white rounded-3xl p-6 border transition-all shadow-sm group hover:shadow-xl hover:shadow-slate-200/50 ${item.status === 'sold_out' ? 'opacity-60 grayscale' : 'border-slate-100'}`}>
-                      <div className="flex items-start justify-between">
+                  CATEGORIES.map(cat => {
+                    const items = todayMenu.filter(i => i.category === cat.id);
+                    if (items.length === 0) return null;
+
+                    return (
+                      <div key={cat.id} className="space-y-6">
                         <div className="flex items-center space-x-4">
-                           <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center overflow-hidden">
-                              {item.image_url ? (
-                                <img src={item.image_url} className="w-full h-full object-cover" />
-                              ) : (
-                                <ImageIcon size={24} className="text-slate-300" />
-                              )}
+                           <div className="bg-accent/10 p-2 rounded-xl text-accent">
+                              <cat.icon size={20} />
                            </div>
-                           <div>
-                              <span className="text-[10px] font-black text-accent uppercase tracking-widest">{item.category}</span>
-                              <h3 className="text-lg font-bold text-slate-800 leading-tight">{item.name}</h3>
-                              {item.status === 'draft' && <span className="text-[9px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-bold ml-0 mt-1 inline-block">TASLAK</span>}
-                              {item.status === 'sold_out' && <span className="text-[9px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold ml-0 mt-1 inline-block uppercase italic">Tükendi</span>}
-                           </div>
+                           <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">{cat.label}</h2>
+                           <div className="flex-1 h-px bg-slate-100" />
                         </div>
-                        <div className="flex flex-col space-y-2">
-                           <button onClick={() => handleToggleStatus(item.id, "passive")} title="Menüden Kaldır" className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><X size={18} /></button>
-                           {item.status !== 'sold_out' && <button onClick={() => handleToggleStatus(item.id, "sold_out")} title="Tükendi İşaretle" className="p-2 text-slate-300 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all"><AlertCircle size={18} /></button>}
-                           {item.status === 'sold_out' && <button onClick={() => handleToggleStatus(item.id, "active")} title="Satışa Aç" className="p-2 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-xl transition-all"><CheckCircle2 size={18} /></button>}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {items.map(item => (
+                            <div key={item.id} className={`bg-white rounded-[32px] p-7 border transition-all shadow-sm hover:shadow-2xl hover:shadow-slate-200/50 flex flex-col justify-between ${item.status === 'sold_out' ? 'opacity-50 grayscale bg-slate-50 border-slate-200' : 'border-slate-100'}`}>
+                              <div>
+                                <div className="flex items-start justify-between mb-6">
+                                  <div className="flex items-center space-x-4">
+                                    <div className="w-20 h-20 bg-slate-100 border border-slate-200 rounded-[24px] flex items-center justify-center overflow-hidden shadow-inner shrink-0">
+                                      {item.image_url ? (
+                                        <img src={item.image_url} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <ImageIcon size={28} className="text-slate-300" />
+                                      )}
+                                    </div>
+                                    <div>
+                                       <span className="text-[10px] font-black text-accent uppercase tracking-widest bg-accent/5 px-2 py-0.5 rounded-lg border border-accent/10">{item.category}</span>
+                                       <h3 className="text-xl font-bold text-slate-800 leading-tight mt-1">{item.name}</h3>
+                                       <div className="flex items-center space-x-2 mt-2">
+                                          {item.status === 'draft' && <span className="text-[9px] text-[#f59e0b] font-black uppercase tracking-widest">(YAYIN BEKLİYOR)</span>}
+                                          {item.status === 'sold_out' && <span className="text-[9px] text-[#ef4444] font-black uppercase tracking-widest">(TÜKENDİ)</span>}
+                                          {item.status === 'active' && <span className="text-[9px] text-[#10b981] font-black uppercase tracking-widest">(AKTİF)</span>}
+                                       </div>
+                                    </div>
+                                  </div>
+                                  <button onClick={() => handleDelete(item.id)} title="Havuzdan Tamamen Sil" className="p-2.5 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all">
+                                     <Trash2 size={20} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="mt-4 pt-6 border-t border-slate-100 flex flex-col space-y-3">
+                                 <div className="flex items-center justify-between mb-1">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">FİYAT</span>
+                                    <span className="text-lg font-black text-slate-900 italic">₺{item.price}</span>
+                                 </div>
+                                 
+                                 <div className="flex flex-wrap gap-2">
+                                   <button 
+                                     onClick={() => handleToggleStatus(item.id, "passive")}
+                                     className="flex-1 min-w-[120px] flex items-center justify-center space-x-2 px-4 py-3 bg-white text-[#f59e0b] border-2 border-[#f59e0b] rounded-2xl text-[10px] font-black hover:bg-[#f59e0b] hover:text-white transition-all uppercase"
+                                   >
+                                      <span>Menüden Kaldır</span>
+                                   </button>
+
+                                   {item.status !== 'sold_out' ? (
+                                     <button 
+                                       onClick={() => handleToggleStatus(item.id, "sold_out")}
+                                       className="flex-[1.5] min-w-[150px] flex items-center justify-center space-x-2 px-4 py-3 bg-[#ef4444] text-white rounded-2xl text-[10px] font-black hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-red-200 uppercase"
+                                     >
+                                        <Ban size={14} />
+                                        <span>Tükendi Olarak İşaretle</span>
+                                     </button>
+                                   ) : (
+                                     <button 
+                                       onClick={() => handleToggleStatus(item.id, "active")}
+                                       className="flex-[1.5] min-width-[150px] flex items-center justify-center space-x-2 px-4 py-3 bg-[#10b981] text-white rounded-2xl text-[10px] font-black hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-emerald-200 uppercase"
+                                     >
+                                        <Check size={14} />
+                                        <span>Tekrar Satışa Aç</span>
+                                     </button>
+                                   )}
+                                   <button 
+                                     onClick={() => handleEditClick(item)}
+                                     className="flex-1 min-w-[100px] py-3 bg-slate-50 text-slate-600 rounded-2xl text-[10px] font-black hover:bg-slate-100 transition-all uppercase border border-slate-200"
+                                   >
+                                      Düzenle
+                                   </button>
+                                 </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    </div>
-                  ))
+                    )
+                  })
                 )}
               </div>
             </div>
           )}
 
           {activeTab === "POOL" && (
-            <div className="space-y-6">
+            <div className="space-y-8">
                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                   <div className="relative max-w-md w-full">
                       <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
@@ -367,74 +469,65 @@ export default function MenuManagement() {
                   )}
                </div>
 
-               <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                      <thead>
-                        <tr className="bg-slate-50/50 text-slate-400 text-[11px] uppercase tracking-wider font-extrabold border-b border-slate-100">
-                          <th className="px-6 py-5 w-10">
-                            <button onClick={toggleSelectAll} className="p-1 hover:bg-slate-100 rounded-md transition-colors">
-                              {selectedIds.length === filteredMenu.length ? <CheckSquare className="text-accent" size={18} /> : <Square size={18} />}
-                            </button>
-                          </th>
-                          <th className="px-6 py-5">Kategori</th>
-                          <th className="px-6 py-5">Yemek Adı</th>
-                          <th className="px-6 py-5">Fiyat</th>
-                          <th className="px-6 py-5">Durum</th>
-                          <th className="px-6 py-5 text-right">Aksiyonlar</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {poolMenu.map(item => (
-                          <tr key={item.id} className={`hover:bg-slate-50/50 transition-colors group ${selectedIds.includes(item.id) ? 'bg-accent/5' : ''}`}>
-                            <td className="px-6 py-5">
-                              <button onClick={() => toggleSelect(item.id)} className="p-1 hover:bg-slate-100 rounded-md transition-colors">
-                                {selectedIds.includes(item.id) ? <CheckSquare className="text-accent" size={18} /> : <Square size={18} />}
-                              </button>
-                            </td>
-                            <td className="px-6 py-5">
-                               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.category}</span>
-                            </td>
-                            <td className="px-6 py-5">
-                               <span className="text-sm font-bold text-slate-800">{item.name}</span>
-                            </td>
-                            <td className="px-6 py-5">
-                               <span className="text-sm font-bold text-slate-600">{item.price} ₺</span>
-                            </td>
-                            <td className="px-6 py-5">
-                               {item.status === 'passive' ? (
-                                 <span className="text-[10px] font-bold text-slate-400 italic">HAVUZDA</span>
-                               ) : (
-                                 <span className="text-[10px] font-bold text-accent italic uppercase tracking-tighter">GÜNÜN MENÜSÜNDE</span>
-                               )}
-                            </td>
-                            <td className="px-6 py-5 text-right">
-                               <div className="flex items-center justify-end space-x-3">
-                                  {item.status === 'passive' ? (
-                                    <button 
-                                      onClick={() => handleToggleStatus(item.id, "draft")}
-                                      className="text-xs font-black bg-accent text-white px-4 py-2 rounded-xl hover:scale-105 active:scale-95 transition-all shadow-md shadow-accent/10"
-                                    >
-                                      GÜNÜN MENÜSÜNE EKLE
-                                    </button>
-                                  ) : (
-                                    <button 
-                                      disabled
-                                      className="text-[11px] font-black text-slate-300 uppercase tracking-tight"
-                                    >
-                                      ZATEN EKLİ
-                                    </button>
-                                  )}
-                                  <button onClick={() => handleDelete(item.id)} className="p-2 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
-                                    <Trash2 size={18} />
-                                  </button>
-                               </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+               <div className="space-y-12">
+                 {CATEGORIES.map(cat => {
+                   const items = filteredMenu.filter(i => i.category === cat.id && i.status === 'passive');
+                   if (items.length === 0) return null;
+
+                   return (
+                     <div key={cat.id} className="space-y-4">
+                        <div className="flex items-center space-x-4">
+                           <div className="bg-slate-100 p-2 rounded-xl text-slate-400">
+                              <cat.icon size={20} />
+                           </div>
+                           <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">{cat.label}</h2>
+                           <div className="flex-1 h-px bg-slate-100" />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                           {items.map(item => (
+                             <div key={item.id} className="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all flex flex-col justify-between">
+                                <div className="flex items-start space-x-4 mb-6">
+                                   <div className="w-14 h-14 bg-slate-50 border border-slate-100 rounded-[18px] shrink-0 overflow-hidden">
+                                      {item.image_url ? (
+                                        <img src={item.image_url} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-slate-200">
+                                          <ImageIcon size={20} />
+                                        </div>
+                                      )}
+                                   </div>
+                                   <div className="flex-1 min-w-0">
+                                      <h3 className="text-base font-bold text-slate-800 truncate">{item.name}</h3>
+                                      <div className="text-sm font-black text-slate-400 italic mt-1">₺{item.price}</div>
+                                   </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                   <button 
+                                     onClick={() => handleToggleStatus(item.id, "draft")}
+                                     className="flex-1 py-3 bg-accent text-white rounded-2xl text-[10px] font-black hover:scale-105 active:scale-95 transition-all shadow-lg shadow-accent/20 uppercase"
+                                   >
+                                      Günün Menüsüne Ekle
+                                   </button>
+                                   <button 
+                                     onClick={() => handleEditClick(item)}
+                                     className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:text-accent transition-all border border-slate-100"
+                                   >
+                                      <Plus size={18} className="rotate-45" />
+                                   </button>
+                                </div>
+                             </div>
+                           ))}
+                        </div>
+                     </div>
+                   );
+                 })}
+
+                 {filteredMenu.filter(i => i.status === 'passive').length === 0 && (
+                   <div className="py-20 text-center bg-white rounded-3xl border border-slate-100 border-dashed">
+                      <p className="text-slate-400 font-bold uppercase tracking-widest text-xs italic">Havuzda uygun yemek bulunamadı.</p>
+                   </div>
+                 )}
                </div>
             </div>
           )}
@@ -471,14 +564,35 @@ export default function MenuManagement() {
 
                   <div className="space-y-4">
                     {bulkItems.map((item, index) => (
-                      <div key={item.id} className="flex flex-col md:flex-row items-center gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-100 group animate-in slide-in-from-top-2">
-                        <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center font-black text-xs">
+                      <div key={item.id} className="grid grid-cols-1 md:grid-cols-[48px_80px_1fr_180px_120px_48px] items-center gap-4 bg-slate-50 border border-slate-100 p-4 rounded-3xl group animate-in slide-in-from-top-2">
+                        <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center font-black text-xs shrink-0">
                           {index + 1}
                         </div>
+                        
+                        {/* Image Upload */}
+                        <div className="relative group/img">
+                           <div className="w-16 h-16 bg-white border border-dashed border-slate-200 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
+                              {item.image_url ? (
+                                <img src={item.image_url} className="w-full h-full object-cover" />
+                              ) : (
+                                <ImageIcon size={20} className="text-slate-300" />
+                              )}
+                           </div>
+                           <label className="absolute inset-0 cursor-pointer opacity-0 group-hover/img:opacity-100 transition-opacity bg-accent/60 flex items-center justify-center text-white rounded-2xl">
+                              <Plus size={20} />
+                              <input 
+                                type="file" 
+                                className="hidden" 
+                                accept="image/*"
+                                onChange={(e) => handleBulkImageChange(index, e)}
+                              />
+                           </label>
+                        </div>
+
                         <input 
                           type="text"
-                          placeholder="Yemek Adı (Örn: Dana Kavurma)"
-                          className="flex-1 bg-white border border-slate-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-accent/20 outline-none font-bold"
+                          placeholder="Yemek Adı"
+                          className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-accent/20 outline-none font-bold text-slate-700"
                           value={item.name}
                           onChange={(e) => {
                             const newItems = [...bulkItems];
@@ -486,8 +600,9 @@ export default function MenuManagement() {
                             setBulkItems(newItems);
                           }}
                         />
+
                         <select 
-                          className="w-full md:w-48 bg-white border border-slate-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-accent/20 outline-none font-bold cursor-pointer"
+                          className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-accent/20 outline-none font-bold cursor-pointer text-slate-600"
                           value={item.category}
                           onChange={(e) => {
                             const newItems = [...bulkItems];
@@ -497,9 +612,25 @@ export default function MenuManagement() {
                         >
                           {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                         </select>
+
+                        <div className="relative">
+                           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₺</span>
+                           <input 
+                            type="number"
+                            placeholder="Fiyat"
+                            className="w-full bg-white border border-slate-200 pl-8 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-accent/20 outline-none font-bold text-slate-700"
+                            value={item.price}
+                            onChange={(e) => {
+                              const newItems = [...bulkItems];
+                              newItems[index].price = e.target.value;
+                              setBulkItems(newItems);
+                            }}
+                          />
+                        </div>
+
                         <button 
                           onClick={() => setBulkItems(bulkItems.filter(i => i.id !== item.id))}
-                          className="p-3 text-slate-300 hover:text-red-500 transition-colors"
+                          className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all"
                         >
                           <Trash2 size={20} />
                         </button>
@@ -507,21 +638,103 @@ export default function MenuManagement() {
                     ))}
                   </div>
 
-                  <div className="mt-8 flex flex-col md:flex-row gap-4 items-center">
+                  <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
                     <button 
                       onClick={handleAddBulkRow}
-                      className="w-full md:w-auto px-8 py-4 bg-slate-100 text-slate-700 rounded-2xl font-bold flex items-center justify-center space-x-2 border border-slate-200 hover:bg-slate-200 active:scale-95 transition-all text-sm"
+                      className="w-full sm:w-auto px-10 py-5 bg-slate-100 text-slate-700 rounded-[24px] font-bold flex items-center justify-center space-x-2 border border-slate-200 hover:bg-slate-200 active:scale-95 transition-all text-sm"
                     >
-                      <Plus size={20} />
+                      <Plus size={22} />
                       <span>YENİ SATIR EKLE</span>
                     </button>
                     <button 
                       onClick={handleSaveBulk}
-                      className="w-full flex-1 md:flex-none px-12 py-4 bg-accent text-white rounded-2xl font-black flex items-center justify-center space-x-3 shadow-xl shadow-accent/20 hover:scale-[1.02] active:scale-95 transition-all"
+                      className="w-full sm:w-auto min-w-[280px] px-12 py-5 bg-accent text-white rounded-[24px] font-black flex items-center justify-center space-x-3 shadow-xl shadow-accent/20 hover:scale-[1.05] active:scale-95 transition-all"
                     >
-                      <Save size={20} />
+                      <Save size={22} />
                       <span>HEPSİNİ HAVUZA KAYDET</span>
                     </button>
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {activeTab === "FIXED" && (
+            <div className="space-y-6">
+                <div className="bg-slate-100 p-6 rounded-3xl border border-slate-200/50">
+                   <h3 className="text-slate-800 font-bold mb-2">Sabit Fiyat Bilgilendirmesi</h3>
+                   <p className="text-slate-600 text-sm italic">Bu alandaki fiyatlar işletmenizin fiziki tabelasındaki fiyatları temsil eder. Müşteri fiyatları buradan beslenmektedir.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                   {systemPrices.map(item => (
+                     <div key={item.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between hover:border-accent/30 transition-all group">
+                        <div className="flex items-center space-x-4">
+                           <div className="p-3 bg-accent/10 text-accent rounded-2xl">
+                              <Star size={24} />
+                           </div>
+                           <div>
+                              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.category}</div>
+                              <h4 className="text-lg font-bold text-slate-800">{item.name}</h4>
+                           </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                           <div className="text-xl font-black text-slate-900 italic">₺{item.price}</div>
+                           <button 
+                             onClick={() => handleEditClick(item)}
+                             className="p-3 text-slate-300 hover:text-accent hover:bg-accent/5 rounded-2xl transition-all"
+                           >
+                              <Plus size={20} />
+                           </button>
+                        </div>
+                     </div>
+                   ))}
+                </div>
+            </div>
+          )}
+
+          {/* Edit Modal */}
+          {editModalVisible && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+               <div className="bg-white w-full max-w-lg rounded-[40px] p-10 shadow-2xl animate-in zoom-in duration-300">
+                  <h2 className="text-2xl font-black text-slate-900 italic mb-2">Öğeyi Düzenle</h2>
+                  <p className="text-slate-500 text-sm mb-8">İsim ve fiyat bilgilerini güncelleyin.</p>
+
+                  <div className="space-y-6">
+                     <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">AD / BAŞLIK</label>
+                        <input 
+                          type="text"
+                          className="w-full bg-slate-50 border border-slate-100 px-6 py-4 rounded-2xl focus:ring-4 focus:ring-accent/10 outline-none font-bold text-slate-800"
+                          value={editingItem.name}
+                          onChange={(e) => setEditingItem({...editingItem, name: e.target.value})}
+                        />
+                     </div>
+
+                     <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">FİYAT (₺)</label>
+                        <input 
+                          type="number"
+                          className="w-full bg-slate-50 border border-slate-100 px-6 py-4 rounded-2xl focus:ring-4 focus:ring-accent/10 outline-none font-bold text-slate-800"
+                          value={editingItem.price}
+                          onChange={(e) => setEditingItem({...editingItem, price: e.target.value})}
+                        />
+                     </div>
+
+                     <div className="flex gap-4 pt-4">
+                        <button 
+                          onClick={() => setEditModalVisible(false)}
+                          className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all"
+                        >
+                           İPTAL
+                        </button>
+                        <button 
+                          onClick={handleSaveEdit}
+                          disabled={processing}
+                          className="flex-[2] py-4 bg-accent text-white rounded-2xl font-black shadow-xl shadow-accent/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center"
+                        >
+                           {processing ? <Loader2 className="animate-spin" size={20} /> : 'GÜNCELLEMEYİ KAYDET'}
+                        </button>
+                     </div>
                   </div>
                </div>
             </div>

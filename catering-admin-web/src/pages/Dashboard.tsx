@@ -70,15 +70,20 @@ export default function Dashboard() {
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'adisyon'
         },
         (payload) => {
-          const newOrder = payload.new as any;
-          // Filter: Only delivery orders (PAKET / Sipariş Ver)
-          if (newOrder.order_type !== 'Şimdi Ye') {
-            handleNewOrder(newOrder);
+          if (payload.eventType === 'INSERT') {
+            const newOrder = payload.new as any;
+            // Filter: Only delivery orders (PAKET / Sipariş Ver)
+            if (newOrder.order_type !== 'Şimdi Ye') {
+              handleNewOrder(newOrder);
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            // Refresh data when an order is updated (e.g., status changed to completed)
+            fetchDashboardData();
           }
         }
       )
@@ -186,7 +191,12 @@ export default function Dashboard() {
       setPopularItems(sortedItems);
 
       // Top 5 Recent Orders (Strict Filter for Delivery)
-      setRecentOrders(allOrders.filter(o => o.order_type !== "Şimdi Ye").slice(0, 5));
+      setRecentOrders(allOrders.filter(o => {
+        const isSelfService = o.order_type === "Şimdi Ye";
+        const status = (o.status || "").toUpperCase();
+        const isFinalized = ["COMPLETED", "TAMAMLANDI", "CANCELLED", "İPTAL", "PAID", "ÖDENDİ"].includes(status);
+        return !isSelfService && !isFinalized;
+      }).slice(0, 5));
     } catch (error) {
       console.error("Dashboard data fetch error:", error);
     } finally {

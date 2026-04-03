@@ -17,7 +17,7 @@ export default function Orders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ACTIVE");
 
   useEffect(() => {
     fetchOrders();
@@ -54,7 +54,10 @@ export default function Orders() {
       order.userName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       String(order.id).includes(searchTerm);
-    const matchesStatus = statusFilter === "ALL" || order.status === statusFilter;
+    const matchesStatus = 
+      statusFilter === "ALL" ? true :
+      statusFilter === "ACTIVE" ? ["PENDING", "PREPARING", "READY", "HAZIRLANIYOR", "BEKLİYOR"].includes(order.status?.toUpperCase()) :
+      order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
@@ -102,6 +105,7 @@ export default function Orders() {
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
         >
+          <option value="ACTIVE">Aktif Siparişler</option>
           <option value="ALL">Tüm Durumlar</option>
           <option value="PENDING">Bekleyenler</option>
           <option value="PREPARING">Hazırlananlar</option>
