@@ -13,8 +13,13 @@ import {
   Loader2,
   X,
   PlusCircle,
-  Image as ImageIcon
+  Image as ImageIcon,
+  FileDown,
+  Upload,
+  CheckSquare,
+  Square
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { menuService } from "../lib/services/menuService";
 
 const CATEGORIES = [
@@ -35,6 +40,10 @@ export default function MenuManagement() {
   const [bulkItems, setBulkItems] = useState([
     { id: "1", name: "", category: "ANA YEMEK", price: "180" }
   ]);
+
+  // Bulk Selection State
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
 
   useEffect(() => {
     fetchMenu();
@@ -105,6 +114,119 @@ export default function MenuManagement() {
       alert("Yemekler eklenirken bir hata oluştu.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: "binary" });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+
+        // Skip header row and map data
+        const newItems = data.slice(1)
+          .filter(row => row[0]) // Only rows with a name
+          .map((row, idx) => ({
+            id: `excel-${Date.now()}-${idx}`,
+            name: String(row[0]),
+            category: (String(row[1]).toUpperCase().replace(" ", "_")) as any || "ANA YEMEK",
+            price: String(row[2] || "180")
+          }));
+
+        if (newItems.length === 0) {
+          alert("Dosyada geçerli yemek verisi bulunamadı.");
+        } else {
+          setBulkItems(newItems);
+          alert(`${newItems.length} yemek dosyadan okundu. Şimdi kontrol edip "Hepsini Havuza Kaydet" butonuna basabilirsiniz.`);
+        }
+      } catch (err) {
+        console.error("Excel import error:", err);
+        alert("Dosya okunurken bir hata oluştu. Lütfen formatı kontrol edin.");
+      } finally {
+        setIsImporting(false);
+        e.target.value = "";
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const downloadTemplate = () => {
+    const ws_data = [
+      ["Yemek Adı", "Kategori", "Fiyat"],
+      ["Mercimek Çorbası", "ÇORBA", "120"],
+      ["İzmir Köfte", "ANA YEMEK", "250"],
+      ["Pilav", "YARDIMCI", "100"],
+      ["Ayran", "İÇECEK", "40"]
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(ws_data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Yemek Listesi");
+    XLSX.writeFile(wb, "yemek_listesi_taslak.xlsx");
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (confirm(`${selectedIds.length} adet yemeği havuzdan tamamen silmek istediğinize emin misiniz?`)) {
+      try {
+        setLoading(true);
+        for (const id of selectedIds) {
+          await menuService.deleteMenuItem(id);
+        }
+        setSelectedIds([]);
+        fetchMenu();
+      } catch (error) {
+        console.error("Bulk delete error:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleBulkPriceUpdate = async () => {
+    const percent = prompt("Seçili yemeklerin fiyatını yüzde kaç artırmak istersiniz? (Örn: 10)");
+    if (!percent || isNaN(Number(percent))) return;
+
+    try {
+      setLoading(true);
+      const ratio = 1 + (Number(percent) / 100);
+      for (const id of selectedIds) {
+        const item = menu.find(i => i.id === id);
+        if (item) {
+          const newPrice = Math.round(item.price * ratio);
+          await menuService.updateMenuItem(id, { ...item, price: newPrice });
+        }
+      }
+      setSelectedIds([]);
+      fetchMenu();
+      alert("Fiyatlar güncellendi!");
+    } catch (error) {
+      console.error("Bulk price update error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredMenu.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredMenu.map(i => i.id));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    if (selectedIds.includes(id)) {
+      setSelectedIds(selectedIds.filter(i => i !== id));
+    } else {
+      setSelectedIds([...selectedIds, id]);
     }
   };
 
@@ -215,15 +337,34 @@ export default function MenuManagement() {
 
           {activeTab === "POOL" && (
             <div className="space-y-6">
-               <div className="relative max-w-md mx-auto md:mx-0">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                  <input 
-                    type="text"
-                    placeholder="Havuzda yemek ara..."
-                    className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-3xl text-sm focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent shadow-sm transition-all"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+               <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="relative max-w-md w-full">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                      <input 
+                        type="text"
+                        placeholder="Havuzda yemek ara..."
+                        className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-3xl text-sm focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent shadow-sm transition-all"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                  </div>
+
+                  {selectedIds.length > 0 && (
+                    <div className="flex items-center space-x-2 animate-in fade-in zoom-in duration-300">
+                      <button 
+                        onClick={handleBulkPriceUpdate}
+                        className="px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl font-bold text-xs hover:bg-emerald-100 transition-all"
+                      >
+                        Fiyat Güncelle ({selectedIds.length})
+                      </button>
+                      <button 
+                        onClick={handleBulkDelete}
+                        className="px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl font-bold text-xs hover:bg-red-100 transition-all"
+                      >
+                        Seçilenleri Sil
+                      </button>
+                    </div>
+                  )}
                </div>
 
                <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
@@ -231,20 +372,34 @@ export default function MenuManagement() {
                     <table className="w-full text-left">
                       <thead>
                         <tr className="bg-slate-50/50 text-slate-400 text-[11px] uppercase tracking-wider font-extrabold border-b border-slate-100">
+                          <th className="px-6 py-5 w-10">
+                            <button onClick={toggleSelectAll} className="p-1 hover:bg-slate-100 rounded-md transition-colors">
+                              {selectedIds.length === filteredMenu.length ? <CheckSquare className="text-accent" size={18} /> : <Square size={18} />}
+                            </button>
+                          </th>
                           <th className="px-6 py-5">Kategori</th>
                           <th className="px-6 py-5">Yemek Adı</th>
+                          <th className="px-6 py-5">Fiyat</th>
                           <th className="px-6 py-5">Durum</th>
                           <th className="px-6 py-5 text-right">Aksiyonlar</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {poolMenu.map(item => (
-                          <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                          <tr key={item.id} className={`hover:bg-slate-50/50 transition-colors group ${selectedIds.includes(item.id) ? 'bg-accent/5' : ''}`}>
+                            <td className="px-6 py-5">
+                              <button onClick={() => toggleSelect(item.id)} className="p-1 hover:bg-slate-100 rounded-md transition-colors">
+                                {selectedIds.includes(item.id) ? <CheckSquare className="text-accent" size={18} /> : <Square size={18} />}
+                              </button>
+                            </td>
                             <td className="px-6 py-5">
                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.category}</span>
                             </td>
                             <td className="px-6 py-5">
                                <span className="text-sm font-bold text-slate-800">{item.name}</span>
+                            </td>
+                            <td className="px-6 py-5">
+                               <span className="text-sm font-bold text-slate-600">{item.price} ₺</span>
                             </td>
                             <td className="px-6 py-5">
                                {item.status === 'passive' ? (
@@ -286,11 +441,33 @@ export default function MenuManagement() {
 
           {activeTab === "ADD" && (
             <div className="max-w-4xl mx-auto space-y-6">
-               <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-xl shadow-slate-200/40 border-t-8 border-t-accent">
-                  <div className="mb-8">
-                    <h2 className="text-2xl font-black text-slate-900 italic">Hızlı Toplu Yemek Ekleme</h2>
-                    <p className="text-slate-500 mt-1 font-medium">Havuzunuza çok sayıda yemeği aynı anda kaydedebilirsiniz.</p>
-                  </div>
+                <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-xl shadow-slate-200/40 border-t-8 border-t-accent">
+                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                      <div>
+                        <h2 className="text-2xl font-black text-slate-900 italic">Hızlı Toplu Yemek Ekleme</h2>
+                        <p className="text-slate-500 mt-1 font-medium">Havuzunuza çok sayıda yemeği aynı anda kaydedebilirsiniz.</p>
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        <button 
+                          onClick={downloadTemplate}
+                          className="flex items-center space-x-2 px-4 py-2 bg-slate-50 text-slate-600 border border-slate-200 rounded-xl font-bold text-xs hover:bg-slate-100 transition-all"
+                        >
+                          <FileDown size={16} />
+                          <span>TASLAK İNDİR</span>
+                        </button>
+                        <label className="flex items-center space-x-2 px-4 py-2 bg-accent/10 text-accent border border-accent/20 rounded-xl font-bold text-xs hover:bg-accent/20 cursor-pointer transition-all">
+                          <Upload size={16} />
+                          <span>{isImporting ? 'OKUNUYOR...' : 'EXCEL YÜKLE'}</span>
+                          <input 
+                            type="file" 
+                            className="hidden" 
+                            accept=".xlsx, .xls, .csv"
+                            onChange={handleImportExcel}
+                            disabled={isImporting}
+                          />
+                        </label>
+                      </div>
+                   </div>
 
                   <div className="space-y-4">
                     {bulkItems.map((item, index) => (

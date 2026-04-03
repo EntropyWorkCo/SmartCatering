@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+
 
 // Geçiçi Test OTP Kodu (Mentör AWS ayarlayana kadar her zaman bu kod geçerli olacak)
 export const TEST_OTP_CODE = "123456";
@@ -32,7 +32,7 @@ export const sendOtp = async (phone: string): Promise<boolean> => {
  * @param phone Telefon numarası
  * @param code Kullanıcının girdiği 6 haneli kod
  */
-export const verifyOtp = async (phone: string, code: string): Promise<boolean> => {
+export const verifyOtp = async (_phone: string, code: string): Promise<boolean> => {
     // Şimdilik sadece TEST_OTP_CODE ile eşleştiriyoruz.
     // İleride veritabanında tutulan geçici kodlarla karşılaştırılabilir.
     

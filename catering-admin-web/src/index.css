@@ -7,9 +7,68 @@
   --color-background: #f8fafc;
 }
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
+  * {
+    @apply transition-colors duration-200 border-slate-200;
+  }
+  
+  .dark * {
+    @apply border-slate-800;
+  }
+
   body {
     @apply bg-background text-primary antialiased;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
+
+  .dark body {
+    @apply bg-[#020617] text-slate-100;
+  }
+}
+
+@layer components {
+  /* Glassmorphism for both light and dark */
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
+  }
+  .dark .glass-card {
+    @apply bg-slate-900/80 border-slate-800/50 shadow-slate-950/40;
+  }
+  
+  .premium-bg {
+    @apply bg-[#F8FAFC] dark:bg-[#020617];
+  }
+  
+  .premium-surface {
+    @apply bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm dark:shadow-slate-950/20;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-100 dark:bg-slate-900;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 dark:bg-slate-700 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400 dark:bg-slate-600;
+}
+
+/* New Order Animation */
+@keyframes newOrderFlash {
+  0% { background-color: rgba(116, 207, 98, 0.2); }
+  100% { background-color: transparent; }
+}
+
+.animate-new-order {
+  animation: newOrderFlash 1s ease-in-out infinite alternate;
 }

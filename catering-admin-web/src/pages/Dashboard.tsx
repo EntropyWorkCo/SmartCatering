@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { 
   Users, 
   TrendingUp, 
@@ -7,8 +7,23 @@ import {
   ArrowUpRight, 
   ArrowDownRight,
   Clock,
-  Loader2
+  Loader2,
+  BarChart3,
+  ArrowRightCircle,
+  BellRing,
+  Package,
+  ChevronRight
 } from "lucide-react";
+import { 
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell
+} from "recharts";
 import { adisyonService } from "../lib/services/adisyonService";
 import { supabase } from "../lib/supabase";
 
@@ -21,14 +36,84 @@ export default function Dashboard() {
     { label: "Kayıtlı Şirket", value: "0", trend: "...", isUp: true, icon: Users, color: "purple" },
   ]);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [popularItems, setPopularItems] = useState<any[]>([]);
+  const [newOrderAlert, setNewOrderAlert] = useState(false);
+  
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
+    const cleanup = setupRealtimeSubscription();
+    
+    // Request notification permission safely
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
+
+    // Preload notification sound safely
+    try {
+      audioRef.current = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+    } catch (e) {
+      console.warn("Audio initialization failed:", e);
+    }
+
+    return () => {
+      if (cleanup) cleanup();
+    };
   }, []);
+
+  const setupRealtimeSubscription = () => {
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'adisyon'
+        },
+        (payload) => {
+          const newOrder = payload.new as any;
+          // Filter: Only delivery orders (PAKET / Sipariş Ver)
+          if (newOrder.order_type !== 'Şimdi Ye') {
+            handleNewOrder(newOrder);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  };
+
+  const handleNewOrder = async (_order: any) => {
+    // Refresh the list to get user/company info
+    fetchDashboardData();
+    
+    // Play sound
+    if (audioRef.current) {
+      audioRef.current.play().catch(e => console.log("Audio play error:", e));
+    }
+
+    // Show visual alert
+    setNewOrderAlert(true);
+    setTimeout(() => setNewOrderAlert(false), 5000);
+
+    // Show desktop notification safely
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      new Notification("Yeni Paket Sipariş! 🛵", {
+        body: `Bir yeni sipariş alındı. Tutarı kontrol etmek için panele göz atın.`,
+        icon: "/favicon.ico"
+      });
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
-      setLoading(true);
+      if (!recentOrders.length) setLoading(true);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
@@ -39,7 +124,6 @@ export default function Dashboard() {
       // 2. Calculate Stats
       const totalOrdersToday = todayOrders.length;
       
-      // Bekleyen İşlemler: Sadece "Teslimat" gereken (Paket, Sipariş Ver) bekleyenler
       const pendingOrders = allOrders.filter(o => 
         o.order_type !== "Şimdi Ye" && 
         ["PENDING", "PREPARING", "HAZIRLANIYOR"].includes(o.status)
@@ -87,7 +171,21 @@ export default function Dashboard() {
         },
       ]);
 
-      // Top 5 Recent Orders: Sadece teslimat odaklı canlı siparişler (Şimdi Ye hariç)
+      // 4. Process Popular Items
+      const itemCounts: { [key: string]: number } = {};
+      allOrders.filter(o => !["CANCELLED", "İptal"].includes(o.status)).forEach(order => {
+        const itemName = order.itemName || "Karışık Menü"; 
+        itemCounts[itemName] = (itemCounts[itemName] || 0) + 1;
+      });
+
+      const sortedItems = Object.entries(itemCounts)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+      
+      setPopularItems(sortedItems);
+
+      // Top 5 Recent Orders (Strict Filter for Delivery)
       setRecentOrders(allOrders.filter(o => o.order_type !== "Şimdi Ye").slice(0, 5));
     } catch (error) {
       console.error("Dashboard data fetch error:", error);
@@ -105,15 +203,15 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-in fade-in duration-500 pb-10">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Genel Bakış</h1>
-          <p className="text-slate-500 mt-1 font-medium">İşletmenizin anlık durumunu buradan takip edin.</p>
+          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Genel Bakış</h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">İşletmenizin anlık durumunu buradan takip edin.</p>
         </div>
         <button 
           onClick={fetchDashboardData}
-          className="bg-white border border-slate-200 px-4 py-2 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm flex items-center space-x-2"
+          className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm flex items-center space-x-2"
         >
           <Clock size={16} />
           <span>Yenile</span>
@@ -125,99 +223,121 @@ export default function Dashboard() {
         {stats.map((stat, idx) => {
           const Icon = stat.icon;
           return (
-            <div key={idx} className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-accent/5 transition-all duration-300 group">
+            <div key={idx} className="bg-white dark:bg-slate-900 rounded-[32px] p-6 shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-xl hover:shadow-accent/5 transition-all duration-300 group">
               <div className="flex items-center justify-between mb-4">
                 <div className={`p-3 rounded-2xl bg-accent/10 text-accent group-hover:scale-110 transition-transform duration-300`}>
                   <Icon size={24} />
                 </div>
-                <div className={`flex items-center space-x-1 text-[10px] font-black uppercase tracking-wider ${stat.isUp ? "text-emerald-600" : "text-orange-600"} bg-slate-50 px-2 py-1 rounded-lg`}>
+                <div className={`flex items-center space-x-1 text-[10px] font-black uppercase tracking-wider ${stat.isUp ? "text-emerald-600" : "text-orange-600"} bg-slate-50 dark:bg-slate-800/50 px-2 py-1 rounded-lg`}>
                   <span>{stat.trend}</span>
                   {stat.isUp ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
                 </div>
               </div>
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{stat.label}</p>
-                <p className="text-2xl font-black text-slate-900 mt-1 tracking-tight">{stat.value}</p>
+                <p className="text-2xl font-black text-slate-900 dark:text-white mt-1 tracking-tight">{stat.value}</p>
               </div>
             </div>
           );
         })}
       </div>
-      
-      {/* Tables & Activities Section */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        <div className="xl:col-span-2 bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/20">
-            <h2 className="text-lg font-black text-slate-900">Aktif Teslimatlar</h2>
-            <a href="/orders" className="text-accent text-sm font-black hover:underline uppercase tracking-wider">Tümünü Gör</a>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50/30 text-slate-400 text-[10px] uppercase tracking-widest font-black">
-                  <th className="px-6 py-4">Müşteri / Kurum</th>
-                  <th className="px-6 py-4">Tutar</th>
-                  <th className="px-6 py-4 text-right">Durum</th>
-                  <th className="px-6 py-4 text-right">Tarih</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {recentOrders.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-10 text-center text-slate-400 italic text-sm">Aktif teslimat bulunmuyor.</td>
-                  </tr>
-                ) : recentOrders.map((order, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80 transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-black text-slate-800 uppercase">{order.userName}</span>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{order.companyName || "Bireysel"}</span>
+
+      {/* Live Order Monitor Hub (Full Width) */}
+      <div className={`bg-white dark:bg-slate-900 p-8 rounded-[40px] border-2 transition-all duration-500 relative overflow-hidden ${newOrderAlert ? "border-accent scale-[1.01] shadow-2xl shadow-accent/10" : "border-slate-100 dark:border-slate-800 shadow-sm"}`}>
+        {newOrderAlert && <div className="absolute inset-0 bg-accent/5 animate-pulse pointer-events-none" />}
+        
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+          <div className="flex-1">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className={`p-3 rounded-2xl ${newOrderAlert ? "bg-accent text-white" : "bg-accent/10 text-accent"}`}>
+                <BellRing size={28} className={newOrderAlert ? "animate-bounce" : ""} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  Canlı Paket Sipariş Takibi
+                  {newOrderAlert && <span className="text-xs bg-accent text-white px-3 py-1 rounded-full animate-in zoom-in">YENİ!</span>}
+                </h2>
+                <p className="text-slate-500 dark:text-slate-400 font-medium italic">Sadece paket ve adresten siparişler burada görünür.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {recentOrders.length === 0 ? (
+                <div className="col-span-full py-10 bg-slate-50 dark:bg-slate-800/20 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center">
+                   <Package size={40} className="text-slate-200 dark:text-slate-700 mb-2" />
+                   <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Bekleyen paket siparişi yok</p>
+                </div>
+              ) : (
+                recentOrders.map((order, idx) => (
+                  <div key={idx} className={`p-5 rounded-3xl border ${idx === 0 && newOrderAlert ? "bg-accent/5 border-accent" : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700"} flex items-center justify-between group transition-all hover:shadow-lg`}>
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-2xl flex items-center justify-center font-black text-slate-400">
+                        {order?.userName?.[0] || "?"}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 font-black text-slate-900 text-sm">₺{order.total_amount?.toLocaleString("tr-TR")}</td>
-                    <td className="px-6 py-4 text-right">
-                      <span className={`
-                        inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider
-                        ${order.status === 'READY' ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : 
-                          ['PENDING', 'PREPARING'].includes(order.status) ? 'bg-orange-100 text-orange-700 border border-orange-200' : 
-                          'bg-emerald-100 text-emerald-700 border border-emerald-200'}
-                      `}>
-                        {order.status === 'PENDING' ? 'Bekliyor' : order.status === 'PREPARING' ? 'Hazırlanıyor' : order.status === 'READY' ? 'Yolda' : 'Tamamlandı'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right text-[10px] text-slate-500 font-bold whitespace-nowrap">
-                      {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <div>
+                        <p className="font-black text-slate-900 dark:text-white uppercase text-sm mb-0.5">{order?.userName || "Bilinmiyor"}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{order.companyName || "Bireysel"} • {order.order_type}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                       <p className="text-sm font-black text-slate-900 dark:text-white">₺{order.total_amount}</p>
+                       <span className="text-[9px] font-black uppercase text-accent">{order.status}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Large Navigation Arrow */}
+          <div className="flex flex-col items-center lg:items-end justify-center">
+             <a 
+              href="/orders" 
+              className="flex flex-col items-center group bg-accent dark:bg-accent p-10 lg:p-14 rounded-[50px] shadow-2xl shadow-accent/20 hover:scale-105 active:scale-95 transition-all"
+             >
+                <ArrowRightCircle size={80} className="text-white group-hover:rotate-[-45deg] transition-transform duration-500" />
+                <span className="text-white font-black uppercase tracking-widest mt-4 text-xs whitespace-nowrap">TÜM SİPARİŞLERE GİT</span>
+                <ChevronRight className="text-white/50 group-hover:translate-x-2 transition-transform" />
+             </a>
           </div>
         </div>
-
-        {/* System Info / Status */}
-        <div className="bg-slate-900 rounded-[40px] p-8 shadow-xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-accent/20 rounded-full blur-3xl group-hover:bg-accent/30 transition-all duration-500"></div>
-          <h2 className="text-xl font-black text-white mb-6 flex items-center space-x-2">
-            <span className="w-1.5 h-6 bg-accent rounded-full"></span>
-            <span>Hızlı Durum</span>
-          </h2>
-          
-          <div className="space-y-4">
-              <div className="bg-white/5 border border-white/10 p-5 rounded-3xl">
-                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-2">Canlı Takip Notu</p>
-                  <p className="text-xs text-slate-200 leading-relaxed italic">
-                    "Şu an sadece <strong>Sipariş Ver</strong> ve <strong>Paket</strong> modundaki teslimat talep eden siparişleri görüyorsunuz. Yemekhaneden alan 'Şimdi Ye' siparişleri Raporlar kısmına kaydedilmektedir."
-                  </p>
-              </div>
-
-              <div className="pt-6 mt-6 border-t border-white/10">
-                 <a href="/reports" className="flex items-center justify-between text-white group">
-                    <span className="text-sm font-black">Tüm Raporları Gör</span>
-                    <ArrowUpRight size={20} className="text-accent group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                 </a>
-              </div>
+      </div>
+      
+      {/* Popular Items (Full Width) */}
+      <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center space-x-2">
+              <BarChart3 size={20} className="text-blue-500" />
+              <span>En Popüler Yemekler</span>
+            </h2>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Sık Tercih Edilen 5 Ürün</p>
           </div>
+        </div>
+        <div className="h-[250px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={popularItems} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" opacity={0.1} />
+              <XAxis type="number" hide />
+              <YAxis 
+                dataKey="name" 
+                type="category" 
+                axisLine={false} 
+                tickLine={false} 
+                tick={{ fill: '#64748b', fontSize: 11, fontWeight: 800 }}
+                width={120}
+              />
+              <Tooltip 
+                cursor={{ fill: 'rgba(116, 207, 98, 0.05)' }}
+                contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', backgroundColor: 'var(--color-surface)' }}
+              />
+              <Bar dataKey="count" radius={[0, 10, 10, 0]} barSize={24}>
+                {popularItems.map((_entry: any, index: number) => (
+                  <Cell key={`cell-${index}`} fill={index === 0 ? '#74CF62' : '#cbd5e1'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>

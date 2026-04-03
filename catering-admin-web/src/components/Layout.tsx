@@ -8,11 +8,32 @@ import {
   Bell,
   Users,
   MessageSquare,
-  BarChart3
+  BarChart3,
+  Sun,
+  Moon
 } from "lucide-react";
+import { useState, useEffect } from "react";
 
 export default function Layout() {
   const location = useLocation();
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("theme");
+      if (saved) return saved === "dark";
+      return document.documentElement.classList.contains("dark");
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [isDark]);
 
   const menuItems = [
     { path: "/", label: "Hızlı Özet", icon: LayoutDashboard },
@@ -25,9 +46,9 @@ export default function Layout() {
   ];
 
   return (
-    <div className="flex h-screen bg-[#F8FAFC]">
+    <div className="flex h-screen bg-[#F8FAFC] dark:bg-[#020617] text-slate-900 dark:text-slate-100 transition-colors duration-300">
       {/* Sidebar */}
-      <aside className="w-72 bg-[#0F172A] text-white flex flex-col shadow-2xl z-20">
+      <aside className="w-72 bg-[#0F172A] dark:bg-[#020617] text-white flex flex-col shadow-2xl z-20 border-r border-white/5">
         <div className="p-8 pb-12 flex items-center space-x-3">
           <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center shadow-lg shadow-accent/20">
             <UtensilsCrossed className="text-white" size={20} />
@@ -81,20 +102,27 @@ export default function Layout() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Header */}
-        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-8 z-10 sticky top-0">
+        <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 z-30 sticky top-0">
           <div>
-            <h2 className="text-slate-500 text-sm font-medium">Hoş Geldiniz,</h2>
-            <p className="text-primary font-bold">Admin Kullanıcı</p>
+            <h2 className="text-slate-500 dark:text-slate-400 text-sm font-medium">Hoş Geldiniz,</h2>
+            <p className="text-primary dark:text-white font-black">Admin Kullanıcı</p>
           </div>
           
           <div className="flex items-center space-x-4">
-            <button className="p-2 text-slate-400 hover:bg-slate-100 rounded-full relative transition-colors">
-              <Bell size={20} />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+            <button 
+              onClick={() => setIsDark(!isDark)}
+              className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-all group"
+            >
+              {isDark ? <Sun size={20} className="text-amber-400 group-rotate-45" /> : <Moon size={20} className="text-indigo-400" />}
             </button>
-            <div className="h-8 w-[1px] bg-slate-200"></div>
+            <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-800"></div>
+            <button className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full relative transition-colors">
+              <Bell size={20} />
+              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-[#0F172A]"></span>
+            </button>
+            <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-800"></div>
             <div className="flex items-center space-x-3 pl-2">
-              <div className="w-10 h-10 bg-gradient-to-tr from-slate-200 to-slate-300 rounded-full flex items-center justify-center text-slate-600 font-bold border-2 border-white shadow-sm">
+              <div className="w-10 h-10 bg-gradient-to-tr from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 rounded-full flex items-center justify-center text-slate-600 dark:text-slate-200 font-bold border-2 border-white dark:border-slate-800 shadow-sm">
                 A
               </div>
             </div>
@@ -102,7 +130,7 @@ export default function Layout() {
         </header>
 
         {/* Content Outlet */}
-        <main className="flex-1 overflow-y-auto p-8 bg-[#F8FAFC]">
+        <main className="flex-1 overflow-y-auto p-8 bg-[#F8FAFC] dark:bg-[#020617]">
           <div className="max-w-7xl mx-auto">
             <Outlet />
           </div>

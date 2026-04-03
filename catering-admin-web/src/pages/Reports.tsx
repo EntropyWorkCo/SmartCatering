@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { adisyonService } from "../lib/services/adisyonService";
+import * as XLSX from "xlsx";
 
 type ReportView = "MAIN" | "SALES" | "FEEDBACK" | "PERFORMANCE";
 
@@ -164,7 +165,30 @@ function SalesView({ onBack, orders }: any) {
           onClick={handlePrint}
           className="flex items-center px-6 py-3 bg-red-600 text-white rounded-2xl text-sm font-black shadow-lg shadow-red-200 hover:scale-105 transition-all w-fit"
         >
-          <Download size={18} className="mr-2" /> PDF OLARAK İNDİR
+          <Download size={18} className="mr-2" /> PDF
+        </button>
+
+        <button 
+          onClick={() => {
+            const ws_data = [
+              ["Tarih", "Müşteri", "Kurum", "Tutar", "Durum", "Tür"],
+              ...stats.filteredOrders.map((o: any) => [
+                new Date(o.created_at).toLocaleDateString('tr-TR'),
+                o.userName,
+                o.companyName || "Bireysel",
+                o.total_amount,
+                o.status,
+                o.order_type
+              ])
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(ws_data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Satış Raporu");
+            XLSX.writeFile(wb, `satis_raporu_${new Date().toISOString().split('T')[0]}.xlsx`);
+          }}
+          className="flex items-center px-6 py-3 bg-emerald-600 text-white rounded-2xl text-sm font-black shadow-lg shadow-emerald-200 hover:scale-105 transition-all w-fit"
+        >
+          <Download size={18} className="mr-2" /> EXCEL
         </button>
       </div>
 
