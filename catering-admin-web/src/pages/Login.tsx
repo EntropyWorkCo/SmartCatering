@@ -69,7 +69,7 @@ export default function Login() {
                 <div className="w-20 h-20 bg-accent rounded-3xl flex items-center justify-center shadow-2xl shadow-accent/40 mb-6 group hover:rotate-12 transition-transform duration-500">
                    <UtensilsCrossed className="text-white" size={36} />
                 </div>
-                <h1 className="text-3xl font-black text-white tracking-tight italic">Smart Catering</h1>
+                <h1 className="text-3xl font-black text-white tracking-tight italic">Meydan Lokanta</h1>
                 <div className="flex items-center space-x-2 mt-2">
                    <div className="h-[1px] w-4 bg-slate-600"></div>
                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.4em]">Admin Panel</p>
@@ -96,7 +96,7 @@ export default function Login() {
                      type="email" 
                      required
                      className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-accent/10 focus:border-accent outline-none transition-all" 
-                     placeholder="admin@smartcatering.com"
+                     placeholder="admin@meydanlokanta.com"
                      value={email}
                      onChange={(e) => setEmail(e.target.value)}
                    />
@@ -147,7 +147,7 @@ export default function Login() {
         
         {/* Footer Links */}
         <p className="text-center mt-8 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-          © 2026 Smart Catering • Tüm Hakları Saklıdır
+          © 2026 Meydan Lokanta • Tüm Hakları Saklıdır
         </p>
       </div>
     </div>

@@ -11,11 +11,13 @@ import {
   PlusCircle,
   CheckCircle2,
   Calendar,
-  X
+  X,
+  Download
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { billingService } from "../lib/services/billingService";
 import { adisyonService } from "../lib/services/adisyonService";
+import { pdfService } from "../lib/services/pdfService";
 
 interface User {
   id: string;
@@ -43,6 +45,12 @@ export default function Customers() {
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [processing, setProcessing] = useState(false);
+
+  // Ekstre İndirme Modalı State
+  const [ekstreModalVisible, setEkstreModalVisible] = useState(false);
+  const [ekstreTargetGroup, setEkstreTargetGroup] = useState<any>(null);
+  const [ekstreStartDate, setEkstreStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [ekstreEndDate, setEkstreEndDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     fetchCustomers();
@@ -151,22 +159,40 @@ export default function Customers() {
       setProcessing(true);
       const amount = Number(newDebtAmount);
       
+      const isCorporate = selectedAccount.isCorporate || !!selectedAccount.companyId;
+
       // 1. Manuel Adisyon Kaydı
       await billingService.addManualEntry(
-        selectedAccount.userId,
+        selectedAccount.userId || selectedAccount.id,
         amount,
         startDate,
         endDate,
         'DEBT'
       );
 
-      // 2. Şirket Bakiyesini Güncelle
-      const newBalance = (selectedAccount.totalDebt || 0) + amount;
-      await billingService.updateCompanyBalance(selectedAccount.companyId, newBalance);
+      // 2. Şirket Bakiyesini Güncelle (Sadece kurumsalsa şirketi güncelle)
+      if (isCorporate && selectedAccount.companyId) {
+        const currentDebt = selectedAccount.totalDebt !== undefined ? selectedAccount.totalDebt : (selectedAccount.companyBalance || 0);
+        const newBalance = currentDebt + amount;
+        await billingService.updateCompanyBalance(selectedAccount.companyId, newBalance);
+        
+        // UI'ı anında güncelle
+        setCustomers(prev => prev.map(c => 
+          c.companyId === selectedAccount.companyId ? { ...c, companyBalance: newBalance } : c
+        ));
+      } else {
+        // Bireysel müşteri için anında UI güncellemesi (Bakiye adisyonlardan hesaplanıyor ama manuel de eklenmiş oldu)
+        const currentDebt = selectedAccount.balance || 0;
+        const newBalance = currentDebt + amount;
+        setCustomers(prev => prev.map(c => 
+          c.id === (selectedAccount.id || selectedAccount.userId) ? { ...c, balance: newBalance } : c
+        ));
+      }
 
       alert("Borç kaydı başarıyla eklendi.");
       setDebtModalVisible(false);
       setNewDebtAmount("");
+      // Arka planda tam veriyi tekrar çek
       fetchCustomers();
     } catch (err: any) {
       alert("Hata: " + err.message);
@@ -198,6 +224,84 @@ export default function Customers() {
       fetchCustomers();
     } catch (err: any) {
       alert("Hata: " + err.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const openEkstreModal = (group: any) => {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    const pad = (n: number) => n < 10 ? '0' + n : n.toString();
+    const formatDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    setEkstreStartDate(formatDate(firstDay));
+    setEkstreEndDate(formatDate(lastDay));
+    setEkstreTargetGroup(group);
+    setEkstreModalVisible(true);
+  };
+
+  const executeDownloadEkstre = async () => {
+    if (!ekstreTargetGroup) return;
+    try {
+      setProcessing(true);
+      const orders = await adisyonService.getCompanyOrders(ekstreTargetGroup.companyId);
+      
+      const start = new Date(ekstreStartDate + "T00:00:00");
+      const end = new Date(ekstreEndDate + "T23:59:59");
+
+      let devreden_bakiye = 0;
+      let bu_donemin_borcu = 0;
+      const donemIciIslemler = [];
+
+      for (const o of orders) {
+        const d = new Date(o.created_at || o.date);
+        const tutar = o.total_amount || 0;
+        const statusUpper = (o.status || "").toUpperCase();
+        
+        const isPaid = ["PAID", "ÖDENDİ", "COMPLETED", "TAMAMLANDI"].includes(statusUpper);
+        const isCancelled = ["CANCELLED", "İPTAL"].includes(statusUpper);
+
+        if (isCancelled) continue; // İptalleri dahil etme
+
+        if (d < start) {
+           if (!isPaid) devreden_bakiye += tutar; 
+        } else if (d >= start && d <= end) {
+           if (!isPaid) bu_donemin_borcu += tutar;
+           donemIciIslemler.push(o);
+        }
+      }
+
+      // Tüketim listesini isme ve tarihe göre alfabetik-kronolojik dizebiliriz
+      donemIciIslemler.sort((a, b) => new Date(a.created_at || a.date).getTime() - new Date(b.created_at || b.date).getTime());
+
+      const reportData = {
+        firma_adi: ekstreTargetGroup.companyName,
+        vkn: ekstreTargetGroup.vkn || "-",
+        firma_adres: ekstreTargetGroup.address || "Kayıtlı Adres",
+        firma_telefon: ekstreTargetGroup.phone || "-",
+        ekstre_no: Math.floor(1000 + Math.random() * 9000).toString(),
+        donem_araligi: `${new Date(start).toLocaleDateString('tr-TR')} - ${new Date(end).toLocaleDateString('tr-TR')}`,
+        dokuman_tarihi: new Date().toLocaleDateString('tr-TR'),
+        devreden_bakiye: devreden_bakiye,
+        bu_donemin_borcu: bu_donemin_borcu,
+        guncel_toplam_borc: devreden_bakiye + bu_donemin_borcu,
+        islemler: donemIciIslemler.map((o: any) => ({
+          tarih: new Date(o.created_at || o.date).toLocaleDateString('tr-TR'),
+          aciklama: o.order_type === 'MANUAL_DEBT' 
+            ? `Admin Borç Girişi (${o.note || ''})` 
+            : `Hizmet: ${o.userName} - ${o.adisyon_items?.map((i: any) => i.menu_items?.name).join(', ') || 'Sipariş'}`,
+          tutar: (o.total_amount || 0).toLocaleString('tr-TR'),
+        }))
+      };
+
+      await pdfService.generateCompanyReport(reportData);
+      setEkstreModalVisible(false);
+    } catch (err: any) {
+      console.error("Ekstre oluşturma hatası:", err);
+      alert(`Ekstre oluşturulurken bir hata oluştu: ${err.message || 'Bilinmeyen hata'}`);
     } finally {
       setProcessing(false);
     }
@@ -287,10 +391,11 @@ export default function Customers() {
                                   {(c.balance ?? 0) > 0 && (
                                      <button 
                                       onClick={() => handleClearDebt(c)}
-                                      className="p-2 text-emerald-500 hover:bg-emerald-50 rounded-xl transition-all" 
+                                      className="flex items-center space-x-2 px-4 py-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all shadow-md shadow-emerald-100 active:scale-95 group" 
                                       title="Borç Ödendi"
                                      >
-                                        <CheckCircle2 size={18} />
+                                        <CheckCircle2 size={16} className="group-hover:scale-110 transition-transform" />
+                                        <span className="text-xs font-bold whitespace-nowrap">BORÇ ÖDENDİ</span>
                                      </button>
                                   )}
                                   <button className="p-2 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
@@ -335,10 +440,11 @@ export default function Customers() {
                                        e.stopPropagation();
                                        handleClearDebt(group);
                                      }}
-                                     className="p-2 text-emerald-500 hover:bg-emerald-50 rounded-xl transition-all"
+                                     className="flex items-center space-x-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 active:scale-95 group"
                                      title="Borç Ödendi"
                                    >
-                                      <CheckCircle2 size={20} />
+                                      <CheckCircle2 size={20} className="group-hover:scale-110 transition-transform" />
+                                      <span className="text-sm font-black tracking-tight">BORÇ ÖDENDİ</span>
                                    </button>
                                    <div className="flex flex-col text-right">
                                       <span className="text-xl font-black text-slate-900 italic">₺{group.totalDebt.toLocaleString("tr-TR")}</span>
@@ -363,6 +469,16 @@ export default function Customers() {
                              >
                                 <PlusCircle size={20} />
                              </button>
+                             <button 
+                                onClick={() => {
+                                  openEkstreModal(group);
+                                }}
+                                className="p-2 bg-red-600 text-white rounded-xl hover:scale-105 transition-all shadow-lg shadow-red-100 flex items-center"
+                                title="Ekstre İndir"
+                                disabled={processing}
+                              >
+                                 <Download size={20} className={processing ? "animate-pulse" : ""} />
+                              </button>
                              {isExpanded ? <ChevronUp className="text-slate-300" /> : <ChevronDown className="text-slate-300" />}
                           </div>
                        </div>
@@ -468,6 +584,78 @@ export default function Customers() {
                       className="flex-[2] bg-accent py-4 rounded-2xl text-white font-black text-sm shadow-lg shadow-accent/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center space-x-2"
                     >
                        {processing ? <Loader2 className="animate-spin" size={18} /> : <span>KAYDET VE GÜNCELLE</span>}
+                    </button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+      {/* Ekstre İndirme Modalı */}
+      {ekstreModalVisible && ekstreTargetGroup && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+           <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-300">
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between">
+                 <div>
+                    <h2 className="text-2xl font-black text-slate-900 leading-tight">Ekstre İndir</h2>
+                    <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">{ekstreTargetGroup.companyName || ekstreTargetGroup.name}</p>
+                 </div>
+                 <button onClick={() => setEkstreModalVisible(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                    <X size={24} className="text-slate-400" />
+                 </button>
+              </div>
+
+              <div className="p-8 space-y-6">
+                 <div className="bg-accent/5 p-4 rounded-2xl border border-accent/10">
+                    <p className="text-xs text-accent font-semibold leading-relaxed">
+                       Seçtiğiniz başlangıç tarihinden önceki tüm ödenmemiş borçlar <strong className="font-black">Geçmişten Devreden Borç</strong> olarak; seçili tarihler arasındaki siparişler ise <strong className="font-black">Bu Dönemin Tüketimi</strong> olarak listelenecektir.
+                    </p>
+                 </div>
+                 
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Başlangıç Tarihi</label>
+                       <div className="relative">
+                          <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                          <input 
+                            type="date"
+                            value={ekstreStartDate}
+                            onChange={(e) => setEkstreStartDate(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-xs font-bold focus:outline-none focus:border-accent"
+                          />
+                       </div>
+                    </div>
+                    <div>
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Bitiş Tarihi</label>
+                       <div className="relative">
+                          <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                          <input 
+                            type="date"
+                            value={ekstreEndDate}
+                            onChange={(e) => setEkstreEndDate(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-xs font-bold focus:outline-none focus:border-accent"
+                          />
+                       </div>
+                    </div>
+                 </div>
+
+                 <div className="pt-4 flex items-center space-x-3">
+                    <button 
+                      onClick={() => setEkstreModalVisible(false)}
+                      className="flex-1 py-4 text-slate-500 font-black text-sm hover:bg-slate-50 rounded-2xl transition-colors"
+                    >
+                       İPTAL
+                    </button>
+                    <button 
+                      onClick={executeDownloadEkstre}
+                      disabled={processing}
+                      className="flex-[2] bg-red-500 py-4 rounded-2xl text-white font-black text-sm shadow-lg shadow-red-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center space-x-2"
+                    >
+                       {processing ? <Loader2 className="animate-spin" size={18} /> : (
+                          <>
+                             <Download size={18} />
+                             <span>PDF OLUŞTUR</span>
+                          </>
+                       )}
                     </button>
                  </div>
               </div>

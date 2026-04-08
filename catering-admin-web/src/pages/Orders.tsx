@@ -72,6 +72,9 @@ export default function Orders() {
       case 'COMPLETED':
       case 'TAMAMLANDI':
         return <span className="flex items-center px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-600 border border-emerald-200 uppercase tracking-wider"><CheckCircle2 size={12} className="mr-1"/> TAMAMLANDI</span>;
+      case 'PAID':
+      case 'ÖDENDİ':
+        return <span className="flex items-center px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-600 border border-emerald-200 uppercase tracking-wider"><CheckCircle2 size={12} className="mr-1"/> ÖDENDİ</span>;
       case 'CANCELLED':
         return <span className="flex items-center px-2.5 py-1 rounded-full text-[10px] font-black bg-red-100 text-red-600 border border-red-200 uppercase tracking-wider"><XCircle size={12} className="mr-1"/> İPTAL EDİLDİ</span>;
       default:

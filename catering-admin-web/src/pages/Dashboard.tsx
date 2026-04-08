@@ -27,13 +27,16 @@ import {
 import { adisyonService } from "../lib/services/adisyonService";
 import { supabase } from "../lib/supabase";
 
+import { useNavigate } from "react-router-dom";
+
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState([
-    { label: "Bugünkü Sipariş", value: "0", trend: "...", isUp: true, icon: ShoppingBag, color: "blue" },
-    { label: "Bekleyen İşlemler", value: "0", trend: "...", isUp: false, icon: UtensilsCrossed, color: "orange" },
-    { label: "Günlük Ciro", value: "₺0", trend: "...", isUp: true, icon: TrendingUp, color: "emerald" },
-    { label: "Kayıtlı Şirket", value: "0", trend: "...", isUp: true, icon: Users, color: "purple" },
+    { label: "Bugünkü Sipariş", value: "0", trend: "...", isUp: true, icon: ShoppingBag, color: "blue", path: "/orders" },
+    { label: "Bekleyen İşlemler", value: "0", trend: "...", isUp: false, icon: UtensilsCrossed, color: "orange", path: "/orders" },
+    { label: "Günlük Ciro", value: "₺0", trend: "...", isUp: true, icon: TrendingUp, color: "emerald", path: "/reports" },
+    { label: "Kayıtlı Şirket", value: "0", trend: "...", isUp: true, icon: Users, color: "purple", path: "/customers" },
   ]);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [popularItems, setPopularItems] = useState<any[]>([]);
@@ -148,7 +151,8 @@ export default function Dashboard() {
           trend: "Toplam", 
           isUp: true, 
           icon: ShoppingBag, 
-          color: "blue" 
+          color: "blue",
+          path: "/orders"
         },
         { 
           label: "Bekleyen İşlemler", 
@@ -156,7 +160,8 @@ export default function Dashboard() {
           trend: "Teslimat", 
           isUp: pendingOrders > 0, 
           icon: UtensilsCrossed, 
-          color: "orange" 
+          color: "orange",
+          path: "/orders"
         },
         { 
           label: "Günlük Ciro", 
@@ -164,7 +169,8 @@ export default function Dashboard() {
           trend: "Gerçek", 
           isUp: true, 
           icon: TrendingUp, 
-          color: "emerald" 
+          color: "emerald",
+          path: "/reports"
         },
         { 
           label: "Kayıtlı Şirket", 
@@ -172,7 +178,8 @@ export default function Dashboard() {
           trend: "Genel", 
           isUp: true, 
           icon: Users, 
-          color: "purple" 
+          color: "purple",
+          path: "/customers"
         },
       ]);
 
@@ -233,7 +240,11 @@ export default function Dashboard() {
         {stats.map((stat, idx) => {
           const Icon = stat.icon;
           return (
-            <div key={idx} className="bg-white dark:bg-slate-900 rounded-[32px] p-6 shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-xl hover:shadow-accent/5 transition-all duration-300 group">
+            <div 
+              key={idx} 
+              onClick={() => navigate((stat as any).path)}
+              className="bg-white dark:bg-slate-900 rounded-[32px] p-6 shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-xl hover:shadow-accent/5 transition-all duration-300 group cursor-pointer"
+            >
               <div className="flex items-center justify-between mb-4">
                 <div className={`p-3 rounded-2xl bg-accent/10 text-accent group-hover:scale-110 transition-transform duration-300`}>
                   <Icon size={24} />

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { adisyonService } from "../lib/services/adisyonService";
+import { pdfService } from "../lib/services/pdfService";
 import * as XLSX from "xlsx";
 
 type ReportView = "MAIN" | "SALES" | "FEEDBACK" | "PERFORMANCE";
@@ -110,6 +111,23 @@ function ReportCard({ icon, title, description, onClick }: any) {
   );
 }
 
+const getStatusLabel = (status: string) => {
+  const s = (status || "").toUpperCase();
+  switch (s) {
+    case 'PENDING': return 'BEKLİYOR';
+    case 'PREPARING':
+    case 'HAZIRLANIYOR': return 'HAZIRLANIYOR';
+    case 'READY': return 'YOLDA';
+    case 'COMPLETED':
+    case 'TAMAMLANDI': return 'TAMAMLANDI';
+    case 'PAID':
+    case 'ÖDENDİ': return 'ÖDENDİ';
+    case 'CANCELLED':
+    case 'İPTAL': return 'İPTAL EDİLDİ';
+    default: return s;
+  }
+};
+
 // --- Sales View ---
 function SalesView({ onBack, orders }: any) {
   const [period, setPeriod] = useState<"DAILY" | "WEEKLY" | "MONTHLY">("MONTHLY");
@@ -136,8 +154,34 @@ function SalesView({ onBack, orders }: any) {
     return { revenue, count, filteredOrders: validOrders };
   }, [orders, period]);
 
-  const handlePrint = () => {
-    window.print();
+  const handleDownloadPDF = async () => {
+    try {
+      const todayString = new Date().toLocaleDateString('tr-TR');
+      const periodLabel = period === "DAILY" ? "GÜNLÜK" : period === "WEEKLY" ? "HAFTALIK" : "AYLIK";
+      
+      const reportData = {
+        firma_adi: "GENEL SATIŞ RAPORU",
+        vkn: "-",
+        firma_adres: "Meydan Lokanta Genel Raporlama",
+        firma_telefon: "-",
+        ekstre_no: Math.floor(1000 + Math.random() * 9000).toString(),
+        donem_araligi: periodLabel,
+        dokuman_tarihi: todayString,
+        devreden_bakiye: 0,
+        bu_donemin_borcu: stats.revenue || 0,
+        guncel_toplam_borc: stats.revenue || 0,
+        islemler: stats.filteredOrders.map((o: any) => ({
+          tarih: new Date(o.created_at).toLocaleDateString('tr-TR'),
+          aciklama: `${o.userName} - ${o.order_type}`,
+          tutar: (o.total_amount || 0).toLocaleString('tr-TR'),
+        }))
+      };
+
+      await pdfService.generateCompanyReport(reportData);
+    } catch (err: any) {
+      console.error("Ekstre oluşturma hatası:", err);
+      alert(`Ekstre oluşturulurken bir hata oluştu: ${err.message || 'Bilinmeyen hata'}`);
+    }
   };
 
   return (
@@ -162,10 +206,10 @@ function SalesView({ onBack, orders }: any) {
         </div>
 
         <button 
-          onClick={handlePrint}
+          onClick={handleDownloadPDF}
           className="flex items-center px-6 py-3 bg-red-600 text-white rounded-2xl text-sm font-black shadow-lg shadow-red-200 hover:scale-105 transition-all w-fit"
         >
-          <Download size={18} className="mr-2" /> PDF
+          <Download size={18} className="mr-2" /> PDF İNDİR
         </button>
 
         <button 
@@ -177,7 +221,7 @@ function SalesView({ onBack, orders }: any) {
                 o.userName,
                 o.companyName || "Bireysel",
                 o.total_amount,
-                o.status,
+                getStatusLabel(o.status),
                 o.order_type
               ])
             ];
@@ -221,7 +265,7 @@ function SalesView({ onBack, orders }: any) {
                   <td className="py-4 text-xs font-bold text-slate-600">{new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
                   <td className="py-4 text-xs font-black text-slate-900 uppercase">{o.userName}</td>
                   <td className="py-4 text-right text-xs font-black text-slate-900">₺{o.total_amount?.toLocaleString('tr-TR')}</td>
-                  <td className="py-4 text-right text-[10px] font-black text-accent uppercase">{o.status}</td>
+                  <td className="py-4 text-right text-[10px] font-black text-accent uppercase tracking-wider">{getStatusLabel(o.status)}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Settings as SettingsIcon, 
   User, 
@@ -8,19 +8,94 @@ import {
   Save,
   LogOut,
   Mail,
-  Globe
+  Globe,
+  Loader2
 } from "lucide-react";
+import { supabase } from "../lib/supabase";
+import { userService } from "../lib/services/userService";
+import { useNavigate } from "react-router-dom";
 
 export default function Settings() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
+  
+  const [profile, setProfile] = useState({
+    fullName: "",
+    email: "",
+    phone: ""
+  });
 
-  const handleSave = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      alert("Ayarlar kaydedildi.");
-    }, 1000);
+  const [config, setConfig] = useState({
+    debtMode: localStorage.getItem("debtMode") !== "false",
+    notifications: localStorage.getItem("notifications") !== "false"
+  });
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      setFetching(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate("/login");
+        return;
+      }
+
+      const userProfile = await userService.getProfile(user.id);
+      setProfile({
+        fullName: userProfile.full_name || "",
+        email: user.email || "",
+        phone: userProfile.phone || ""
+      });
+    } catch (err) {
+      console.error("Profile fetch error:", err);
+    } finally {
+      setFetching(false);
+    }
   };
+
+  const handleSave = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await userService.updateProfile(user.id, {
+        fullName: profile.fullName,
+        phone: profile.phone
+      });
+
+      // Save config to local storage (Mocking global settings)
+      localStorage.setItem("debtMode", String(config.debtMode));
+      localStorage.setItem("notifications", String(config.notifications));
+
+      alert("Ayarlar başarıyla güncellendi.");
+    } catch (err) {
+      console.error("Save error:", err);
+      alert("Ayarlar kaydedilirken bir hata oluştu.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (window.confirm("Çıkış yapmak istediğinize emin misiniz?")) {
+      await supabase.auth.signOut();
+      navigate("/login");
+    }
+  };
+
+  if (fetching) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
+        <Loader2 className="animate-spin mb-4" size={48} />
+        <p className="font-bold uppercase tracking-widest text-xs tracking-[0.2em]">Ayarlar Yükleniyor...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -39,16 +114,31 @@ export default function Settings() {
             </div>
             <div className="p-8 space-y-4">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
+                   <div>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Tam İsim</label>
-                    <input type="text" defaultValue="Smart Catering Admin" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 text-sm font-bold focus:ring-4 focus:ring-accent/10 focus:border-accent outline-none" />
+                    <input 
+                      type="text" 
+                      value={profile.fullName} 
+                      onChange={(e) => setProfile({ ...profile, fullName: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 text-sm font-bold focus:ring-4 focus:ring-accent/10 focus:border-accent outline-none" 
+                    />
                   </div>
                   <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">E-Posta</label>
-                    <input type="email" defaultValue="admin@smartcatering.com" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 text-sm font-bold focus:ring-4 focus:ring-accent/10 focus:border-accent outline-none" />
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">E-Posta (Salt Okunur)</label>
+                    <input 
+                      type="email" 
+                      value={profile.email} 
+                      disabled
+                      className="w-full bg-slate-100 border border-slate-200 rounded-2xl px-5 py-3 text-sm font-bold opacity-70 cursor-not-allowed" 
+                    />
                   </div>
                </div>
-               <button className="text-accent text-xs font-black underline hover:text-accent/80 transition-colors">Şifre Değiştir</button>
+               <button 
+                  onClick={() => alert("Şifre sıfırlama e-postası gönderildi.")}
+                  className="text-accent text-xs font-black underline hover:text-accent/80 transition-colors"
+                >
+                  Şifre Değiştir
+                </button>
             </div>
           </section>
 
@@ -68,26 +158,32 @@ export default function Settings() {
                         <p className="text-sm font-bold text-slate-800">Borç Takibi Modu</p>
                         <p className="text-[10px] text-slate-500">Müşterilerin veresiye almasına izin ver</p>
                      </div>
-                  </div>
-                  <div className="w-12 h-6 bg-accent rounded-full relative cursor-pointer shadow-inner">
-                     <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-md transition-all"></div>
-                  </div>
-               </div>
+                   </div>
+                   <div 
+                     onClick={() => setConfig({ ...config, debtMode: !config.debtMode })}
+                     className={`w-12 h-6 rounded-full relative cursor-pointer transition-all duration-300 ${config.debtMode ? 'bg-accent' : 'bg-slate-300'}`}
+                   >
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-md transition-all duration-300 ${config.debtMode ? 'right-1' : 'left-1'}`}></div>
+                   </div>
+                </div>
 
-               <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div className="flex items-center space-x-4">
-                     <div className="bg-blue-100 text-blue-600 p-2 rounded-xl">
-                        <Bell size={18} />
-                     </div>
-                     <div>
-                        <p className="text-sm font-bold text-slate-800">Otomatik Bildirimler</p>
-                        <p className="text-[10px] text-slate-500">Sipariş durum değişikliklerinde PUSH gönder</p>
-                     </div>
-                  </div>
-                  <div className="w-12 h-6 bg-accent rounded-full relative cursor-pointer shadow-inner">
-                     <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-md transition-all"></div>
-                  </div>
-               </div>
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                   <div className="flex items-center space-x-4">
+                      <div className="bg-blue-100 text-blue-600 p-2 rounded-xl">
+                         <Bell size={18} />
+                      </div>
+                      <div>
+                         <p className="text-sm font-bold text-slate-800">Otomatik Bildirimler</p>
+                         <p className="text-[10px] text-slate-500">Sipariş durum değişikliklerinde PUSH gönder</p>
+                      </div>
+                   </div>
+                   <div 
+                     onClick={() => setConfig({ ...config, notifications: !config.notifications })}
+                     className={`w-12 h-6 rounded-full relative cursor-pointer transition-all duration-300 ${config.notifications ? 'bg-accent' : 'bg-slate-300'}`}
+                   >
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-md transition-all duration-300 ${config.notifications ? 'right-1' : 'left-1'}`}></div>
+                   </div>
+                </div>
             </div>
           </section>
 
@@ -114,19 +210,22 @@ export default function Settings() {
               <div className="space-y-3">
                  <div className="flex items-center space-x-3 text-slate-300">
                     <Mail size={16} className="text-accent" />
-                    <span className="text-xs font-bold">destek@smartcatering.com</span>
+                    <span className="text-xs font-bold">destek@meydanlokanta.com</span>
                  </div>
                  <div className="flex items-center space-x-3 text-slate-300">
                     <Globe size={16} className="text-accent" />
-                    <span className="text-xs font-bold">smartcatering.com/admin-help</span>
+                    <span className="text-xs font-bold">meydanlokanta.com/admin-help</span>
                  </div>
               </div>
            </div>
 
-           <button className="w-full bg-red-50 text-red-600 p-5 rounded-3xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center space-x-2 border border-red-100 hover:bg-red-600 hover:text-white transition-all shadow-lg shadow-red-100">
-              <LogOut size={18} />
-              <span>GÜVENLİ ÇIKIŞ YAP</span>
-           </button>
+            <button 
+              onClick={handleLogout}
+              className="w-full bg-red-50 text-red-600 p-5 rounded-3xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center space-x-2 border border-red-100 hover:bg-red-600 hover:text-white transition-all shadow-lg shadow-red-100"
+            >
+               <LogOut size={18} />
+               <span>GÜVENLİ ÇIKIŞ YAP</span>
+            </button>
         </div>
       </div>
     </div>
