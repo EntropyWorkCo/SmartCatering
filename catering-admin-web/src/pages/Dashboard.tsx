@@ -78,7 +78,7 @@ export default function Dashboard() {
           if (payload.eventType === 'INSERT') {
             const newOrder = payload.new as any;
             // Filter: Only delivery orders (PAKET / Sipariş Ver)
-            if (newOrder.order_type !== 'Şimdi Ye') {
+            if (["PAKET", "Sipariş Ver"].includes(newOrder.order_type)) {
               handleNewOrder(newOrder);
             }
           } else if (payload.eventType === 'UPDATE') {
@@ -130,7 +130,7 @@ export default function Dashboard() {
       const totalOrdersToday = todayOrders.length;
       
       const pendingOrders = allOrders.filter(o => 
-        o.order_type !== "Şimdi Ye" && 
+        ["PAKET", "Sipariş Ver"].includes(o.order_type) && 
         ["PENDING", "PREPARING", "HAZIRLANIYOR"].includes(o.status)
       ).length;
 
@@ -192,10 +192,10 @@ export default function Dashboard() {
 
       // Top 5 Recent Orders (Strict Filter for Delivery)
       setRecentOrders(allOrders.filter(o => {
-        const isSelfService = o.order_type === "Şimdi Ye";
+        const isLiveOrder = ["PAKET", "Sipariş Ver"].includes(o.order_type);
         const status = (o.status || "").toUpperCase();
         const isFinalized = ["COMPLETED", "TAMAMLANDI", "CANCELLED", "İPTAL", "PAID", "ÖDENDİ"].includes(status);
-        return !isSelfService && !isFinalized;
+        return isLiveOrder && !isFinalized;
       }).slice(0, 5));
     } catch (error) {
       console.error("Dashboard data fetch error:", error);

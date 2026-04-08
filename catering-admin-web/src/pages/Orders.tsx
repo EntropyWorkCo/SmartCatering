@@ -47,8 +47,8 @@ export default function Orders() {
 
   const filteredOrders = orders.filter(order => {
     // Sadece "Teslimat" gereken siparişleri göster (Paket, Sipariş Ver vb.)
-    // "Şimdi Ye" kullanıcıları yemekhaneden aldığı için canlı listede görünmezler.
-    if (order.order_type === "Şimdi Ye") return false;
+    // Manuel borçlar (MANUAL_DEBT) ve "Şimdi Ye" kullanıcıları canlı listede görünmez.
+    if (!["PAKET", "Sipariş Ver"].includes(order.order_type)) return false;
 
     const matchesSearch = 
       order.userName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -155,8 +155,31 @@ export default function Orders() {
                     )}
                   </td>
                   <td className="px-8 py-6 max-w-xs">
-                    <div className="text-xs font-bold text-slate-600 leading-relaxed truncate">{order.note || 'Standart Menü'}</div>
-                    <div className="text-[10px] font-medium text-slate-400 mt-1 italic">{order.order_type}</div>
+                    <div className="space-y-2">
+                      {(order.adisyon_items || []).map((item: any) => (
+                        <div key={item.id} className="text-xs">
+                          <div className="font-black text-slate-700 flex items-center">
+                            <span className="bg-slate-100 px-1.5 py-0.5 rounded mr-2 text-[10px] tabular-nums font-black text-slate-500">{item.quantity}x</span>
+                            <span className="uppercase tracking-tight">{item.menu_items?.name}</span>
+                          </div>
+                          {item.selections && Array.isArray(item.selections) && item.selections.length > 0 && (
+                            <div className="ml-8 mt-1 border-l-2 border-slate-100 pl-2 space-y-0.5">
+                              {item.selections.map((sel: any, idx: number) => (
+                                <div key={idx} className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                                  └ {sel.item_name}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {order.note && (
+                        <div className="bg-orange-50/50 p-3 rounded-2xl border border-orange-100/50 mt-3 animate-in fade-in slide-in-from-top-2 duration-500">
+                          <p className="text-[10px] font-black text-orange-600 uppercase tracking-[0.1em] mb-1 leading-none opacity-50">Sipariş Notu</p>
+                          <p className="text-[11px] font-bold text-orange-700 italic leading-snug">{order.note}</p>
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end">{getStatusBadge(order.status)}</div>

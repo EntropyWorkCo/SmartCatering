@@ -120,13 +120,14 @@ export default function Customers() {
   const kurumsalCustomers = filteredCustomers.filter((c: User) => c.company && c.company !== 'Bireysel Üyelik');
 
   const groupedKurumsal = (() => {
-    const groups: Record<string, { companyName: string; companyId: string; vkn: string; totalDebt: number; customers: User[] }> = {};
+    const groups: Record<string, { companyName: string; companyId: string; isCorporate: boolean; vkn: string; totalDebt: number; customers: User[] }> = {};
     for (const c of kurumsalCustomers) {
       const key = `${c.company}-${c.vkn || ''}`;
       if (!groups[key]) {
         groups[key] = { 
           companyName: c.company || 'İsimsiz Firma', 
           companyId: c.companyId || '',
+          isCorporate: true,
           vkn: c.vkn || '', 
           totalDebt: c.companyBalance || 0, 
           customers: [] 
@@ -181,10 +182,19 @@ export default function Customers() {
       setProcessing(true);
       if (account.isCorporate && account.companyId) {
         await billingService.clearCompanyBalance(account.companyId);
+        // Instant UI Update (Mobile Parity) - Corrected Property for Corporate
+        setCustomers(prev => prev.map(c => 
+          c.companyId === account.companyId ? { ...c, companyBalance: 0 } : c
+        ));
       } else if (account.id) {
         await adisyonService.clearUserDebt(account.id);
+        // Instant UI Update (Mobile Parity) - Corrected Property for Individual
+        setCustomers(prev => prev.map(c => 
+          c.id === account.id ? { ...c, balance: 0 } : c
+        ));
       }
       alert("Borç başarıyla sıfırlandı.");
+      // Background re-fetch to ensure synchronization
       fetchCustomers();
     } catch (err: any) {
       alert("Hata: " + err.message);
