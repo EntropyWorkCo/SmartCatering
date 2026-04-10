@@ -19,7 +19,7 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { verifyOtp } from "../../lib/services/authService";
+import { verifyOtp, sendOtp } from "../../lib/services/authService";
 import { supabase } from "../../lib/supabase";
 
 export default function OtpVerifyScreen() {
@@ -53,7 +53,7 @@ export default function OtpVerifyScreen() {
         try {
             const isMatch = await verifyOtp(phone, code);
             if (!isMatch) {
-                Alert.alert("Hatalı Kod", "Girdiğiniz kod yanlış. Test modunda cevap: '123456' dır.");
+                Alert.alert("Hatalı Kod", "Girdiğiniz kod yanlış veya süresi dolmuş. Lütfen tekrar deneyin.");
                 setLoading(false);
                 return;
             }
@@ -211,7 +211,16 @@ export default function OtpVerifyScreen() {
 
                     <TouchableOpacity
                         style={styles.resendButton}
-                        onPress={() => Alert.alert("Bilgi (Prototip)", "Kod test amaçlı '123456' olarak belirlenmiştir.")}
+                        onPress={async () => {
+                            setLoading(true);
+                            const success = await sendOtp(phone);
+                            setLoading(false);
+                            if (success) {
+                                Alert.alert("Başarılı", "Yeni doğrulama kodu numaraya tekrar gönderildi.");
+                            } else {
+                                Alert.alert("Hata", "Mevcut ayarlarınızla kod gönderilemedi. Lütfen teknik logları kontrol edin.");
+                            }
+                        }}
                     >
                         <Text style={styles.resendText}>Kodu Tekrar Gönder</Text>
                     </TouchableOpacity>

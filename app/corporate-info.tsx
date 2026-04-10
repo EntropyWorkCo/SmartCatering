@@ -307,60 +307,110 @@ export default function CorporateInfoScreen() {
         }
 
         const dateStr = new Date().toLocaleDateString('tr-TR');
+        
+        // Dönem Başlangıç Tarihi Hesabı
+        const thresholdDate = new Date();
+        if (periodFilter === '15_DAYS') thresholdDate.setDate(thresholdDate.getDate() - 15);
+        else if (periodFilter === 'MONTHLY') thresholdDate.setMonth(thresholdDate.getMonth() - 1);
+        else if (periodFilter === 'YEARLY') thresholdDate.setFullYear(thresholdDate.getFullYear() - 1);
+        
+        const donemAraligi = `${thresholdDate.toLocaleDateString('tr-TR')} - ${dateStr}`;
+
+        let devreden_bakiye = 0;
+        let bu_donemin_borcu = 0;
+
+        orders.forEach((o: any) => {
+            const d = new Date(o.created_at || o.date);
+            const tutar = o.total_amount || 0;
+            const statusUpper = (o.status || "").toUpperCase();
+            
+            const isPaid = ["PAID", "ÖDENDİ", "COMPLETED", "TAMAMLANDI"].includes(statusUpper);
+            const isCancelled = ["CANCELLED", "İPTAL"].includes(statusUpper);
+
+            if (isCancelled) return;
+
+            if (d < thresholdDate) {
+                if (!isPaid) devreden_bakiye += tutar;
+            } else {
+                if (!isPaid) bu_donemin_borcu += tutar;
+            }
+        });
+
+        const guncel_toplam_borc = devreden_bakiye + bu_donemin_borcu;
+
         const tableRows = filteredOrders.map((o: any) => {
             const d = new Date(o.created_at || o.date);
             const dateFormatted = `${d.toLocaleDateString('tr-TR')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
             
             const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
-            const manualLabel = o.order_type === 'MANUAL_DEBT' ? 'Borç Girişi' : 'Ödeme Kaydı';
+            const manualLabel = o.order_type === 'MANUAL_DEBT' ? 'Admin Borç Girişi' : 'Ödeme Kaydı';
+            
             const detailText = isManual 
-                ? `<strong>${manualLabel}</strong><br>Aralık: ${o.note}` 
-                : (o.adisyon_items?.map((item: any) => `${item.quantity}x ${item.menu_items?.name || 'Yemek'}`).join('<br>') || 'Detay yok');
+                ? `${manualLabel} (${o.note || ''})` 
+                : `Hizmet: ${o.userName} - ${o.adisyon_items?.map((item: any) => item.menu_items?.name).join(', ') || 'Sipariş'}`;
 
             return `
                 <tr>
-                    <td style="padding: 12px; border-bottom: 1px solid #ddd;">${dateFormatted}</td>
-                    <td style="padding: 12px; border-bottom: 1px solid #ddd;">${o.userName}</td>
-                    <td style="padding: 12px; border-bottom: 1px solid #ddd;">
-                      ${detailText}
-                    </td>
+                    <td style="padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; width: 120px; color: #64748b;">${dateFormatted}</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; font-weight: 500;">✔️ ${detailText}</td>
                 </tr>
             `;
         }).join('');
 
         const html = `
-            <html>
-                <body style="font-family: Helvetica, Arial, sans-serif; padding: 40px; color: #333;">
-                    <h1 style="color: ${colors.primary}; margin-bottom: 5px;">Smart Catering</h1>
-                    <h2 style="color: #666; font-weight: normal; margin-top: 0;">Firma Borç Ekstresi</h2>
-                    ${filteredOrders.some((o: any) => o.order_type === 'MANUAL_DEBT') 
-                      ? `<p style="color: #ed1c18; font-size: 14px; font-weight: bold; margin-bottom: 15px;">${filteredOrders.find((o: any) => o.order_type === 'MANUAL_DEBT')?.note} Aralığı Hizmet Detayı</p>`
-                      : ''
-                    }
-                    <p style="color: #888; font-size: 12px;">Firma: ${companyName}</p>
-                    <p style="color: #888; font-size: 12px;">Tarih: ${dateStr}</p>
-                    
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 30px 0;">
-                        <p style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase;">Toplam Ödenmemiş Borç</p>
-                        <h2 style="margin: 10px 0 0 0; color: ${totalDebt > 0 ? '#e11d48' : '#10b981'};">
-                            ${totalDebt > 0 ? `₺${totalDebt.toLocaleString("tr-TR")}` : 'BORÇ ÖDENDİ'}
-                        </h2>
-                    </div>
+    <html>
+    <body style="margin: 0; padding: 40px; font-family: Helvetica, Arial, sans-serif; color: #1e293b;">
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; margin-bottom: 30px;">
+            <div style="flex: 1;">
+                <div style="background: ${colors.primary}; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 900; font-style: italic; display: inline-block; font-size: 20px;">MEYDAN LOKANTA</div>
+            </div>
+            <div style="flex: 1; text-align: right;">
+                <h1 style="font-size: 28px; font-weight: 900; color: #0f172a; margin: 0; text-transform: uppercase;">MÜŞTERİ HESAP ÖZETİ</h1>
+                <div style="font-size: 12px; color: #64748b; margin-top: 5px;">Seçili Dönem: <strong>${donemAraligi}</strong></div>
+            </div>
+        </div>
 
-                    <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-                        <thead>
-                            <tr style="background-color: #f8f9fa; text-align: left;">
-                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">TARIH</th>
-                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">ÇALIŞAN</th>
-                                <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">ÜRÜNLER</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${tableRows}
-                        </tbody>
-                    </table>
-                </body>
-            </html>
+        <!-- YENİ ÜST KISIM (ÖZET & TOPLAM BORÇ) -->
+        <div style="margin-bottom: 40px;">
+            <div style="font-size: 16px; font-weight: bold; color: #0f172a; margin-bottom: 12px;">Müşteri: ${companyName}</div>
+            
+            <table style="width: 100%; border-collapse: collapse; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                <tr>
+                    <td style="padding: 12px 20px; font-size: 14px; color: #475569; border-bottom: 1px solid #e2e8f0;">Geçmişten Devreden Borç <em>(Dönem Öncesi)</em></td>
+                    <td style="padding: 12px 20px; font-size: 14px; font-weight: bold; text-align: right; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${devreden_bakiye.toLocaleString('tr-TR')} TL</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px 20px; font-size: 14px; color: #475569; border-bottom: 1px solid #e2e8f0;">Bu Dönemin Borcu <em>(${donemAraligi})</em></td>
+                    <td style="padding: 12px 20px; font-size: 14px; font-weight: bold; text-align: right; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${bu_donemin_borcu.toLocaleString('tr-TR')} TL</td>
+                </tr>
+                <tr style="background: #eef2ff;">
+                    <td style="padding: 16px 20px; font-size: 16px; font-weight: 900; color: #dc2626;">🔴 GÜNCEL TOPLAM BORCUNUZ</td>
+                    <td style="padding: 16px 20px; font-size: 20px; font-weight: 900; text-align: right; color: #dc2626;">${guncel_toplam_borc.toLocaleString('tr-TR')} TL</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- ALT KISIM (TÜKETİM DETAYLARI) -->
+        <div>
+            <h2 style="font-size: 14px; font-weight: bold; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px;">
+                Seçili Dönemde (${donemAraligi}) Alınan Hizmetler / Detaylar:
+            </h2>
+            
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+                <tbody>
+                    ${tableRows}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Footer -->
+        <div style="margin-top: 60px; padding-top: 30px; border-top: 2px solid #f1f5f9; font-size: 11px; color: #94a3b8; display: flex; justify-content: space-between;">
+            <div style="font-style: italic;">Bu belge sistem tarafından otomatik oluşturulmuştur. Döküman Tarihi: ${dateStr}</div>
+            <div style="font-weight: 700; color: #64748b;">Meydan Lokanta</div>
+        </div>
+    </body>
+    </html>
         `;
 
         try {

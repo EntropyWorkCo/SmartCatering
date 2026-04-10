@@ -14,7 +14,7 @@ export function NotificationRegister() {
           if (token) {
             await userService.updatePushToken(user.id, token);
           } else {
-            console.warn("Push token alınamadı (Muhtemelen Project ID eksik)");
+            console.log("Push token alınmadı (Bu durum Android Expo Go üzerinde test edilirken veya izin verilmediğinde normaldir).");
           }
         } catch (error) {
           console.error('Error registering push notifications:', error);
