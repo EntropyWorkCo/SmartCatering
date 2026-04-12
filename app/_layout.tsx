@@ -19,6 +19,7 @@ import {
 import "react-native-reanimated";
 
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useUserRole } from "@/lib/hooks/useUserRole";
 
 export { ErrorBoundary } from "expo-router";
 
@@ -31,7 +32,8 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
-  const { user, loading: authLoading, isAdmin } = useAuth();
+  const { role, loading: roleLoading, isAdmin } = useUserRole();
+  const { user, loading: authLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -39,29 +41,54 @@ export default function RootLayout() {
     if (error) throw error;
   }, [error]);
 
+  const loading = !loaded || authLoading || roleLoading;
+
   // Auth Guard & Initial Redirection logic
   useEffect(() => {
-    if (!loaded || authLoading) return;
+    if (loading) return;
 
     const inAuthGroup = segments[0] === "auth" || segments[0] === "welcome";
     const isModalOrRating = segments[0] === "modal" || segments[0] === "rating";
     
-    console.log("🛠️ ROOT AUTH GUARD:", { segments, userId: user?.id, isAdmin, inAuthGroup });
+    console.log("🛠️ ROOT AUTH GUARD:", { segments, role, userId: user?.id, isAdmin, inAuthGroup });
 
-    // Determine target path
-    let targetPath = "";
-    
-    if (!user && !inAuthGroup && !isModalOrRating) {
-      targetPath = "/welcome";
-    } else if (user && (inAuthGroup || segments.length < 1)) {
-      targetPath = isAdmin ? "/(admin)/dashboard" : "/(tabs)";
+    if (!user) {
+      if (!inAuthGroup && !isModalOrRating) {
+        console.log("🚀 REDIRECTING TO: /welcome");
+        router.replace("/welcome");
+      }
+      return;
     }
 
-    if (targetPath) {
-      console.log("🚀 REDIRECTING TO:", targetPath);
-      router.replace(targetPath as any);
+    // User is logged in
+    if (inAuthGroup || segments.length < 1) {
+      let targetPath: any = "";
+      
+      switch(role) {
+        case 'admin':
+          targetPath = "/(admin)/dashboard";
+          break;
+        case 'firma_sahibi':
+        case 'firma_calisan':
+        case 'bireysel':
+          targetPath = "/(tabs)";
+          break;
+        default:
+          // Geçiş sürecinde rol tespiti yapılamazsa kullanıcıyı sistemden atmıyoruz, 
+          // varsayılan olarak (tabs) grubuna yönlendiriyoruz.
+          if (!roleLoading && segments.length < 1) {
+            console.log("🚀 REDIRECTING TO DEFAULT: /(tabs)");
+            targetPath = "/(tabs)";
+          }
+          break;
+      }
+
+      if (targetPath) {
+        console.log("🚀 REDIRECTING TO:", targetPath);
+        router.replace(targetPath);
+      }
     }
-  }, [user, isAdmin, segments, authLoading, loaded]);
+  }, [user, role, segments, loading, roleLoading]);
 
   // Hide Splash Screen only when fonts and auth state are loaded
   useEffect(() => {
@@ -83,7 +110,8 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useResolvedTheme();
-  const { user, isAdmin } = useAuth();
+  const { isAdmin } = useUserRole();
+  const { user } = useAuth();
   const router = useRouter();
   const lastMenuNoteRef = React.useRef<number>(0);
 

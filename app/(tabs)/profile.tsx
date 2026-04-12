@@ -35,7 +35,7 @@ export default function ProfileScreen() {
 
     const { user } = useAuth();
     const { profile, loading, refresh } = useProfile(user?.id);
-    const isCompanyOwner = !!profile?.corporate_info;
+    const isCompanyOwner = !!profile?.corporate_info || profile?.is_company === true || profile?.role === 'corporate';
 
     // Sekme her odaklandığında veriyi yenile (Örn: Kurumsal Bilgiler'den dönünce)
     useFocusEffect(
@@ -167,36 +167,9 @@ export default function ProfileScreen() {
                     </TouchableOpacity>
                 </View>
 
-                {isCompanyOwner && (
-                    <TouchableOpacity 
-                        onPress={() => router.push("/corporate-info")}
-                        style={{ 
-                            backgroundColor: colors.surface, 
-
-                            padding: 20, 
-                            borderRadius: 16, 
-                            borderWidth: 1, 
-                            borderColor: colors.surfaceBorder, 
-                            marginTop: 12, 
-                            marginBottom: 20, 
-                            flexDirection: 'row', 
-                            alignItems: 'center', 
-                            justifyContent: 'space-between',
-                            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2
-                        }}
-                    >
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                            <View style={{ backgroundColor: colors.primary + '15', padding: 10, borderRadius: 12 }}>
-                                <MaterialIcons name="business" size={24} color={colors.primary} />
-                            </View>
-                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>Firma Yönetim Paneli</Text>
-                        </View>
-                        <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
-                    </TouchableOpacity>
-                )}
-
                 {/* User Info Form */}
                 <View style={styles.formSection}>
+
                     <View style={styles.roleBadgeContainer}>
                         <View style={styles.roleBadge}>
                             <MaterialIcons
@@ -252,6 +225,13 @@ export default function ProfileScreen() {
                         <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
                     </TouchableOpacity>
 
+                    {isCompanyOwner && (
+                        <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/corporate-info")}>
+                            <MaterialIcons name="business" size={24} color={colors.primary} />
+                            <Text style={[styles.linkText, { color: colors.primary }]}>Firma Yönetim Paneli (Çalışan/Borç)</Text>
+                            <MaterialIcons name="chevron-right" size={24} color={colors.primary} />
+                        </TouchableOpacity>
+                    )}
 
 
                     <TouchableOpacity style={styles.linkItem} onPress={() => router.push("/support" as any)}>
@@ -270,18 +250,6 @@ export default function ProfileScreen() {
                             thumbColor="#fff"
                         />
                     </View>
-
-                    <TouchableOpacity
-                        style={[styles.linkItem, { borderColor: colors.primary + '80', backgroundColor: colors.primary + '10' }]}
-                        onPress={() => {
-                            Alert.alert("Test Başladı", "5 saniye sonra değerlendirme bildirimi (simülasyon) gelecek.");
-                            notificationService.scheduleRatingNotification(0.083); // ~5 seconds
-                        }}
-                    >
-                        <MaterialIcons name="timer" size={24} color={colors.primary} />
-                        <Text style={[styles.linkText, { color: colors.primary }]}>Bildirimi Test Et (5 sn sonra)</Text>
-                        <MaterialIcons name="play-arrow" size={24} color={colors.primary} />
-                    </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>

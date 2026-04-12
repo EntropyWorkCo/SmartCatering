@@ -16,6 +16,8 @@ import { useProfile } from "@/lib/hooks/useProfile";
 import { adisyonService } from "@/lib/services/adisyonService";
 import { normalizePhone } from "@/lib/services/authService";
 import { billingService } from "@/lib/services/billingService";
+import { ekstreService } from "@/lib/services/ekstreService";
+import { pdfService } from "@/lib/services/pdfService";
 import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
@@ -71,7 +73,7 @@ export default function CorporateInfoScreen() {
     }, [user?.id]);
 
     const actualCompanyId = fetchedCompanyId || profile?.corporate_info?.id || profile?.company_id;
-    const isCompanyOwner = !!profile?.corporate_info;
+    const isCompanyOwner = !!profile?.corporate_info || profile?.is_company === true || profile?.role === 'corporate';
 
     useEffect(() => {
         if (!authLoading && !profileLoading && !isCompanyOwner) {
@@ -145,6 +147,25 @@ export default function CorporateInfoScreen() {
             console.error(e);
         } finally {
             setOrdersLoading(false);
+        }
+    };
+
+    const handleDownloadEkstre = async () => {
+        if (!actualCompanyId) return;
+        setSaving(true);
+        try {
+            const now = new Date();
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+            
+            const data = await ekstreService.getEkstreVerisi(actualCompanyId, firstDay, lastDay);
+            const { uri } = await Print.printToFileAsync({ html: pdfService.generateEkstreHTML(data) });
+            await Sharing.shareAsync(uri);
+        } catch (error) {
+            console.error(error);
+            Alert.alert("Hata", "PDF oluşturulurken bir sorun oluştu.");
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -363,7 +384,7 @@ export default function CorporateInfoScreen() {
         <!-- Header -->
         <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; margin-bottom: 30px;">
             <div style="flex: 1;">
-                <div style="background: ${colors.primary}; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 900; font-style: italic; display: inline-block; font-size: 20px;">MEYDAN LOKANTA</div>
+                <div style="background: ${colors.primary}; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 900; font-style: italic; display: inline-block; font-size: 20px; margin-bottom: 8px;">MEYDAN LOKANTA</div>
             </div>
             <div style="flex: 1; text-align: right;">
                 <h1 style="font-size: 28px; font-weight: 900; color: #0f172a; margin: 0; text-transform: uppercase;">MÜŞTERİ HESAP ÖZETİ</h1>
@@ -475,16 +496,26 @@ export default function CorporateInfoScreen() {
                         </View>
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Firma / Şirket Adı</Text>
-                            <View style={[styles.inputContainer, styles.readOnlyInput]}>
+                            <View style={styles.inputContainer}>
                                 <MaterialIcons name="business" size={20} color={colors.muted} />
-                                <TextInput style={[styles.input, { color: colors.muted }]} value={companyName} editable={false} />
+                                <TextInput 
+                                    style={styles.input} 
+                                    value={companyName} 
+                                    onChangeText={setCompanyName}
+                                    placeholder="Firma Adını Giriniz"
+                                />
                             </View>
                         </View>
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Vergi Numarası / TCKN</Text>
-                            <View style={[styles.inputContainer, styles.readOnlyInput]}>
+                            <View style={styles.inputContainer}>
                                 <MaterialIcons name="tag" size={20} color={colors.muted} />
-                                <TextInput style={[styles.input, { color: colors.muted }]} value={taxNumber} editable={false} />
+                                <TextInput 
+                                    style={styles.input} 
+                                    value={taxNumber} 
+                                    onChangeText={setTaxNumber}
+                                    placeholder="Vergi No"
+                                />
                             </View>
                         </View>
                         <View style={styles.formGroup}>
@@ -591,12 +622,22 @@ export default function CorporateInfoScreen() {
                     <View style={{ gap: 24 }}>
                         <View style={[styles.sectionCard, { alignItems: 'center', backgroundColor: colors.dangerBg, borderColor: colors.danger, borderWidth: 1 }]}>
                             <Text style={{ fontSize: 12, color: colors.danger, fontWeight: 'bold', marginBottom: 4, textTransform: 'uppercase' }}>Toplam Ödenmemiş Borç</Text>
-                            <Text style={{ fontSize: 36, fontWeight: '900', color: colors.danger }}>{totalDebt > 0 ? `₺${totalDebt.toLocaleString('tr-TR')}` : 'Borç Bulunmuyor'}</Text>
+                            <Text style={{ fontSize: 36, fontWeight: '900', color: colors.danger }}>{adminDebt > 0 ? `₺${adminDebt.toLocaleString('tr-TR')}` : 'Borç Bulunmuyor'}</Text>
                         </View>
 
-                        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }]} onPress={generatePdfEkstre}>
-                            <MaterialIcons name="picture-as-pdf" size={20} color="#fff" style={{ marginRight: 8 }} />
-                            <Text style={styles.actionBtnText}>Ekstre PDF İndir / Paylaş</Text>
+                        <TouchableOpacity 
+                            style={[styles.actionBtn, { backgroundColor: colors.primary }]} 
+                            onPress={handleDownloadEkstre}
+                            disabled={saving}
+                        >
+                            {saving ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <>
+                                    <MaterialIcons name="picture-as-pdf" size={20} color="#fff" style={{ marginRight: 8 }} />
+                                    <Text style={styles.actionBtnText}>Hesap Ekstresini İndir (PDF)</Text>
+                                </>
+                            )}
                         </TouchableOpacity>
 
                         <View style={styles.sectionCard}>

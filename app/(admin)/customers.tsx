@@ -95,9 +95,10 @@ export default function AdminCustomers() {
                             } else {
                                 // Bireysel ise siparişlerden çek
                                 if (ordersData) {
-                                    const userOrders = ordersData.filter((o: any) => 
-                                        o.user_id === profile.id && !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)
-                                    );
+                                    const userOrders = ordersData.filter((o: any) => {
+                                        const status = (o.status || "").toUpperCase();
+                                        return o.user_id === profile.id && !["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ", "COMPLETED", "TAMAMLANDI"].includes(status);
+                                    });
                                     balance = userOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0);
                                 }
                             }

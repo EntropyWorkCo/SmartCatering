@@ -4,7 +4,7 @@ export const feedbackService = {
   // Yeni bir değerlendirme gönder
   async submitFeedback(userId: string, rating: number, comment?: string) {
     const { data, error } = await supabase
-      .from("feedback")
+      .from("feedbacks")
       .insert([{ user_id: userId, rating, comment }])
       .select();
 
@@ -15,14 +15,11 @@ export const feedbackService = {
   // (Admin için) Tüm geri bildirimleri yorum yapan kişinin adıyla birlikte getir
   async getAllFeedbacks() {
     const { data, error } = await supabase
-      .from("feedback")
-      // Foreign key ile users tablosuna bağlanıp full_name bilgisini de çekiyoruz
-      .select(
-        `
+      .from("feedbacks")
+      .select(`
         *,
         users ( full_name )
-      `,
-      )
+      `)
       .order("created_at", { ascending: false });
 
     if (error) throw error;

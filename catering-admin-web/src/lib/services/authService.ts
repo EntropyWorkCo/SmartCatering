@@ -25,7 +25,7 @@ export const sendOtp = async (phone: string): Promise<boolean> => {
         // İletiMerkezi telefon numarasını 5xxxxxxxxx formatında bekliyor
         const cleanPhone = phone.replace(/\D/g, "").slice(-10);
 
-        const messageText = `SmartCatering onay kodunuz: ${otpCode}. Lütfen kimseyle paylaşmayın.`;
+        const messageText = `MeydanLokanta onay kodunuz: ${otpCode}. Lütfen kimseyle paylaşmayın.`;
 
         const apiUrl = "https://api.iletimerkezi.com/v1/send-sms/json";
         const payload = {

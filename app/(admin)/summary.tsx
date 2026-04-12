@@ -170,7 +170,8 @@ export default function SummaryScreen() {
         }
 
         // Bireysel ise sipariş toplamlarını ekle, kurumsal ise adminin girdiği balance'ı göstereceğiz
-        if (!["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(order.status)) {
+        const statusUpper = (order.status || "").toUpperCase();
+        if (!["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ", "COMPLETED", "TAMAMLANDI"].includes(statusUpper)) {
            map[key].total += order.total_amount || 0;
         }
         
@@ -291,7 +292,7 @@ export default function SummaryScreen() {
           <body>
             <div class="header">
               <div>
-                <h1 class="brand">Smart Catering</h1>
+                <div style="background: ${colors.primary}; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 900; font-style: italic; display: inline-block; font-size: 20px; margin-bottom: 8px;">MEYDAN LOKANTA</div>
                 <p class="report-type">Hizmet Detay & Borç Ekstresi</p>
               </div>
               <div class="meta-right">
@@ -309,28 +310,64 @@ export default function SummaryScreen() {
               <thead>
                 <tr>
                   <th style="width: 100px;">Tarih</th>
-                  <th>Açıklama / Detay</th>
-                  <th style="text-align:right; width: 120px;">Tutar</th>
+                  <th>Hizmet / Sipariş Detayı</th>
+                  <th style="width: 120px; text-align: center;">Durum</th>
                 </tr>
               </thead>
               <tbody>
-                ${account.orders.map((o: any) => {
-                  const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
-                  const manualLabel = o.order_type === 'MANUAL_DEBT' ? '<span style="color:#f97316;">Borç Kaydı</span>' : '<span style="color:#10b981;">Ödeme Kaydı</span>';
-                  const detail = isManual 
-                    ? `<strong>${manualLabel}</strong><br/><small style="color:#94a3b8;">Dönem: ${o.note}</small>`
-                    : (o.adisyon_items?.map((i: any) => `${i.menu_items?.name || 'Ürün'}`).join(', ') || 'İşlem detayı');
-                  
-                  return `
-                    <tr>
-                      <td>${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
-                      <td>${detail}</td>
-                      <td style="text-align:right; font-weight: bold; color: ${o.order_type === 'MANUAL_PAYMENT' ? '#10b981' : '#1e293b'}">
-                        ${o.order_type === 'MANUAL_PAYMENT' ? '-' : ''}₺${o.total_amount?.toLocaleString('tr-TR')}
-                      </td>
-                    </tr>
-                  `;
-                }).join('')}
+                ${(() => {
+                  // 1. Manuel borç/ödeme kayıtlarını ve teknik notları tamamen gizle
+                  const filteredOrders = account.orders.filter((o: any) => {
+                    const note = (o.note || "").toUpperCase();
+                    const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
+                    return !note.includes("BORCA AKTARILDI") && !isManual;
+                  });
+
+                  // 2. Aynı gün ve aynı kullanıcıya ait kayıtları grupla
+                  const groupedMap: { [key: string]: any } = {};
+                  filteredOrders.forEach((o: any) => {
+                    const dateKey = new Date(o.created_at).toLocaleDateString('tr-TR');
+                    const userKey = o.userName || 'Personel';
+                    const key = `${dateKey}_${userKey}`;
+
+                    if (!groupedMap[key]) {
+                      groupedMap[key] = { ...o, count: 1, items: [...(o.adisyon_items || [])] };
+                    } else {
+                      groupedMap[key].count += 1;
+                      if (o.adisyon_items) groupedMap[key].items.push(...o.adisyon_items);
+                    }
+                  });
+
+                  return Object.values(groupedMap).map((o: any) => {
+                    const getLocalizedStatus = (status: string) => {
+                      const s = (status || "").toUpperCase();
+                      if (["PAID", "ÖDENDİ", "ÖDENDI"].includes(s)) return "ÖDENDİ";
+                      if (["COMPLETED", "TAMAMLANDI"].includes(s)) return "TAMAMLANDI";
+                      if (["CANCELLED", "İPTAL"].includes(s)) return "İPTAL";
+                      return "TAMAMLANDI";
+                    };
+
+                    const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
+                    const manualLabel = o.order_type === 'MANUAL_DEBT' ? '<span style="color:#f97316;">Yemek Hizmet Bedeli</span>' : '<span style="color:#10b981;">Ödeme Kaydı</span>';
+                    
+                    const adisyonDetay = o.items?.map((i: any) => i.menu_items?.name).join(', ');
+                    const detail = isManual 
+                      ? `<strong>${manualLabel}</strong><br/><small style="color:#94a3b8;">Not: ${o.note || '-'}</small>`
+                      : `<strong>${o.userName || 'Personel'}</strong> ${o.count > 1 ? `<span style="color:${colors.primary}; font-weight:bold;">(x${o.count})</span>` : ''}<br/><small style="color:#64748b;">${adisyonDetay || 'İşlem Detayı'}</small>`;
+                    
+                    const statusLabel = getLocalizedStatus(o.status);
+                    
+                    return `
+                      <tr>
+                        <td style="padding: 8px 10px; border-bottom: 1px solid #f1f5f9;">${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
+                        <td style="padding: 8px 10px; border-bottom: 1px solid #f1f5f9;">${detail}</td>
+                        <td style="padding: 8px 10px; border-bottom: 1px solid #f1f5f9; text-align: center; color: ${statusLabel === 'ÖDENDİ' ? '#10b981' : '#f97316'}; font-weight: bold;">
+                          ${statusLabel}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('');
+                })()}
               </tbody>
             </table>
 
@@ -346,7 +383,7 @@ export default function SummaryScreen() {
 
             <div class="footer">
               <p>Bu belge bilgilendirme amaçlı otomatik olarak oluşturulmuştur.</p>
-              &copy; ${new Date().getFullYear()} Smart Catering | Mutfak Yönetim Paneli
+              &copy; ${new Date().getFullYear()} Meydan Lokanta | Yönetim Paneli
             </div>
           </body>
         </html>
@@ -405,16 +442,7 @@ export default function SummaryScreen() {
           <Text style={styles.totalAmount}>₺{totalDebt.toLocaleString("tr-TR")}</Text>
         </View>
 
-        <View style={styles.statsRow}>
-          <View style={styles.miniStatCard}>
-            <Text style={styles.miniStatLabel}>SİSTEM PUANI</Text>
-            <Text style={styles.miniStatValue}>{averageRating} / 5</Text>
-          </View>
-          <View style={styles.miniStatCard}>
-            <Text style={styles.miniStatLabel}>GELEN YORUM</Text>
-            <Text style={styles.miniStatValue}>{ratings.length} Adet</Text>
-          </View>
-        </View>
+        <Text style={{ fontSize: 10, fontWeight: '900', color: colors.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginTop: 24, marginBottom: 12 }}>FİRMA & BORÇ LİSTESİ</Text>
 
         {groupedAccounts.map((account) => (
           <View key={account.userId} style={styles.accountCard}>

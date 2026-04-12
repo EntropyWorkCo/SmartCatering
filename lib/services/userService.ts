@@ -26,6 +26,15 @@ export const userService = {
         companyPhone: companyData.company_phone,
         invoiceAddress: companyData.address
       };
+    } else if (data.is_company === true || (data as any).role === 'corporate') {
+      // Kayıt henüz yoksa boş bir yapı ekle ki UI'da görünsün ve düzenlenebilsin
+      (data as any).corporate_info = {
+        id: null,
+        companyName: "",
+        taxNumber: "",
+        companyPhone: "",
+        invoiceAddress: ""
+      };
     }
 
     return data;

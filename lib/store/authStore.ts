@@ -5,12 +5,14 @@ import { supabase } from "../supabase";
 interface AuthState {
   session: any | null;
   user: any | null;
+  role: string | null;
   isAdmin: boolean;
   loading: boolean;
   initialized: boolean;
   setSession: (session: any) => void;
   setLoading: (loading: boolean) => void;
   setIsAdmin: (isAdmin: boolean) => void;
+  setRole: (role: string | null) => void;
   initialize: (force?: boolean) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -18,14 +20,18 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   user: null,
+  role: null,
   isAdmin: false,
   loading: true,
   initialized: false,
 
   setSession: (session) => {
+    const role = session?.user?.app_metadata?.role || session?.user?.user_metadata?.role || null;
     set({ 
       session, 
       user: session?.user || null,
+      role,
+      isAdmin: role === 'admin',
       loading: false 
     });
   },
@@ -33,6 +39,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setLoading: (loading) => set({ loading }),
   
   setIsAdmin: (isAdmin) => set({ isAdmin }),
+
+  setRole: (role) => set({ role, isAdmin: role === 'admin' }),
 
   initialize: async (force = false) => {
     if (get().initialized && !force) return;
@@ -45,7 +53,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (sessionError) {
         console.warn("Auth initialization session error:", sessionError.message);
-        // If the refresh token is invalid or not found, we should sign out to clear local state
         if (sessionError.message.includes("Refresh Token") || sessionError.status === 400) {
           await supabase.auth.signOut();
           await AsyncStorage.removeItem("isAdmin");
@@ -53,7 +60,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
         finalSession = null;
       } else if (!session) {
-        // Check for soft user if no supabase session
         const softUserStr = await AsyncStorage.getItem("softUser");
         if (softUserStr) {
           try {
@@ -65,15 +71,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
 
-      // 2. Get Admin Status from Database (Preferred) or Storage (Fallback)
-      let isAdmin = false;
-      if (finalSession?.user && !(finalSession as any).isSoftUser) {
-        // use userService.checkIsAdmin if it's available without circular dependency
-        // Since we are in the store, we can use supabase directly or import userService
+      // 2. Resolve Role and Admin Status
+      const role = finalSession?.user?.app_metadata?.role || finalSession?.user?.user_metadata?.role || null;
+      let isAdmin = role === 'admin';
+      
+      if (!role && finalSession?.user && !(finalSession as any).isSoftUser) {
         const { data: adminData } = await supabase.rpc("is_admin");
         isAdmin = !!adminData;
         await AsyncStorage.setItem("isAdmin", isAdmin ? "true" : "false");
-      } else {
+      } else if (!role) {
         const adminFlag = await AsyncStorage.getItem("isAdmin");
         isAdmin = adminFlag === "true";
       }
@@ -81,6 +87,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ 
         session: finalSession, 
         user: finalSession?.user || null,
+        role,
         isAdmin: isAdmin,
         loading: false,
         initialized: true
@@ -100,12 +107,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           }
         }
 
-        let isNowAdmin = false;
-        if (currentSession?.user && !(currentSession as any).isSoftUser) {
+        const currentRole = currentSession?.user?.app_metadata?.role || currentSession?.user?.user_metadata?.role || null;
+        let isNowAdmin = currentRole === 'admin';
+        
+        if (!currentRole && currentSession?.user && !(currentSession as any).isSoftUser) {
           const { data: adminData } = await supabase.rpc("is_admin");
           isNowAdmin = !!adminData;
           await AsyncStorage.setItem("isAdmin", isNowAdmin ? "true" : "false");
-        } else {
+        } else if (!currentRole) {
           const adminFlag = await AsyncStorage.getItem("isAdmin");
           isNowAdmin = adminFlag === "true";
         }
@@ -113,6 +122,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ 
           session: currentSession, 
           user: currentSession?.user || null,
+          role: currentRole,
           isAdmin: isNowAdmin,
           loading: false
         });
@@ -127,6 +137,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await supabase.auth.signOut();
     await AsyncStorage.removeItem("isAdmin");
     await AsyncStorage.removeItem("softUser");
-    set({ session: null, user: null, isAdmin: false, loading: false });
+    set({ session: null, user: null, role: null, isAdmin: false, loading: false });
   }
 }));

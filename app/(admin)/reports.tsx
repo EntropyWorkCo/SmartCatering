@@ -168,7 +168,10 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
     }, [mainTab]);
 
     const stats = useMemo(() => {
-        const validOrders = orders.filter((o: any) => !["CANCELLED", "İptal"].includes(o.status));
+        const validOrders = orders.filter((o: any) => {
+            const statusUpper = (o.status || "").toUpperCase();
+            return !["CANCELLED", "İPTAL"].includes(statusUpper);
+        });
 
         const now = new Date();
         const filtered = validOrders.filter((o: any) => {
@@ -266,40 +269,76 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
 
             const companyDebt = items[0]?.companyBalance || 0;
 
-            const rows = items.map((o: any) => `
+            const getLocalizedStatus = (status: string) => {
+                const s = (status || "").toUpperCase();
+                if (["PAID", "ÖDENDİ", "ÖDENDI"].includes(s)) return "ÖDENDİ";
+                if (["COMPLETED", "TAMAMLANDI"].includes(s)) return "TAMAMLANDI";
+                if (["CANCELLED", "İPTAL"].includes(s)) return "İPTAL";
+                if (["READY", "YOLDA", "HAZIR"].includes(s)) return "YOLDA";
+                if (["PREPARING", "HAZIRLANIYOR"].includes(s)) return "HAZIRLANIYOR";
+                return "BEKLİYOR";
+            };
+
+            const groupedMap: { [key: string]: any } = {};
+            items.forEach((o: any) => {
+                // Manuel girilen hizmet bedellerini ve borçları dökümden gizliyoruz
+                if (o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT') return;
+                
+                const dateKey = new Date(o.created_at).toLocaleDateString('tr-TR');
+                const userKey = o.userName || 'Müşteri';
+                const key = `${dateKey}_${userKey}`;
+
+                if (!groupedMap[key]) {
+                    groupedMap[key] = { ...o, count: 1, items: [...(o.adisyon_items || [])] };
+                } else {
+                    groupedMap[key].count += 1;
+                    if (o.adisyon_items) groupedMap[key].items.push(...o.adisyon_items);
+                }
+            });
+
+            const rows = Object.values(groupedMap).map((o: any) => {
+                const statusLabel = getLocalizedStatus(o.status);
+                // Gruplanmış item isimleri
+                const itemDetails = o.items?.map((i: any) => i.menu_items?.name).join(', ') || 'Hizmet';
+                
+                return `
                 <tr>
-                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px;">#${o.id.toString().substring(0, 8)}</td>
-                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px;">${o.userName || 'Müşteri'}</td>
-                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px;">${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
-                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px; text-align:right;">₺${o.total_amount?.toLocaleString("tr-TR")}</td>
-                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 10px; color: ${["PAID", "Ödendi"].includes(o.status) ? "#10b981" : "#f97316"}; font-weight: bold;">${o.status}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px;">#${o.id.toString().substring(0, 8)}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px;">
+                        <strong>${o.userName || 'Müşteri'}</strong> ${o.count > 1 ? `<span style="color:${colors.primary}; font-weight:bold;">(x${o.count})</span>` : ''}<br/>
+                        <span style="color: #64748b; font-size: 9px;">${itemDetails}</span>
+                    </td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px;">${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #f1f5f9; font-size: 10px; color: ${statusLabel === 'ÖDENDİ' ? "#10b981" : "#f97316"}; font-weight: bold;">
+                        ${statusLabel}
+                    </td>
                 </tr>
-            `).join('');
+            `}).join('');
 
             return `
                 <div style="margin-bottom: 40px; page-break-inside: avoid;">
                     <div style="background-color: #f8fafc; border-left: 5px solid ${colors.primary}; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
                         <h2 style="margin: 0; color: #1e293b; font-size: 18px;">${companyName}</h2>
                         <div style="display: flex; gap: 20px; text-align: right;">
-                             <div>
-                                 <div style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold;">BU DÖNEMKİ TÜKETİM</div>
-                                 <div style="font-size: 16px; color: ${colors.primary}; font-weight: 900;">₺${compTotal.toLocaleString("tr-TR")}</div>
-                             </div>
                              ${mainTab === "KURUMSAL" ? `
                              <div style="border-left: 1px solid #e2e8f0; padding-left: 20px;">
                                  <div style="font-size: 10px; color: ${companyDebt <= 0 ? '#10b981' : '#ef4444'}; text-transform: uppercase; font-weight: bold;">${companyDebt <= 0 ? 'BORÇ DURUMU' : 'GÜNCEL BORÇ'}</div>
                                  <div style="font-size: 16px; color: ${companyDebt <= 0 ? '#10b981' : '#ef4444'}; font-weight: 900;">${companyDebt <= 0 ? 'ÖDENDİ' : `₺${companyDebt.toLocaleString("tr-TR")}`}</div>
                              </div>
-                             ` : ''}
+                             ` : `
+                             <div>
+                                 <div style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold;">DÖNEM TÜKETİMİ</div>
+                                 <div style="font-size: 16px; color: ${colors.primary}; font-weight: 900;">₺${compTotal.toLocaleString("tr-TR")}</div>
+                             </div>
+                             `}
                         </div>
                     </div>
                     <table style="width: 100%; border-collapse: collapse;">
                         <thead>
                             <tr style="text-align: left;">
                                 <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">ID</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">KULLANICI</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">KİŞİ & SİPARİŞ DETAYI</th>
                                 <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">TARİH</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase; text-align:right;">TUTAR</th>
                                 <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">DURUM</th>
                             </tr>
                         </thead>
@@ -307,9 +346,6 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                             ${rows}
                         </tbody>
                     </table>
-                    <div style="margin-top: 10px; font-size: 11px; color: #64748b; font-style: italic;">
-                       Bu firmanın toplam <strong>${compMeals} adet</strong> öğün kaydı bulunmaktadır.
-                    </div>
                 </div>
             `;
         }).join('');
@@ -320,8 +356,8 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                 <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5;">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px;">
                         <div>
-                            <h1 style="color: ${colors.primary}; margin: 0; font-size: 28px; font-weight: 900; letter-spacing: -1px;">Smart Catering</h1>
-                            <p style="margin: 5px 0 0 0; color: #64748b; font-size: 14px; font-weight: bold;">Satış & Tahsilat Raporu</p>
+                            <div style="background: ${colors.primary}; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 900; font-style: italic; display: inline-block; font-size: 20px; margin-bottom: 8px;">MEYDAN LOKANTA</div>
+                            <p style="margin: 0; color: #64748b; font-size: 14px; font-weight: bold;">Satış & Tahsilat Raporu</p>
                         </div>
                         <div style="text-align: right;">
                             <div style="font-size: 12px; color: #64748b;">Tarih Aralığı: <strong style="color: #1e293b;">${dateRangeStr}</strong></div>
@@ -346,8 +382,8 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                     ${groupHtml}
 
                     <div style="margin-top: 60px; padding-top: 20px; border-top: 1px solid #f1f5f9; text-align: center; color: #94a3b8; font-size: 10px;">
-                        Bu belge Smart Catering İşletme Otomasyonu tarafından otomatik olarak oluşturulmuştur.<br/>
-                        &copy; ${new Date().getFullYear()} Smart Catering | Tüm Hakları Saklıdır.
+                        Bu belge Meydan Lokanta İşletme Otomasyonu tarafından otomatik olarak oluşturulmuştur.<br/>
+                        &copy; ${new Date().getFullYear()} Meydan Lokanta | Tüm Hakları Saklıdır.
                     </div>
                 </body>
             </html>
@@ -495,7 +531,11 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                                                         </View>
                                                         <View style={{ alignItems: "flex-end", justifyContent: 'center' }}>
                                                             <Text style={[styles.orderTotal, { fontSize: 14 }]}>₺{o.total_amount?.toLocaleString("tr-TR")}</Text>
-                                                            <Text style={[styles.orderTime, ["PAID", "Ödendi"].includes(o.status) && { color: "#10b981" }]}>{o.status}</Text>
+                                                            <Text style={[styles.orderTime, ["PAID", "ÖDENDI", "ÖDENDİ", "TAMAMLANDI"].includes(String(o.status).toUpperCase()) && { color: "#10b981" }]}>
+                                                                {String(o.status).toUpperCase() === 'PAID' ? 'ÖDENDİ' : 
+                                                                 String(o.status).toUpperCase() === 'READY' ? 'YOLDA' :
+                                                                 String(o.status).toUpperCase() === 'COMPLETED' ? 'TAMAMLANDI' : o.status}
+                                                            </Text>
                                                         </View>
                                                     </View>
                                                 ));
@@ -564,19 +604,10 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
 const PerformanceDashboard = ({ onBack, ratings, colors, styles }: any) => {
     const insets = useSafeAreaInsets();
 
-    const calcAvg = (key: string) => {
-        const valid = ratings.filter((r: any) => r[key] && r[key] > 0);
-        if (valid.length === 0) return "5.0";
-        return (valid.reduce((acc: number, r: any) => acc + r[key], 0) / valid.length).toFixed(1);
-    };
-
-    const stats = {
-        general: calcAvg('generalStars'),
-        ana: calcAvg('rating_ana'),
-        corba: calcAvg('rating_corba'),
-        yan: calcAvg('rating_yan'),
-        tatli: calcAvg('rating_tatli')
-    };
+    const validRatings = ratings.filter((r: any) => r.generalStars > 0);
+    const avgScore = validRatings.length > 0
+        ? (validRatings.reduce((acc: number, r: any) => acc + r.generalStars, 0) / validRatings.length).toFixed(1)
+        : "0.0";
 
     return (
         <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
@@ -588,25 +619,55 @@ const PerformanceDashboard = ({ onBack, ratings, colors, styles }: any) => {
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                {/* Genel Puan Kartı */}
                 <View style={[styles.perfHeroCard, { borderColor: colors.primary }]}>
                     <View style={styles.perfHeroContent}>
                         <View>
                             <Text style={styles.perfHeroLabel}>GENEL PUAN ORTALAMASI</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                                <Text style={[styles.perfHeroScore, { color: colors.primary }]}>{stats.general}</Text>
+                                <Text style={[styles.perfHeroScore, { color: colors.primary }]}>{avgScore}</Text>
                                 <Text style={styles.perfHeroScoreMax}>/ 5.0</Text>
                             </View>
-                            <Text style={[styles.perfHeroDesc, { color: colors.muted }]}>Sistemdeki tüm oyların ortalamasıdır</Text>
+                            <View style={{ flexDirection: 'row', gap: 4, marginTop: 8 }}>
+                                {[1, 2, 3, 4, 5].map(i => (
+                                    <MaterialIcons key={i} name="star" size={22} color={i <= Math.round(parseFloat(avgScore)) ? "#fbbf24" : colors.surfaceBorder} />
+                                ))}
+                                <Text style={{ color: colors.muted, fontSize: 12, marginLeft: 8, alignSelf: 'center' }}>{ratings.length} Yorum</Text>
+                            </View>
                         </View>
                     </View>
                 </View>
 
-                <View style={styles.statsGrid}>
-                    <StatCard icon="restaurant" label="ANA YEMEK" score={stats.ana} color="#f97316" trend="" styles={styles} />
-                    <StatCard icon="soup-kitchen" label="ÇORBALAR" score={stats.corba} color="#3b82f6" trend="" styles={styles} />
-                    <StatCard icon="flatware" label="YAN YEMEK" score={stats.yan} color="#10b981" trend="" styles={styles} />
-                    <StatCard icon="cake" label="TATLI" score={stats.tatli} color="#ec4899" trend="" styles={styles} />
-                </View>
+                {/* Yorum Listesi */}
+                {ratings.length > 0 ? (
+                    ratings.map((r: any) => (
+                        <View key={r.id} style={styles.feedbackCard}>
+                            <View style={styles.feedbackTop}>
+                                <View style={styles.feedbackUser}>
+                                    <View style={styles.feedbackAvatar}>
+                                        <MaterialIcons name="person" size={20} color={colors.text} />
+                                    </View>
+                                    <View>
+                                        <Text style={styles.feedbackName}>{r.userName}</Text>
+                                        <Text style={styles.feedbackCompany}>{r.company || 'Bireysel'}</Text>
+                                    </View>
+                                </View>
+                                <View style={styles.starsCont}>
+                                    {[1, 2, 3, 4, 5].map(i => (
+                                        <MaterialIcons key={i} name="star" size={16} color={i <= r.generalStars ? "#fbbf24" : colors.surfaceBorder} />
+                                    ))}
+                                </View>
+                            </View>
+                            {r.note ? <Text style={styles.feedbackNote}>"{r.note}"</Text> : null}
+                            <Text style={styles.feedbackDate}>{r.date}</Text>
+                        </View>
+                    ))
+                ) : (
+                    <View style={styles.emptyState}>
+                        <MaterialIcons name="rate-review" size={64} color={colors.surfaceBorder} />
+                        <Text style={styles.emptyText}>Henüz yorum yok</Text>
+                    </View>
+                )}
             </ScrollView>
         </View>
     );

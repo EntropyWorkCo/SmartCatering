@@ -168,7 +168,10 @@ export default function HomeScreen() {
   const filteredUnpaidOrders = useMemo(() => {
     if (!orders) return [];
 
-    const unpaid = orders.filter((o) => !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status));
+    const unpaid = orders.filter((o) => {
+      const status = (o.status || "").toUpperCase();
+      return !["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ", "COMPLETED", "TAMAMLANDI"].includes(status);
+    });
 
     const now = new Date();
     return unpaid.filter(order => {
@@ -201,7 +204,7 @@ export default function HomeScreen() {
     if (!orders || orders.length === 0) return null;
     return [...orders]
       .sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime())
-      .find(o => o.order_type === "Sipariş Ver" && ["PENDING", "PREPARING", "READY", "HAZIR", "HAZIRLANIYOR", "BEKLEMEDE"].includes(o.status.toUpperCase()));
+      .find(o => o.order_type === "Sipariş Ver" && ["PENDING", "PREPARING", "READY", "HAZIR", "HAZIRLANIYOR", "BEKLEMEDE", "BEKLİYOR", "YOLDA"].includes(o.status.toUpperCase()));
   }, [orders]);
 
   const [localPhoto, setLocalPhoto] = React.useState<string | null>(null);
@@ -228,46 +231,96 @@ export default function HomeScreen() {
 
     const dateStr = new Date().toLocaleDateString('tr-TR');
 
+    const getLocalizedStatus = (status: string) => {
+      const s = (status || "").toUpperCase();
+      if (["PAID", "ÖDENDİ", "ÖDENDI"].includes(s)) return "ÖDENDİ";
+      if (["COMPLETED", "TAMAMLANDI"].includes(s)) return "TAMAMLANDI";
+      if (["CANCELLED", "İPTAL"].includes(s)) return "İPTAL";
+      if (["READY", "YOLDA", "HAZIR"].includes(s)) return "YOLDA";
+      if (["PREPARING", "HAZIRLANIYOR"].includes(s)) return "HAZIRLANIYOR";
+      return "BEKLİYOR";
+    };
+
     const tableRows = unpaidOrders.map((o: any) => {
       const d = new Date(o.created_at || o.date);
       const dateFormatted = `${d.toLocaleDateString('tr-TR')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      const statusLabel = getLocalizedStatus(o.status);
+      
       return `
-        <tr>
-            <td style="padding: 12px; border-bottom: 1px solid #ddd;">${dateFormatted}</td>
-            <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 12px; font-size: 11px; color: #64748b;">${dateFormatted}</td>
+            <td style="padding: 12px; font-size: 12px; color: #1e293b; font-weight: 500;">
               ${o.adisyon_items?.map((item: any) => `${item.quantity}x ${item.menu_items?.name || 'Yemek'}`).join('<br>') || 'Detay yok'}
             </td>
-            <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right;">₺${o.total_amount?.toLocaleString("tr-TR")}</td>
+            <td style="padding: 12px; font-size: 11px; font-weight: bold; color: ${statusLabel === 'ÖDENDİ' ? '#10b981' : '#f97316'}; text-align: center;">
+              ${statusLabel}
+            </td>
+            <td style="padding: 12px; font-size: 13px; font-weight: 900; color: #1e293b; text-align: right;">₺${o.total_amount?.toLocaleString("tr-TR")}</td>
         </tr>
-    `;
+      `;
     }).join('');
 
     const html = `
+        <!DOCTYPE html>
         <html>
-            <body style="font-family: Helvetica, Arial, sans-serif; padding: 40px; color: #333;">
-                <h1 style="color: ${colors.primary}; margin-bottom: 5px;">Smart Catering</h1>
-                <h2 style="color: #666; font-weight: normal; margin-top: 0;">Güncel Borç Dökümü</h2>
-                <p style="color: #888; font-size: 12px;">Müşteri: ${profile?.full_name || 'Misafir'}</p>
-                <p style="color: #888; font-size: 12px;">Tarih: ${dateStr}</p>
-                
-                <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 30px 0;">
-                    <p style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase;">Toplam Ödenmemiş Borç</p>
-                    <h2 style="margin: 10px 0 0 0; color: #e11d48;">₺${currentDebt.toLocaleString("tr-TR")}</h2>
-                </div>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <style>
+              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; background: #fff; }
+              .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; }
+              .brand-box { background: ${colors.primary}; color: white; padding: 8px 16px; border-radius: 8px; font-weight: 900; font-style: italic; font-size: 18px; display: inline-block; margin-bottom: 5px; }
+              .report-title { margin: 0; color: #0f172a; font-size: 24px; font-weight: 900; text-transform: uppercase; }
+              .meta-text { font-size: 12px; color: #64748b; margin-top: 4px; }
+              .summary-card { background: #f8fafc; padding: 25px; border-radius: 16px; margin: 30px 0; border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+              .summary-label { font-size: 11px; color: #64748b; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; }
+              .summary-value { font-size: 28px; font-weight: 900; color: #e11d48; margin-top: 5px; }
+              table { width: 100%; border-collapse: collapse; }
+              th { text-align: left; font-size: 10px; color: #64748b; padding: 12px; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; letter-spacing: 0.5px; }
+              .footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid #f1f5f9; text-align: center; color: #94a3b8; font-size: 10px; font-style: italic; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div>
+                <div class="brand-box">MEYDAN LOKANTA</div>
+                <h1 class="report-title">Hesap Özeti</h1>
+                <div class="meta-text">Müşteri: <strong>${profile?.full_name || 'Değerli Müşterimiz'}</strong></div>
+              </div>
+              <div style="text-align: right;">
+                <div class="meta-text">Tarih: <strong>${dateStr}</strong></div>
+                <div class="meta-text">Belge No: <strong>#${Math.random().toString(36).substring(7).toUpperCase()}</strong></div>
+              </div>
+            </div>
 
-                <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-                    <thead>
-                        <tr style="background-color: #f8f9fa; text-align: left;">
-                            <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">TARIH</th>
-                            <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666;">URUNLER</th>
-                            <th style="padding: 12px; border-bottom: 2px solid #ddd; font-weight: bold; font-size: 12px; color: #666; text-align: right;">TUTAR</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${tableRows}
-                    </tbody>
-                </table>
-            </body>
+            <div class="summary-card">
+              <div>
+                <div class="summary-label">Toplam Ödenmemiş Borç</div>
+                <div class="summary-value">₺${currentDebt.toLocaleString("tr-TR")}</div>
+              </div>
+              <div style="text-align: right; color: #64748b; font-size: 12px;">
+                <strong>${unpaidOrders.length}</strong> Sipariş Kaydı
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Tarih</th>
+                  <th>Hizmet / Ürünler</th>
+                  <th style="bottom: 12px; text-align: center;">Durum</th>
+                  <th style="text-align: right;">Tutar</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tableRows}
+              </tbody>
+            </table>
+
+            <div class="footer">
+              Bu belge bilgilendirme amaçlı otomatik oluşturulmuştur.<br/>
+              © ${new Date().getFullYear()} Meydan Lokanta | Tüm Hakları Saklıdır.
+            </div>
+          </body>
         </html>
     `;
 
@@ -336,6 +389,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Canlı Sipariş Takibi */}
+
         {activePacketOrder && (
           <LiveOrderTrackingCard order={activePacketOrder} colors={colors} />
         )}
@@ -498,10 +552,11 @@ const STATUS_COLORS: any = {
 };
 
 const STATUS_LABELS: any = {
-  "PENDING": "Alındı",
+  "PENDING": "Sipariş Alındı",
   "PREPARING": "Hazırlanıyor",
   "READY": "Yolda",
-  "COMPLETED": "Teslim",
+  "COMPLETED": "Tamamlandı",
+  "PAID": "Ödendi"
 };
 
 const STATUS_ICONS: any = {
@@ -519,9 +574,9 @@ const LiveOrderTrackingCard = ({ order, colors }: any) => {
     let currentStepIndex = Math.max(0, steps.indexOf(status));
     
     // Fallback logic
-    const activeColor = STATUS_COLORS[status] || colors.primary;
-    const activeIcon = STATUS_ICONS[status] || "info";
-    const activeLabel = STATUS_LABELS[status] || status;
+    const activeColor = STATUS_COLORS[status.toUpperCase()] || colors.primary;
+    const activeIcon = STATUS_ICONS[status.toUpperCase()] || "info";
+    const activeLabel = STATUS_LABELS[status.toUpperCase()] || status;
 
     return (
         <View style={{ backgroundColor: colors.surface, borderRadius: 24, padding: 20, marginBottom: 32, borderWidth: 1, borderColor: activeColor, shadowColor: activeColor, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 }}>

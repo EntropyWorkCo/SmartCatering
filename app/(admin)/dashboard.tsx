@@ -27,10 +27,11 @@ const STATUS_COLORS: any = {
 
 const STATUS_LABELS: any = {
   "PENDING": "Sipariş Alındı",
-  "PREPARING": "Mutfakta",
+  "PREPARING": "Hazırlanıyor",
   "READY": "Yolda",
-  "COMPLETED": "Teslim Edildi",
+  "COMPLETED": "Tamamlandı",
   "CANCELLED": "İptal Edildi",
+  "PAID": "Ödendi"
 };
 
 export default function AdminDashboard() {

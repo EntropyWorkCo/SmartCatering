@@ -51,6 +51,8 @@ export default function Customers() {
   const [ekstreTargetGroup, setEkstreTargetGroup] = useState<any>(null);
   const [ekstreStartDate, setEkstreStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [ekstreEndDate, setEkstreEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [ekstreUnitPrice, setEkstreUnitPrice] = useState("0");
+  const [ekstrePaymentStatus, setEkstrePaymentStatus] = useState<'ODENDI' | 'BEKLIYOR'>('BEKLIYOR');
 
   useEffect(() => {
     fetchCustomers();
@@ -89,9 +91,10 @@ export default function Customers() {
             balance = 0;
           } else {
             if (ordersData) {
-              const userOrders = ordersData.filter((o: any) => 
-                o.user_id === profile.id && !["CANCELLED", "İptal", "PAID", "Ödendi", "COMPLETED", "Tamamlandı"].includes(o.status)
-              );
+              const userOrders = ordersData.filter((o: any) => {
+                const status = (o.status || "").toUpperCase();
+                return o.user_id === profile.id && !["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ", "COMPLETED", "TAMAMLANDI"].includes(status);
+              });
               balance = userOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0);
             }
           }
@@ -252,52 +255,32 @@ export default function Customers() {
       const start = new Date(ekstreStartDate + "T00:00:00");
       const end = new Date(ekstreEndDate + "T23:59:59");
 
-      let devreden_bakiye = 0;
       let bu_donemin_borcu = 0;
-      const donemIciIslemler = [];
+      const donemIciIslemler: any[] = [];
 
       for (const o of orders) {
         const d = new Date(o.created_at || o.date);
         const tutar = o.total_amount || 0;
         const statusUpper = (o.status || "").toUpperCase();
-        
-        const isPaid = ["PAID", "ÖDENDİ", "COMPLETED", "TAMAMLANDI"].includes(statusUpper);
+        const isPaid = ["PAID", "ÖDENDI", "ÖDENDİ", "COMPLETED", "TAMAMLANDI"].includes(statusUpper);
         const isCancelled = ["CANCELLED", "İPTAL"].includes(statusUpper);
-
-        if (isCancelled) continue; // İptalleri dahil etme
-
-        if (d < start) {
-           if (!isPaid) devreden_bakiye += tutar; 
-        } else if (d >= start && d <= end) {
-           if (!isPaid) bu_donemin_borcu += tutar;
-           donemIciIslemler.push(o);
+        if (isCancelled) continue;
+        if (d >= start && d <= end) {
+          if (!isPaid) bu_donemin_borcu += tutar;
+          donemIciIslemler.push(o);
         }
       }
 
-      // Tüketim listesini isme ve tarihe göre alfabetik-kronolojik dizebiliriz
       donemIciIslemler.sort((a, b) => new Date(a.created_at || a.date).getTime() - new Date(b.created_at || b.date).getTime());
 
-      const reportData = {
-        firma_adi: ekstreTargetGroup.companyName,
-        vkn: ekstreTargetGroup.vkn || "-",
-        firma_adres: ekstreTargetGroup.address || "Kayıtlı Adres",
-        firma_telefon: ekstreTargetGroup.phone || "-",
-        ekstre_no: Math.floor(1000 + Math.random() * 9000).toString(),
-        donem_araligi: `${new Date(start).toLocaleDateString('tr-TR')} - ${new Date(end).toLocaleDateString('tr-TR')}`,
-        dokuman_tarihi: new Date().toLocaleDateString('tr-TR'),
-        devreden_bakiye: devreden_bakiye,
-        bu_donemin_borcu: bu_donemin_borcu,
-        guncel_toplam_borc: devreden_bakiye + bu_donemin_borcu,
-        islemler: donemIciIslemler.map((o: any) => ({
-          tarih: new Date(o.created_at || o.date).toLocaleDateString('tr-TR'),
-          aciklama: o.order_type === 'MANUAL_DEBT' 
-            ? `Admin Borç Girişi (${o.note || ''})` 
-            : `Hizmet: ${o.userName} - ${o.adisyon_items?.map((i: any) => i.menu_items?.name).join(', ') || 'Sipariş'}`,
-          tutar: (o.total_amount || 0).toLocaleString('tr-TR'),
-        }))
+      const account = {
+        displayName: ekstreTargetGroup.companyName,
+        isCorporate: true,
+        manualDebt: ekstreTargetGroup.totalDebt || bu_donemin_borcu,
+        total: bu_donemin_borcu,
       };
 
-      await pdfService.generateCompanyReport(reportData);
+      pdfService.generateCompanyExtre(account, donemIciIslemler);
       setEkstreModalVisible(false);
     } catch (err: any) {
       console.error("Ekstre oluşturma hatası:", err);
@@ -611,32 +594,63 @@ export default function Customers() {
                     </p>
                  </div>
                  
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Başlangıç Tarihi</label>
-                       <div className="relative">
-                          <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                          <input 
-                            type="date"
-                            value={ekstreStartDate}
-                            onChange={(e) => setEkstreStartDate(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-xs font-bold focus:outline-none focus:border-accent"
-                          />
-                       </div>
+                 <div style={{ marginBottom: '24px' }}>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Dönem Birim Fiyatı (₺)</label>
+                    <div className="relative">
+                      <input 
+                        type="number"
+                        value={ekstreUnitPrice}
+                        onChange={(e) => setEkstreUnitPrice(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-xl font-black focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent transition-all"
+                        placeholder="0.00"
+                      />
+                      <div className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 font-black">TL</div>
                     </div>
-                    <div>
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Bitiş Tarihi</label>
-                       <div className="relative">
-                          <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                          <input 
-                            type="date"
-                            value={ekstreEndDate}
-                            onChange={(e) => setEkstreEndDate(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-xs font-bold focus:outline-none focus:border-accent"
-                          />
-                       </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Başlangıç Tarihi</label>
+                        <div className="relative">
+                           <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                           <input 
+                             type="date"
+                             value={ekstreStartDate}
+                             onChange={(e) => setEkstreStartDate(e.target.value)}
+                             className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-xs font-bold focus:outline-none focus:border-accent"
+                           />
+                        </div>
+                     </div>
+                     <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Bitiş Tarihi</label>
+                        <div className="relative">
+                           <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                           <input 
+                             type="date"
+                             value={ekstreEndDate}
+                             onChange={(e) => setEkstreEndDate(e.target.value)}
+                             className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-xs font-bold focus:outline-none focus:border-accent"
+                           />
+                        </div>
+                     </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Ödeme Durumu</label>
+                    <div className="flex bg-slate-100 p-1 rounded-xl">
+                      {(["BEKLIYOR", "ODENDI"] as const).map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => setEkstrePaymentStatus(s)}
+                          className={`flex-1 py-2 rounded-lg text-[10px] font-black transition-all ${
+                            ekstrePaymentStatus === s ? "bg-white text-slate-900 shadow-sm" : "text-slate-400"
+                          }`}
+                        >
+                          {s === "BEKLIYOR" ? "⏳ BEKLENİYOR" : "✅ ÖDENDİ"}
+                        </button>
+                      ))}
                     </div>
-                 </div>
+                  </div>
 
                  <div className="pt-4 flex items-center space-x-3">
                     <button 

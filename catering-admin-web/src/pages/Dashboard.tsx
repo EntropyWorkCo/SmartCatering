@@ -22,8 +22,11 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Cell
+  Cell,
+  LabelList
 } from "recharts";
+
+const CHART_COLORS = ["#74CF62", "#3b82f6", "#f59e0b", "#ec4899", "#8b5cf6"];
 import { adisyonService } from "../lib/services/adisyonService";
 import { supabase } from "../lib/supabase";
 
@@ -134,7 +137,7 @@ export default function Dashboard() {
       
       const pendingOrders = allOrders.filter(o => 
         ["PAKET", "Sipariş Ver"].includes(o.order_type) && 
-        ["PENDING", "PREPARING", "HAZIRLANIYOR"].includes(o.status)
+        ["PENDING", "PREPARING", "HAZIRLANIYOR", "BEKLİYOR", "YOLDA"].includes(String(o.status).toUpperCase())
       ).length;
 
       const dailyRevenue = todayOrders
@@ -183,12 +186,16 @@ export default function Dashboard() {
         },
       ]);
 
-      // 4. Process Popular Items
+      // 4. Process Popular Items — read from adisyon_items[].menu_items.name & quantity
       const itemCounts: { [key: string]: number } = {};
-      allOrders.filter(o => !["CANCELLED", "İptal"].includes(o.status)).forEach(order => {
-        const itemName = order.itemName || "Karışık Menü"; 
-        itemCounts[itemName] = (itemCounts[itemName] || 0) + 1;
-      });
+      allOrders
+        .filter(o => !["CANCELLED", "İPTAL", "İptal"].includes((o.status || "").toUpperCase()))
+        .forEach(order => {
+          (order.adisyon_items || []).forEach((item: any) => {
+            const name = item.menu_items?.name || "Bilinmiyor";
+            itemCounts[name] = (itemCounts[name] || 0) + (item.quantity || 1);
+          });
+        });
 
       const sortedItems = Object.entries(itemCounts)
         .map(([name, count]) => ({ name, count }))
@@ -302,7 +309,12 @@ export default function Dashboard() {
                     </div>
                     <div className="text-right">
                        <p className="text-sm font-black text-slate-900 dark:text-white">₺{order.total_amount}</p>
-                       <span className="text-[9px] font-black uppercase text-accent">{order.status}</span>
+                       <span className="text-[9px] font-black uppercase text-accent">
+                         {String(order.status).toUpperCase() === 'PENDING' ? 'BEKLİYOR' :
+                          String(order.status).toUpperCase() === 'PREPARING' ? 'HAZIRLANIYOR' :
+                          String(order.status).toUpperCase() === 'READY' ? 'YOLDA' :
+                          String(order.status).toUpperCase() === 'COMPLETED' ? 'TAMAMLANDI' : order.status}
+                       </span>
                     </div>
                   </div>
                 ))
@@ -332,34 +344,55 @@ export default function Dashboard() {
               <BarChart3 size={20} className="text-blue-500" />
               <span>En Popüler Yemekler</span>
             </h2>
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Sık Tercih Edilen 5 Ürün</p>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Tüm Zamanların En Çok Sipariş Edilen 5 Ürünü</p>
           </div>
         </div>
-        <div className="h-[250px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={popularItems} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" opacity={0.1} />
-              <XAxis type="number" hide />
-              <YAxis 
-                dataKey="name" 
-                type="category" 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fill: '#64748b', fontSize: 11, fontWeight: 800 }}
-                width={120}
-              />
-              <Tooltip 
-                cursor={{ fill: 'rgba(116, 207, 98, 0.05)' }}
-                contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', backgroundColor: 'var(--color-surface)' }}
-              />
-              <Bar dataKey="count" radius={[0, 10, 10, 0]} barSize={24}>
-                {popularItems.map((_entry: any, index: number) => (
-                  <Cell key={`cell-${index}`} fill={index === 0 ? '#74CF62' : '#cbd5e1'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+
+        {popularItems.length === 0 ? (
+          <div className="h-[280px] flex flex-col items-center justify-center text-slate-300 dark:text-slate-700">
+            <UtensilsCrossed size={48} />
+            <p className="mt-3 text-xs font-bold uppercase tracking-widest">Henüz yemek verisi yok</p>
+          </div>
+        ) : (
+          <div className="h-[280px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={popularItems} layout="vertical" margin={{ left: 0, right: 48, top: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" opacity={0.5} />
+                <XAxis type="number" hide />
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#64748b', fontSize: 12, fontWeight: 800 }}
+                  width={140}
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(116, 207, 98, 0.08)' }}
+                  contentStyle={{
+                    borderRadius: '16px',
+                    border: 'none',
+                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.15)',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                  }}
+                  formatter={(value: any) => [`${value} Adet`, "Toplam Sipariş"]}
+                />
+                <Bar dataKey="count" radius={[0, 12, 12, 0]} barSize={28}>
+                  <LabelList
+                    dataKey="count"
+                    position="right"
+                    formatter={(v: any) => `${v}×`}
+                    style={{ fontSize: 11, fontWeight: 900, fill: '#64748b' }}
+                  />
+                  {popularItems.map((_entry: any, index: number) => (
+                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
     </div>
   );
