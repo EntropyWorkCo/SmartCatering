@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1074305568675:android:90cc0e633d4faae72a5416",
+        "mobilesdk_app_id": "1:1074305568675:android:6aa793efba4b12352a5416",
         "android_client_info": {
-          "package_name": "com.anonymous.mobileapp"
+          "package_name": "com.entropywork.smartcatering"
         }
       },
       "oauth_client": [],

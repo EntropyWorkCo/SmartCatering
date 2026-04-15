@@ -7,5 +7,7 @@
   "css.lint.unknownAtRules": "ignore",
   "tailwindCSS.includeLanguages": {
     "plaintext": "ts"
-  }
+  },
+  "java.configuration.updateBuildConfiguration": "interactive",
+  "java.compile.nullAnalysis.mode": "automatic"
 }
