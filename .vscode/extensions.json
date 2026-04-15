@@ -1,3 +1,5 @@
-{ "recommendations": ["expo.vscode-expo-tools"] } 
-//Bu eklenti, Expo projelerinde kod tamamlama, hata ayıklama ve yapılandırma dosyalarında yardımcı olan resmi bir araçtır.
-
+{
+  "recommendations": [
+    "denoland.vscode-deno"
+  ]
+}

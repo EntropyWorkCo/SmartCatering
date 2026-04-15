@@ -1,113 +1,39 @@
 import { supabase } from '../supabase';
 
-// Gerçek TopluSMS API Entegrasyonu
+// Supabase Edge Function üzerinden İletiMerkezi API entegrasyonu
 export const sendOtp = async (phone: string): Promise<boolean> => {
     try {
-        // 1. 6 Haneli Rastgele Kod Üret
-        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-        // 2. Supabase otp_codes tablosuna kaydet
-        const { error: dbError } = await supabase
-            .from('otp_codes' as any)
-            .insert([{ phone, code: otpCode }] as any);
-            
-        if (dbError) {
-            console.error("OTP Veritabanı Kayıt Hatası:", dbError);
-            return false;
-        }
-
-        // 3. İletiMerkezi (POST JSON) API İsteği
-        // Not: Çevre değişkenlerini .env'nizden alıyoruz. Expo'da EXPO_PUBLIC_ ön eki gerekir.
-        const apiKey = process.env.EXPO_PUBLIC_SMS_KEY || "";
-        const apiHash = process.env.EXPO_PUBLIC_SMS_HASH || "";
-        const sender = process.env.EXPO_PUBLIC_SMS_SENDER || "";
-
-        // İletiMerkezi telefon numarasını 5xxxxxxxxx formatında bekliyor
-        const cleanPhone = phone.replace(/\D/g, "").slice(-10);
-        
-        const messageText = `MeydanLokanta onay kodunuz: ${otpCode}. Lütfen kimseyle paylaşmayın.`;
-
-        const apiUrl = "https://api.iletimerkezi.com/v1/send-sms/json";
-        const payload = {
-            request: {
-                authentication: {
-                    key: apiKey,
-                    hash: apiHash
-                },
-                order: {
-                    sender: sender,
-                    iys: "0",
-                    message: {
-                        text: messageText,
-                        receipents: {
-                            number: [cleanPhone]
-                        }
-                    }
-                }
-            }
-        };
-
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
+        const { data, error } = await supabase.functions.invoke('send-otp', {
+            body: { phone }
         });
 
-        const rawText = await response.text();
-        console.log("IletiMerkezi Ham Cevap:", rawText);
-
-        try {
-            const jsonData = JSON.parse(rawText);
-            
-            if (jsonData?.response?.status?.code == 200 || jsonData?.response?.status?.code === "200") {
-                return true;
-            } else {
-                console.error("IletiMerkezi Hata (401 vb):", jsonData);
-                return false;
-            }
-        } catch (e) {
-            console.error("IletiMerkezi JSON okunamadı, cevap parçalanamıyor:", rawText);
+        if (error || !data?.success) {
+            console.error("OTP Gönderim Hatası (Edge Function):", error?.message || data?.error);
             return false;
         }
+
+        return true;
     } catch (error) {
-        console.error("OTP Gönderim Hatası:", error);
+        console.error("Beklenmeyen OTP Gönderim Hatası:", error);
         return false;
     }
 };
 
 /**
- * Kullanıcının girdiği OTP kodunu doğrular.
+ * Edge Function üzerinden OTP kodunu doğrular.
  * @param phone Telefon numarası
  * @param code Kullanıcının girdiği 6 haneli kod
  */
 export const verifyOtp = async (phone: string, code: string): Promise<boolean> => {
     try {
-        // En son geçerli olan kodu çek (kullanılmamış ve 5 dakika içinde üretilmiş)
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-        
-        const { data, error } = await (supabase
-            .from('otp_codes' as any)
-            .select('*')
-            .eq('phone', phone)
-            .eq('code', code)
-            .eq('is_used', false)
-            .gte('created_at', fiveMinutesAgo)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single() as any);
+        const { data, error } = await supabase.functions.invoke('verify-otp', {
+            body: { phone, code }
+        });
 
-        if (error || !data) {
-            console.error("OTP Doğrulama Hatası veya Süresi Dolmuş:", error?.message);
+        if (error || !data?.success) {
+            console.error("OTP Doğrulama Hatası (Edge Function):", error?.message || data?.error);
             return false;
         }
-
-        // Kodu kullanıldı olarak işaretle
-        await supabase
-            .from('otp_codes' as any)
-            .update({ is_used: true } as any)
-            .eq('id', data.id);
 
         return true;
     } catch (e) {
