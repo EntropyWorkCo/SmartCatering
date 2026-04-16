@@ -82,37 +82,25 @@ export const sendOtp = async (phone: string): Promise<boolean> => {
  * @param phone Telefon numarası
  * @param code Kullanıcının girdiği 6 haneli kod
  */
-export const verifyOtp = async (phone: string, code: string): Promise<boolean> => {
+export const verifyOtp = async (phone: string, code: string): Promise<any> => {
     try {
-        // En son geçerli olan kodu çek (kullanılmamış ve 5 dakika içinde üretilmiş)
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-        
-        const { data, error } = await (supabase
-            .from('otp_codes' as any)
-            .select('*')
-            .eq('phone', phone)
-            .eq('code', code)
-            .eq('is_used', false)
-            .gte('created_at', fiveMinutesAgo)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single() as any);
+        const { data, error } = await supabase.functions.invoke('verify-otp', {
+            body: { phone, code },
+        });
 
-        if (error || !data) {
-            console.error("OTP Doğrulama Hatası veya Süresi Dolmuş:", error?.message);
-            return false;
+        if (error) {
+            console.error("verifyOtp Hatası:", error);
+            return { success: false, error: error.message };
         }
 
-        // Kodu kullanıldı olarak işaretle
-        await supabase
-            .from('otp_codes' as any)
-            .update({ is_used: true } as any)
-            .eq('id', data.id);
-
-        return true;
-    } catch (e) {
+        if (data && data.success) {
+            return data; // { success: true, user_exists: true/false, access_token, etc. }
+        } else {
+            return { success: false, error: data?.error || "Doğrulama başarısız" };
+        }
+    } catch (e: any) {
          console.error("verifyOtp Hatası:", e);
-         return false;
+         return { success: false, error: e.message };
     }
 };
 

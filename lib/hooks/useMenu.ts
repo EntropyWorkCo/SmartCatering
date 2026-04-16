@@ -24,9 +24,11 @@ export const useMenu = (onlyActive: boolean = true) => {
   useEffect(() => {
     fetchMenu();
 
-    // Realtime Güncelleme Dinleyicisi
+    // Benzersiz bir kanal adı oluştur, çünkü bu hook birden fazla yerde çağrılırsa aynı kanala 2 kere abone olmaya çalışıp hata verir.
+    const channelName = `menu-items-changes-${Math.random().toString(36).substring(7)}`;
+
     const channel = supabase
-      .channel("menu-items-changes")
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "menu_items" },

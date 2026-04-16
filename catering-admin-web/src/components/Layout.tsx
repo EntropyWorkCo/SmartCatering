@@ -1,4 +1,4 @@
-import { Outlet, Link, useLocation } from "react-router-dom";
+import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
   ShoppingBag, 
@@ -20,6 +20,8 @@ import { supabase } from "../lib/supabase";
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("theme");
@@ -117,6 +119,15 @@ export default function Layout() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      navigate("/login");
+    } catch (error) {
+      console.error("Çıkış yapılırken hata oluştu:", error);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     const s = (status || "").toUpperCase();
     switch (s) {
@@ -187,7 +198,10 @@ export default function Layout() {
             <p className="text-[10px] text-slate-500">Son güncelleme: Az önce</p>
           </div>
           
-          <button className="w-full flex items-center space-x-3 py-3 px-4 text-slate-400 hover:bg-red-500/10 hover:text-red-400 rounded-xl transition-all duration-200 group">
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center space-x-3 py-3 px-4 text-slate-400 hover:bg-red-500/10 hover:text-red-400 rounded-xl transition-all duration-200 group"
+          >
             <LogOut size={18} className="group-hover:-translate-x-1 transition-transform" />
             <span className="text-sm font-medium">Güvenli Çıkış</span>
           </button>
@@ -291,10 +305,33 @@ export default function Layout() {
               )}
             </div>
             <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-800"></div>
-            <div className="flex items-center space-x-3 pl-2">
-              <div className="w-10 h-10 bg-gradient-to-tr from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 rounded-full flex items-center justify-center text-slate-600 dark:text-slate-200 font-bold border-2 border-white dark:border-slate-800 shadow-sm">
-                A
-              </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                className="flex items-center space-x-3 pl-2 group"
+              >
+                <div className="w-10 h-10 bg-gradient-to-tr from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 rounded-full flex items-center justify-center text-slate-600 dark:text-slate-200 font-bold border-2 border-white dark:border-slate-800 shadow-sm group-hover:shadow-md transition-all">
+                  A
+                </div>
+              </button>
+
+              {showProfileMenu && (
+                <div className="absolute right-0 mt-4 w-56 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden z-50">
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">Admin Kullanıcı</p>
+                    <p className="text-xs text-slate-500">admin@meydan.app</p>
+                  </div>
+                  <div className="p-2">
+                    <button 
+                      onClick={handleLogout}
+                      className="w-full flex items-center space-x-3 p-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-colors font-medium text-sm"
+                    >
+                      <LogOut size={16} />
+                      <span>Sistemden Çıkış Yap</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>

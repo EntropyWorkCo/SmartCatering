@@ -88,12 +88,13 @@ export const userService = {
       console.error("User tablosu güncellenirken hata:", userUpdateError);
     }
   },
-  async updateProfile(userId: string, data: { fullName: string, phone: string }) {
+  async updateProfile(userId: string, data: { fullName: string, phone: string, address?: string }) {
     const { error } = await supabase
       .from("users")
       .update({
         full_name: data.fullName,
         phone: data.phone,
+        address: data.address || null,
       })
       .eq("id", userId);
 

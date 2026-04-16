@@ -51,46 +51,38 @@ export default function OtpVerifyScreen() {
         setLoading(true);
 
         try {
-            const isMatch = await verifyOtp(phone, code);
-            if (!isMatch) {
-                Alert.alert("Hatalı Kod", "Girdiğiniz kod yanlış veya süresi dolmuş. Lütfen tekrar deneyin.");
+            const result = await verifyOtp(phone, code);
+            if (!result || !result.success) {
+                Alert.alert("Hatalı Kod", result?.error || "Girdiğiniz kod yanlış veya süresi dolmuş. Lütfen tekrar deneyin.");
                 setLoading(false);
                 return;
             }
 
-            // --- Gerçek OTP (SMS servisi tam gelene dek) Doğrulandı, İşlemlere Başla ---
-            // --- Akıllı Telefon Eşleştirme (Migration Support) ---
-            const clean10 = phone.replace(/\D/g, "").slice(-10); // Son 10 hane (5XXXXXXXXX)
-            const clean0 = `0${clean10}`; // 0 ile başlayan (05XXXXXXXXX)
-            const cleanPlus90 = `+90${clean10}`; // Tam format (+905XXXXXXXXX)
-
-            // Önce bu numaraya sahip bir kullanıcı var mı (herhangi bir formatta) ona bakalım
-            const { data: existingUser } = await supabase
-                .from("users")
-                .select("*")
-                .or(`phone.eq."${clean10}",phone.eq."${clean0}",phone.eq."${cleanPlus90}"`)
-                .maybeSingle();
-
-            // Eğer kullanıcı bulunduysa, sistemdeki kayıtlı numarasını (ve formatını) kullanalım
-            const effectivePhone = existingUser ? existingUser.phone : cleanPlus90;
+            let basePhone = phone.replace(/[^0-9]/g, "");
+            if (basePhone.startsWith("90") && basePhone.length > 10) basePhone = basePhone.slice(2);
+            if (basePhone.startsWith("0")) basePhone = basePhone.slice(1);
+            
+            const cleanPhone = `90${basePhone}`;
+            const effectivePhone = `+90${basePhone}`;
             const fakeEmail = `${effectivePhone}@meydan.com`;
+            const staticPassword = `${effectivePhone}OtpPassword!`;
 
             if (mode === "register") {
-                // KAYIT İŞLEMİ (Eğer kullanıcı zaten varsa login'e yönlendirilmeli ama OtpVerifyScreen genelde buna gelmez)
-                if (existingUser) {
+                if (result.user_exists) {
                     Alert.alert("Bilgi", "Bu numara zaten kayıtlı. Lütfen giriş yapın.");
                     router.replace("/auth/login");
                     return;
                 }
 
                 const isCompany = role === "owner";
+                // Edge Function says user doesn't exist, we must register them.
                 const { data: authData, error: authError } = await supabase.auth.signUp({
                     email: fakeEmail,
-                    password: `${effectivePhone}OtpPassword!`, // Şifre kayıtlı numara formatıyla eşleşmeli
+                    password: staticPassword,
                     options: {
                         data: {
                             full_name: name,
-                            phone: effectivePhone, // Veritabanına yeni standart (+90) ile kaydedilecek
+                            phone: effectivePhone,
                             is_company: isCompany,
                             role: role,
                         },
@@ -109,48 +101,75 @@ export default function OtpVerifyScreen() {
 
                 if (authData.session) {
                     Alert.alert("Başarılı", "Hesabınız oluşturuldu!");
+                    await triggerAuthRefresh();
                     router.replace("/(tabs)/home");
                 } else {
                     router.replace("/auth/login");
                 }
             } else {
-                // GİRİŞ PENCERESİ
-                if (!existingUser) {
+                // LOGIN MODE
+                if (!result.user_exists) {
                     Alert.alert("Kayıt Bulunamadı", "Bu numarayla eşleşen hesabınız bulunamadı. Lütfen kayıt olmayı deneyin.");
                     setLoading(false);
                     return;
                 }
 
+                // If role is employee, we need to check if they have a company_id
+                // The edge function returned the user record!
+                const existingUser = result.user;
+
+                const isActuallyCompany = existingUser?.is_company === true 
+                                        || existingUser?.role === 'owner' 
+                                        || existingUser?.role === 'corporate';
+
+                // Yetki Çapraz Giriş Engeli (Bireysel üyeler Kurumsal'dan, Kurumsallar Bireyselden giremesin)
+                if (role === 'owner' && !isActuallyCompany) {
+                    Alert.alert("Giriş Hatası", "Bu numara bireysel hesaba aittir. Firma sahibi girişi yapılamaz.");
+                    setLoading(false);
+                    return;
+                }
+                
+                if (role === 'individual' && isActuallyCompany) {
+                    Alert.alert("Giriş Hatası", "Bu numara kurumsal hesaba aittir. Lütfen Firma / Çalışan girişini kullanın.");
+                    setLoading(false);
+                    return;
+                }
                 if (role === 'employee') {
-                    // Çalışan kontrolü (Zaten existingUser içinde company_id olmalı)
-                    if (!existingUser.company_id || !existingUser.is_company) {
+                    if (!existingUser?.company_id || !existingUser?.is_company) {
                         Alert.alert("Hata", "Firma kaydınız doğrulanamadı.");
                         setLoading(false);
                         return;
                     }
 
                     await AsyncStorage.setItem("softUser", JSON.stringify(existingUser));
+                    
+                    // We also need to set the session
+                    const { error: sessionError } = await supabase.auth.setSession({
+                        access_token: result.access_token,
+                        refresh_token: result.refresh_token,
+                    });
+                    
+                    if (sessionError) throw sessionError;
+                    
                     await triggerAuthRefresh();
                     router.replace("/(tabs)/home");
                     return;
                 }
 
-                // Owner veya Individual için Auth Girişi
-                const { data, error } = await supabase.auth.signInWithPassword({
-                    email: fakeEmail,
-                    password: `${effectivePhone}OtpPassword!`, 
+                // Normal Login (Owner/Individual) - use Edge Function's tokens directly
+                const { error: sessionError } = await supabase.auth.setSession({
+                    access_token: result.access_token,
+                    refresh_token: result.refresh_token,
                 });
 
-                if (error) {
-                    Alert.alert("Giriş Başarısız", "Şifre veya kullanıcı formatı hatası. Lütfen tekrar deneyin.");
+                if (sessionError) {
+                    Alert.alert("Giriş Başarısız", "Oturum oluşturulamadı: " + sessionError.message);
                     setLoading(false);
                     return;
                 }
 
-                if (data.session) {
-                    await triggerAuthRefresh();
-                    router.replace("/(tabs)/home");
-                }
+                await triggerAuthRefresh();
+                router.replace("/(tabs)/home");
             }
         } catch (error: any) {
             Alert.alert("Hata Oluştu", error.message);

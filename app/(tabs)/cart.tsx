@@ -55,6 +55,9 @@ export default function CartScreen() {
                 }
             } else {
                 // For individual users
+                if (profile.address && !address) {
+                    setAddress(profile.address);
+                }
                 if (profile.phone && !phone) {
                     setPhone(profile.phone);
                 }

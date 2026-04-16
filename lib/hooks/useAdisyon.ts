@@ -41,8 +41,11 @@ export const useAdisyon = (userId?: string, onNewOrder?: (payload: any) => void)
     };
     if (filterQuery) channelConf.filter = filterQuery;
 
+    const baseName = userId ? `custom-update-channel-${userId}` : "custom-update-channel-admin";
+    const channelName = `${baseName}-${Math.random().toString(36).substring(7)}`;
+
     const channel = supabase
-      .channel(userId ? `custom-update-channel-${userId}` : "custom-update-channel-admin")
+      .channel(channelName)
       .on(
         "postgres_changes",
         channelConf,
@@ -58,7 +61,7 @@ export const useAdisyon = (userId?: string, onNewOrder?: (payload: any) => void)
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, onNewOrder]);
+  }, [userId]);
 
   return {
     orders,

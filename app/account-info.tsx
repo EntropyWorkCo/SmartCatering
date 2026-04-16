@@ -21,12 +21,14 @@ export default function AccountInfoScreen() {
     const { profile, loading } = useProfile(user?.id);
     const [fullName, setFullName] = useState("");
     const [phone, setPhone] = useState("");
+    const [address, setAddress] = useState("");
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         if (profile) {
             setFullName(profile.full_name || "");
             setPhone(profile.phone || "");
+            setAddress(profile.address || "");
         }
     }, [profile]);
 
@@ -63,7 +65,8 @@ export default function AccountInfoScreen() {
         try {
             await userService.updateProfile(user.id, {
                 fullName,
-                phone
+                phone,
+                address
             });
             Alert.alert("Başarılı", "Bilgileriniz başarıyla kaydedildi.");
         } catch (error: any) {
@@ -163,10 +166,39 @@ export default function AccountInfoScreen() {
                     </View>
                 </View>
 
+                <View style={styles.formGroup}>
+                    <Text style={styles.label}>Adres</Text>
+                    <View style={[styles.inputContainer, { height: 'auto', paddingVertical: 12 }]}>
+                        <MaterialIcons name="location-on" size={20} color={colors.primary} style={{ marginTop: 2 }} />
+                        <TextInput
+                            style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
+                            value={address}
+                            onChangeText={setAddress}
+                            placeholder="Açık adresinizi giriniz"
+                            placeholderTextColor={colors.muted}
+                            multiline
+                            numberOfLines={3}
+                        />
+                    </View>
+                </View>
+
+                {/* Kaydet Butonu */}
+                <TouchableOpacity 
+                    style={[styles.saveBtn, saving && { opacity: 0.7 }]} 
+                    onPress={handleSave} 
+                    disabled={saving}
+                >
+                    {saving ? (
+                        <ActivityIndicator color={colors.background} />
+                    ) : (
+                        <Text style={styles.saveBtnText}>BİLGİLERİMİ KAYDET</Text>
+                    )}
+                </TouchableOpacity>
+
                 <View style={styles.infoBox}>
                     <MaterialIcons name="info-outline" size={20} color={colors.muted} />
                     <Text style={styles.infoText}>
-                        Hesap bilgileriniz güvenlik ve giriş tutarlılığı için değiştirilemez. Değişiklik talepleriniz için lütfen yönetici ile iletişime geçin.
+                        Ad ve Telefon bilgileriniz güvenlik için değiştirilemez. adres bilginiz ise siparişlerinizde otomatik kullanılır.
                     </Text>
                 </View>
             </ScrollView>
