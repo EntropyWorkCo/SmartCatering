@@ -118,6 +118,13 @@ export default function OtpVerifyScreen() {
                 // The edge function returned the user record!
                 const existingUser = result.user;
 
+                // Silinmiş hesap engeli
+                if (existingUser?.role === 'deleted') {
+                    Alert.alert("Hesap Silinmiş", "Bu hesap bağlı bulunduğu firma tarafından silinmiştir veya askıya alınmıştır. Giriş yapılamaz.");
+                    setLoading(false);
+                    return;
+                }
+
                 const isActuallyCompany = existingUser?.is_company === true 
                                         || existingUser?.role === 'owner' 
                                         || existingUser?.role === 'corporate';

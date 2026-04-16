@@ -94,7 +94,6 @@ export const userService = {
       .update({
         full_name: data.fullName,
         phone: data.phone,
-        address: data.address || null,
       })
       .eq("id", userId);
 
@@ -147,6 +146,7 @@ export const userService = {
       .from("users")
       .select("*")
       .eq("company_id", companyId)
+      .neq("role", "deleted")
       .order("created_at", { ascending: false });
     if (error) throw error;
     return data;
@@ -169,11 +169,11 @@ export const userService = {
   },
 
   async deleteEmployee(employeeId: string) {
-    // Unlink the employee from the company rather than hard deleting the user row, 
-    // to preserve adisyon history and avoid FK violation if any exist.
+    // Soft delete by setting role to "deleted". We keep company_id intact because
+    // updating it to null violates the Row-Level Security policy for company owners.
     const { error } = await supabase
       .from("users")
-      .update({ company_id: null, is_company: false, role: "customer" })
+      .update({ role: "deleted" })
       .eq("id", employeeId);
       
     if (error) throw error;
