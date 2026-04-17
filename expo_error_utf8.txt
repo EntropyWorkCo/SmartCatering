@@ -1,3 +1,0 @@
-﻿Starting project at C:\catering-proje
-ÔÇ║ Port 8081 is being used by another process
-ÔÇ║ Skipping dev server

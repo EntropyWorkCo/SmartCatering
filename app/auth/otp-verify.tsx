@@ -33,6 +33,7 @@ export default function OtpVerifyScreen() {
     const name = params.name as string;
     const companyName = params.companyName as string;
     const vkn = params.vkn as string;
+    const address = params.address as string;
     
     const [code, setCode] = useState("");
     const [loading, setLoading] = useState(false);
@@ -97,6 +98,11 @@ export default function OtpVerifyScreen() {
                         company_name: companyName,
                         tax_number: vkn,
                     });
+                }
+
+                // Kayıt sırasında girilen adresi kaydet (bireysel kullanıcı için)
+                if (authData.user && address?.trim() && !isCompany) {
+                    await supabase.from("users").update({ address } as any).eq("id", authData.user.id);
                 }
 
                 if (authData.session) {

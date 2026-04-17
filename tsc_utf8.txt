@@ -1,4 +1,0 @@
-﻿app/(admin)/menu.tsx(296,48): error TS7006: Parameter 't' implicitly has an 'any' type.
-app/(admin)/menu.tsx(337,48): error TS7006: Parameter 't' implicitly has an 'any' type.
-app/(admin)/menu.tsx(393,48): error TS7006: Parameter 't' implicitly has an 'any' type.
-app/(admin)/menu.tsx(421,48): error TS7006: Parameter 't' implicitly has an 'any' type.

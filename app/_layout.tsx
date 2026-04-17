@@ -92,16 +92,16 @@ export default function RootLayout() {
 
   // Hide Splash Screen only when fonts and auth state are loaded
   useEffect(() => {
-    if (loaded && !authLoading) {
-      // Give a tiny bit of time for the initial navigation to settle
+    if (loaded && !authLoading && !roleLoading) {
+      // Role tespiti tamamlanmadan splash'i kapatmıyoruz
       const timer = setTimeout(() => {
         SplashScreen.hideAsync();
       }, 200);
       return () => clearTimeout(timer);
     }
-  }, [loaded, authLoading]);
+  }, [loaded, authLoading, roleLoading]);
 
-  if (!loaded || authLoading) {
+  if (!loaded || authLoading || roleLoading) {
     return null;
   }
 
@@ -154,8 +154,10 @@ function RootLayoutNav() {
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'adisyon' }, (payload) => {
               const orderType = payload.new?.order_type;
               
-              // Sadece Paket/Sipariş Ver (Şimdi Ye hariç) bildirim gönder
-              if (orderType === "Şimdi Ye") return;
+              // Sadece gerçek paket siparişleri bildirim tetiklesin
+              // Manuel borç/ödeme girişleri ve Şimdi Ye hariç
+              const ignoredTypes = ["Şimdi Ye", "MANUAL_DEBT", "MANUAL_PAYMENT"];
+              if (!orderType || ignoredTypes.includes(orderType)) return;
 
               console.log("🔥 YENİ SİPARİŞ TESPİT EDİLDİ (Root)");
               

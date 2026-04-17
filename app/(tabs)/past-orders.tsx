@@ -67,6 +67,11 @@ export default function PastOrdersScreen() {
         const now = new Date();
 
         const filtered = orders.filter((order: any) => {
+            // Manuel finans kayıtlarını (borç/ödeme) kullanıcının kişisel sipariş geçmişinden gizle
+            if (order.order_type === 'MANUAL_DEBT' || order.order_type === 'MANUAL_PAYMENT') {
+                return false;
+            }
+
             if (timeFilter === "ALL") return true;
 
             const orderDate = new Date(order.created_at || order.date);

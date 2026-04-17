@@ -39,13 +39,29 @@ export const pdfService = {
         const now = new Date();
         const generationTime = now.toLocaleDateString('tr-TR') + ' ' + now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
-        // 1. Manuel Hizmet Bedellerini dökümden gizliyoruz (Kullanıcı istemiyor)
-        const mealRows = ""; // Tüm manuel yemek kayıtları gizlendi
-        
+        // 1. Manuel Hizmet Bedelleri (Dönem Borcu ve Ödeme)
+        const manualEntries = (adisyonlar || []).filter((a: any) => 
+            a.order_type === 'MANUAL_DEBT' || a.order_type === 'MANUAL_PAYMENT'
+        );
+
+        let mealRows = manualEntries.map((m: any, index: number) => {
+            const dateStr = new Date(m.created_at).toLocaleDateString('tr-TR');
+            const isDebt = m.order_type === 'MANUAL_DEBT';
+            const label = isDebt ? `Dönem Borcu (${m.note || '-'})` : `Ödeme Alındı (${m.note || '-'})`;
+            const color = isDebt ? '#dc2626' : '#16a34a';
+            return `
+                <tr>
+                    <td style="text-align: center; padding: 8px;">${index + 1}</td>
+                    <td style="padding: 8px;">${dateStr}</td>
+                    <td style="padding: 8px;"><strong style="color: ${color};">${label}</strong> - ₺${m.total_amount?.toLocaleString('tr-TR')}</td>
+                </tr>
+            `;
+        }).join('');
+
         // 2. Personel Siparişleri (Adisyonlar) - Tablo Satırları (GRUPLAYARAK)
         const groupedAdisyons: { [key: string]: any } = {};
         (adisyonlar || []).forEach((a: any) => {
-            // Manuel kayıtları ve sistem notlarını gizle
+            // Manuel kayıtları ve sistem notlarını personel listesinden gizle
             const note = (a.note || "").toUpperCase();
             if (note.includes("BORCA AKTARILDI") || note.includes("BORÇ AKTARILDI") || a.order_type === 'MANUAL_DEBT' || a.order_type === 'MANUAL_PAYMENT') return;
 

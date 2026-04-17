@@ -53,14 +53,14 @@ export const notificationService = {
         try {
             let query = (supabase
                 .from("users") as any)
-                .select("push_token, admin")
+                .select("push_token, role")
                 .not("push_token", "is", null);
 
             if (userId) {
                 query = query.eq("id", userId);
             } else if (excludeAdmins) {
                 // Varsayılan olarak admin olmayanların (müşterilerin) tokenlarını getir
-                query = query.neq("admin", "true");
+                query = query.neq("role", "admin");
             }
 
             const { data, error } = await query;
@@ -151,7 +151,7 @@ export const notificationService = {
             const { data, error } = await supabase
                 .from("users")
                 .select("push_token")
-                .eq("admin", "true")
+                .eq("role", "admin")
                 .not("push_token", "is", null);
 
             if (error) {

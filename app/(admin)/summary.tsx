@@ -240,10 +240,19 @@ export default function SummaryScreen() {
           onPress: async () => {
              setUpdatingDebt(true);
              try {
-               if (account.isCorporate && account.companyId) {
-                 await billingService.clearCompanyBalance(account.companyId);
-                 setCompanies(prev => prev.map(c => c.id === account.companyId ? { ...c, balance: 0 } : c));
-               } else if (account.userId) {
+              if (account.isCorporate && account.companyId) {
+                const currentDate = new Date().toLocaleDateString('tr-TR');
+                await billingService.addManualEntry(
+                  account.userId, 
+                  account.manualDebt, 
+                  currentDate, 
+                  currentDate, 
+                  'PAYMENT'
+                );
+
+                await billingService.clearCompanyBalance(account.companyId);
+                setCompanies(prev => prev.map(c => c.id === account.companyId ? { ...c, balance: 0 } : c));
+              } else if (account.userId) {
                  await adisyonService.clearUserDebt(account.userId);
                  await fetchOrders();
                }
@@ -316,16 +325,28 @@ export default function SummaryScreen() {
               </thead>
               <tbody>
                 ${(() => {
-                  // 1. Manuel borç/ödeme kayıtlarını ve teknik notları tamamen gizle
+                  // 1. Manuel borç/ödeme kayıtlarını ve personelin yediği tüm siparişleri kapsa
                   const filteredOrders = account.orders.filter((o: any) => {
                     const note = (o.note || "").toUpperCase();
-                    const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
-                    return !note.includes("BORCA AKTARILDI") && !isManual;
+                    return !note.includes("BORCA AKTARILDI");
                   });
 
-                  // 2. Aynı gün ve aynı kullanıcıya ait kayıtları grupla
+                  // 2. Birleştirilmiş Row Listesi (Tarih bazlı sıralama için)
+                  const unifiedEntries: any[] = [];
                   const groupedMap: { [key: string]: any } = {};
+
                   filteredOrders.forEach((o: any) => {
+                    const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
+                    
+                    if (isManual) {
+                        unifiedEntries.push({
+                            type: 'manual',
+                            date: new Date(o.created_at),
+                            order: o
+                        });
+                        return;
+                    }
+
                     const dateKey = new Date(o.created_at).toLocaleDateString('tr-TR');
                     const userKey = o.userName || 'Personel';
                     const key = `${dateKey}_${userKey}`;
@@ -338,34 +359,87 @@ export default function SummaryScreen() {
                     }
                   });
 
-                  return Object.values(groupedMap).map((o: any) => {
-                    const getLocalizedStatus = (status: string) => {
-                      const s = (status || "").toUpperCase();
-                      if (["PAID", "ÖDENDİ", "ÖDENDI"].includes(s)) return "ÖDENDİ";
-                      if (["COMPLETED", "TAMAMLANDI"].includes(s)) return "TAMAMLANDI";
-                      if (["CANCELLED", "İPTAL"].includes(s)) return "İPTAL";
-                      return "TAMAMLANDI";
-                    };
+                  // Gruplanmış siparişleri listeye ekle
+                  Object.values(groupedMap).forEach((o: any) => {
+                    unifiedEntries.push({
+                        type: 'order',
+                        date: new Date(o.created_at),
+                        order: o
+                    });
+                  });
 
-                    const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
-                    const manualLabel = o.order_type === 'MANUAL_DEBT' ? '<span style="color:#f97316;">Yemek Hizmet Bedeli</span>' : '<span style="color:#10b981;">Ödeme Kaydı</span>';
-                    
-                    const adisyonDetay = o.items?.map((i: any) => i.menu_items?.name).join(', ');
-                    const detail = isManual 
-                      ? `<strong>${manualLabel}</strong><br/><small style="color:#94a3b8;">Not: ${o.note || '-'}</small>`
-                      : `<strong>${o.userName || 'Personel'}</strong> ${o.count > 1 ? `<span style="color:${colors.primary}; font-weight:bold;">(x${o.count})</span>` : ''}<br/><small style="color:#64748b;">${adisyonDetay || 'İşlem Detayı'}</small>`;
-                    
-                    const statusLabel = getLocalizedStatus(o.status);
-                    
-                    return `
-                      <tr>
-                        <td style="padding: 8px 10px; border-bottom: 1px solid #f1f5f9;">${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
-                        <td style="padding: 8px 10px; border-bottom: 1px solid #f1f5f9;">${detail}</td>
-                        <td style="padding: 8px 10px; border-bottom: 1px solid #f1f5f9; text-align: center; color: ${statusLabel === 'ÖDENDİ' ? '#10b981' : '#f97316'}; font-weight: bold;">
-                          ${statusLabel}
-                        </td>
-                      </tr>
-                    `;
+                  // 3. TARİH SIRASINA GÖRE DİZ (Yeniden Eskiye)
+                  unifiedEntries.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+                  // 4. AKILLI BAKİYE TAKİBİ (Waterfall Logic)
+                  let remainingBalance = account.isCorporate ? account.manualDebt : account.total;
+
+                  // 5. HTML Satırlarını Oluştur
+                  return unifiedEntries.map((entry) => {
+                    const { type, order: o } = entry;
+                    const dateStr = entry.date.toLocaleDateString('tr-TR');
+
+                    if (type === 'manual') {
+                        const isDebt = o.order_type === 'MANUAL_DEBT';
+                        
+                        // Eğer bu bir borç girişiyse ve hala bir bakiye varsa "AÇIK", bakiye bitmişse "KAPALI"
+                        let statusColor = '#22c55e'; // Varsayılan: Ödendi (Yeşil)
+                        let statusLabel = 'ÖDENDİ / KAPALI';
+                        let labelColor = '#64748b';
+
+                        if (isDebt) {
+                            if (remainingBalance > 0) {
+                                statusColor = '#f97316'; // Borç (Turuncu)
+                                statusLabel = 'BORÇ / AÇIK';
+                                labelColor = '#f97316';
+                                remainingBalance -= (o.total_amount || 0); // Bakiyeden düş
+                            } else {
+                                // Borç kaydı ama kümülatif bakiye zaten dolmuş (yani ödenmiş)
+                                statusColor = '#10b981';
+                                statusLabel = 'ÖDENDİ / KAPALI';
+                                labelColor = '#64748b';
+                            }
+                        } else {
+                            // Ödeme Kaydı
+                            statusColor = '#10b981';
+                            statusLabel = 'ÖDEME İŞLENDİ';
+                            labelColor = '#22c55e';
+                        }
+
+                        const labelText = isDebt ? `BORÇ GİRİŞİ: ${o.note || '-'}` : `ÖDEME ALINDI: ${o.note || '-'}`;
+
+                        return `
+                          <tr>
+                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size:11px;">${dateStr}</td>
+                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size:11px;">
+                                <strong style="color: ${labelColor};">${labelText}</strong><br/>
+                                <small style="color:#64748b;">Kayıt Tutarı: ₺${o.total_amount?.toLocaleString('tr-TR')}</small>
+                            </td>
+                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; text-align: center; color: ${statusColor}; font-weight: bold; font-size:10px;">${statusLabel}</td>
+                          </tr>
+                        `;
+                    } else {
+                        const statusUpper = (o.status || "").toUpperCase();
+                        const isCancelled = ["CANCELLED", "İPTAL"].includes(statusUpper);
+                        
+                        const adisyonDetay = (o.items || []).map((i: any) => {
+                            const name = i.menu_items?.name || i.menu_item?.name || 'Ürün';
+                            return `${i.quantity}x ${name}`;
+                        }).filter(Boolean).join(', ');
+
+                        return `
+                          <tr>
+                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size:11px;">${dateStr}</td>
+                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size:11px;">
+                                <strong>${o.userName || 'Personel'}</strong> ${o.count > 1 ? `<span style="color:${colors.primary}; font-weight:bold;">(x${o.count})</span>` : ''}<br/>
+                                <small style="color:#64748b;">${adisyonDetay || 'Yemek Siparişi'}</small>
+                            </td>
+                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; text-align: center; color: ${isCancelled ? '#ef4444' : '#64748b'}; font-weight: bold; font-size:10px;">
+                              ${isCancelled ? "İPTAL" : "TAMAMLANDI"}
+                            </td>
+                          </tr>
+                        `;
+                    }
                   }).join('');
                 })()}
               </tbody>
@@ -610,9 +684,15 @@ export default function SummaryScreen() {
                {previewAccount.orders.map((order: any) => (
                  <View key={order.id} style={styles.simpleOrderRow}>
                    <Text style={[styles.simpleOrderDate, { color: colors.text }]}>{new Date(order.created_at).toLocaleDateString("tr-TR")}</Text>
-                   {order.adisyon_items?.map((item: any) => (
-                     <Text key={item.id} style={{ color: colors.muted, fontSize: 12 }}>• {item.quantity}x {item.menu_items?.name}</Text>
-                   ))}
+                   {order.order_type === 'MANUAL_DEBT' ? (
+                     <Text style={{ color: colors.primary, fontSize: 13, fontWeight: 'bold' }}>• Dönem Borcu ({order.note}): ₺{order.total_amount?.toLocaleString("tr-TR")}</Text>
+                   ) : order.order_type === 'MANUAL_PAYMENT' ? (
+                     <Text style={{ color: "#4CAF50", fontSize: 13, fontWeight: 'bold' }}>• Ödeme Alındı ({order.note}): ₺{order.total_amount?.toLocaleString("tr-TR")}</Text>
+                   ) : (
+                     order.adisyon_items?.map((item: any) => (
+                       <Text key={item.id} style={{ color: colors.muted, fontSize: 12 }}>• {item.quantity}x {item.menu_items?.name}</Text>
+                     ))
+                   )}
                  </View>
                ))}
                <View style={styles.invoiceDivider} />

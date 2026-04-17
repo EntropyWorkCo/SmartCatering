@@ -47,14 +47,10 @@ export default function AccountInfoScreen() {
         }
     };
 
+    const isCorporate = !!(profile?.is_company || profile?.corporate_info);
+
     const handleSave = async () => {
         if (!user?.id) return;
-
-        // Telefon numarası doğrulaması
-        if (phone.length !== 10 || !phone.startsWith('5')) {
-            Alert.alert("Hata", "Lütfen geçerli bir telefon numarası giriniz (5XX XXX XX XX).");
-            return;
-        }
 
         if (!fullName.trim()) {
             Alert.alert("Hata", "Lütfen adınızı ve soyadınızı giriniz.");
@@ -66,7 +62,7 @@ export default function AccountInfoScreen() {
             await userService.updateProfile(user.id, {
                 fullName,
                 phone,
-                address
+                address: isCorporate ? undefined : address
             });
             Alert.alert("Başarılı", "Bilgileriniz başarıyla kaydedildi.");
         } catch (error: any) {
@@ -166,21 +162,24 @@ export default function AccountInfoScreen() {
                     </View>
                 </View>
 
-                <View style={styles.formGroup}>
-                    <Text style={styles.label}>Adres</Text>
-                    <View style={[styles.inputContainer, { height: 'auto', paddingVertical: 12 }]}>
-                        <MaterialIcons name="location-on" size={20} color={colors.primary} style={{ marginTop: 2 }} />
-                        <TextInput
-                            style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
-                            value={address}
-                            onChangeText={setAddress}
-                            placeholder="Açık adresinizi giriniz"
-                            placeholderTextColor={colors.muted}
-                            multiline
-                            numberOfLines={3}
-                        />
+                {/* Firma sahipleri adresi Firma Bilgileri > Fatura Adresi üzerinden yönetir */}
+                {!isCorporate && (
+                    <View style={styles.formGroup}>
+                        <Text style={styles.label}>Adres</Text>
+                        <View style={[styles.inputContainer, { height: 'auto', paddingVertical: 12 }]}>
+                            <MaterialIcons name="location-on" size={20} color={colors.primary} style={{ marginTop: 2 }} />
+                            <TextInput
+                                style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
+                                value={address}
+                                onChangeText={setAddress}
+                                placeholder="Açık adresinizi giriniz"
+                                placeholderTextColor={colors.muted}
+                                multiline
+                                numberOfLines={3}
+                            />
+                        </View>
                     </View>
-                </View>
+                )}
 
                 {/* Kaydet Butonu */}
                 <TouchableOpacity 

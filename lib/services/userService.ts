@@ -94,6 +94,7 @@ export const userService = {
       .update({
         full_name: data.fullName,
         phone: data.phone,
+        ...(data.address !== undefined ? { address: data.address } : {}),
       })
       .eq("id", userId);
 

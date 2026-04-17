@@ -366,9 +366,13 @@ export default function CorporateInfoScreen() {
             const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
             const manualLabel = o.order_type === 'MANUAL_DEBT' ? 'Admin Borç Girişi' : 'Ödeme Kaydı';
             
+            const adisyonDetay = o.adisyon_items && o.adisyon_items.length > 0 
+                ? o.adisyon_items.map((i: any) => i.menu_items?.name ? `${i.quantity}x ${i.menu_items.name}` : '').filter(Boolean).join(', ') 
+                : '';
+
             const detailText = isManual 
-                ? `${manualLabel} (${o.note || ''})` 
-                : `Hizmet: ${o.userName} - ${o.adisyon_items?.map((item: any) => item.menu_items?.name).join(', ') || 'Sipariş'}`;
+                ? `<strong>${manualLabel}</strong> - ₺${o.total_amount?.toLocaleString('tr-TR')} <br/><small style="color:#64748b;">(${o.order_type === 'MANUAL_DEBT' ? 'Dönem' : 'Tarih'}: ${o.note || ''})</small>` 
+                : `Hizmet: ${o.userName} - ${adisyonDetay || 'Sipariş Detayı'}`;
 
             return `
                 <tr>
@@ -694,9 +698,12 @@ export default function CorporateInfoScreen() {
                                                                 <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 8 }}>{date.toLocaleString('tr-TR')}</Text>
                                                                 
                                                                 {order.order_type?.startsWith('MANUAL') ? (
-                                                                    <View style={{ backgroundColor: colors.background, padding: 8, borderRadius: 8 }}>
+                                                                    <View style={{ backgroundColor: colors.background, padding: 8, borderRadius: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                         <Text style={{ fontSize: 12, color: colors.text }}>
-                                                                            <Text style={{ fontWeight: 'bold' }}>Tarih Aralığı:</Text> {order.note}
+                                                                            <Text style={{ fontWeight: 'bold', color: colors.muted }}>{order.order_type === 'MANUAL_DEBT' ? 'Dönem:' : 'Tarih:'}</Text> {order.note}
+                                                                        </Text>
+                                                                        <Text style={{ fontSize: 14, fontWeight: 'bold', color: order.order_type === 'MANUAL_PAYMENT' ? '#4CAF50' : colors.primary }}>
+                                                                            ₺{order.total_amount?.toLocaleString("tr-TR")}
                                                                         </Text>
                                                                     </View>
                                                                 ) : (
