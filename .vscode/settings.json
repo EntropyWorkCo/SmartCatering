@@ -3,6 +3,7 @@
     "editor.defaultFormatter": "denoland.vscode-deno"
   },
   "css.lint.unknownAtRules": "ignore",
+  "deno.enable": false,
   "deno.enablePaths": [
     "supabase/functions"
   ],

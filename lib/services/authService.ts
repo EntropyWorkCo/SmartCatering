@@ -47,6 +47,36 @@ export const verifyOtp = async (phone: string, code: string): Promise<any> => {
 };
 
 /**
+ * Yeni kullanıcıyı güvenli şekilde kayıt eder (register-user Edge Function üzerinden).
+ * OTP doğrulandıktan sonra çağrılır. auth.users + public.users atomik oluşturulur,
+ * ardından generateLink+verifyOtp ile gerçek session döner — fake password yok.
+ */
+export const registerUser = async (params: {
+    phone: string;
+    name: string;
+    role: 'owner' | 'individual' | 'employee';
+    companyName?: string;
+    vkn?: string;
+    address?: string;
+}): Promise<{ success: boolean; auto_login?: boolean; access_token?: string; refresh_token?: string; error?: string }> => {
+    try {
+        const { data, error } = await supabase.functions.invoke('register-user', {
+            body: params,
+        });
+
+        if (error) {
+            console.error('registerUser Hatası:', error);
+            return { success: false, error: error.message };
+        }
+
+        return data;
+    } catch (e: any) {
+        console.error('registerUser Hatası:', e);
+        return { success: false, error: e.message };
+    }
+};
+
+/**
  * Telefon formatını normalize eder (baştaki satırları ve 0'ı siler).
  * @param phone Ham telefon string'i
  * @returns 5 ile başlayan 10 haneli format veya null

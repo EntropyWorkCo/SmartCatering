@@ -19,7 +19,7 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { verifyOtp, sendOtp } from "../../lib/services/authService";
+import { sendOtp, verifyOtp, registerUser } from "../../lib/services/authService";
 import { supabase } from "../../lib/supabase";
 
 export default function OtpVerifyScreen() {
@@ -63,10 +63,7 @@ export default function OtpVerifyScreen() {
             if (basePhone.startsWith("90") && basePhone.length > 10) basePhone = basePhone.slice(2);
             if (basePhone.startsWith("0")) basePhone = basePhone.slice(1);
             
-            const cleanPhone = `90${basePhone}`;
             const effectivePhone = `+90${basePhone}`;
-            const fakeEmail = `${effectivePhone}@meydan.com`;
-            const staticPassword = `${effectivePhone}OtpPassword!`;
 
             if (mode === "register") {
                 if (result.user_exists) {
@@ -76,40 +73,36 @@ export default function OtpVerifyScreen() {
                 }
 
                 const isCompany = role === "owner";
-                // Edge Function says user doesn't exist, we must register them.
-                const { data: authData, error: authError } = await supabase.auth.signUp({
-                    email: fakeEmail,
-                    password: staticPassword,
-                    options: {
-                        data: {
-                            full_name: name,
-                            phone: effectivePhone,
-                            is_company: isCompany,
-                            role: role,
-                        },
-                    },
+
+                // Güvenli kayıt: register-user edge function atomik olarak
+                // auth.users + public.users oluşturur, generateLink+verifyOtp
+                // ile gerçek session döner — fake email/password yok
+                const regResult = await registerUser({
+                    phone,
+                    name,
+                    role: role as 'owner' | 'individual' | 'employee',
+                    companyName,
+                    vkn,
+                    address,
                 });
 
-                if (authError) throw authError;
+                if (!regResult.success) {
+                    Alert.alert("Kayıt Hatası", regResult.error || "Kayıt yapılamadı.");
+                    setLoading(false);
+                    return;
+                }
 
-                if (authData.user && isCompany) {
-                    await supabase.from("companies").upsert({
-                        user_id: authData.user.id,
-                        company_name: companyName,
-                        tax_number: vkn,
+                if (regResult.auto_login && regResult.access_token && regResult.refresh_token) {
+                    const { error: sessionError } = await supabase.auth.setSession({
+                        access_token: regResult.access_token,
+                        refresh_token: regResult.refresh_token,
                     });
-                }
-
-                // Kayıt sırasında girilen adresi kaydet (bireysel kullanıcı için)
-                if (authData.user && address?.trim() && !isCompany) {
-                    await supabase.from("users").update({ address } as any).eq("id", authData.user.id);
-                }
-
-                if (authData.session) {
+                    if (sessionError) throw sessionError;
                     Alert.alert("Başarılı", "Hesabınız oluşturuldu!");
                     await triggerAuthRefresh();
                     router.replace("/(tabs)/home");
                 } else {
+                    Alert.alert("Başarılı", "Hesabınız oluşturuldu! Lütfen giriş yapın.");
                     router.replace("/auth/login");
                 }
             } else {
