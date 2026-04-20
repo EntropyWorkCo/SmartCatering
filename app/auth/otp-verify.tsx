@@ -98,6 +98,7 @@ export default function OtpVerifyScreen() {
                         refresh_token: regResult.refresh_token,
                     });
                     if (sessionError) throw sessionError;
+
                     Alert.alert("Başarılı", "Hesabınız oluşturuldu!");
                     await triggerAuthRefresh();
                     router.replace("/(tabs)/home");
