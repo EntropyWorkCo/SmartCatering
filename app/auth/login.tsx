@@ -66,6 +66,9 @@ export default function LoginTabsScreen() {
             if (activeTab === 'owner' && (!companyName.trim() || !vkn.trim())) {
                 return Alert.alert("Hata", "Lütfen firma adı ve VKN giriniz.");
             }
+            if (activeTab === 'owner' && (vkn.length !== 10 && vkn.length !== 11)) {
+                return Alert.alert("Geçersiz VKN/TCKN", "VKN 10 hane, TCKN 11 hane olmalıdır.");
+            }
         }
 
         setLoading(true);

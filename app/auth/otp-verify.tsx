@@ -97,10 +97,11 @@ export default function OtpVerifyScreen() {
                         user_id: authData.user.id,
                         company_name: companyName,
                         tax_number: vkn,
+                        address: address,
                     });
                 }
 
-                // Kayıt sırasında girilen adresi kaydet (bireysel kullanıcı için)
+                // Kayıt sırasında girilen adresi kaydet (Sadece bireysel için users tablosuna)
                 if (authData.user && address?.trim() && !isCompany) {
                     await supabase.from("users").update({ address } as any).eq("id", authData.user.id);
                 }
