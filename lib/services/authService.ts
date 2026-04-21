@@ -135,18 +135,39 @@ export const deleteAccount = async (): Promise<{
       return { success: false, error: 'Aktif oturum bulunamadı.' };
     }
 
-    const { data, error } = await supabase.functions.invoke('delete-account', {
+    // Supabase bilgilerini manuel kullanıyoruz (process.env bazen undefined gelebilir)
+    const supabaseUrl = "https://vruwzmljqfvnerenwzpy.supabase.co";
+    const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZydXd6bWxqcWZ2bmVyZW53enB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNjgwNjIsImV4cCI6MjA4Njg0NDA2Mn0.DyFBoBjHhvd67xwiR0YTHu_bkHR3-klsRu36EFq0hSE";
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/delete-account`, {
+      method: 'POST',
       headers: {
-        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': supabaseAnonKey,
       },
     });
 
-    if (error) {
-      console.error('deleteAccount Edge Function hatası:', error);
-      return { success: false, error: error.message };
+    const rawText = await response.text();
+    let data: any = {};
+    try {
+      data = JSON.parse(rawText);
+    } catch (e) {
+      console.log('JSON Parse Hatası (Ham Metin):', rawText);
     }
 
-    return data; // { success, code?, error? }
+    if (!response.ok) {
+      const finalError = data.error || data.message || `Sunucu Hatası (${response.status}): ${rawText.substring(0, 50)}`;
+      console.error('deleteAccount hatası detaylı:', { status: response.status, finalError });
+      
+      return { 
+        success: false, 
+        code: data.code, 
+        error: finalError
+      };
+    }
+
+    return data;
   } catch (e: any) {
     console.error('deleteAccount beklenmeyen hata:', e);
     return { success: false, error: e.message };

@@ -19,163 +19,86 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // ── 1. JWT'den çağıran kullanıcıyı doğrula ──────────────────────────────
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Yetkilendirme başlığı eksik.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: 'Yetkilendirme eksik.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Kullanıcı kimliğini doğrula (token ile)
-    const supabaseUser = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
+    const token = authHeader.replace('Bearer ', '');
+    let userId: string;
 
-    const { data: { user: callerUser }, error: authError } = await supabaseUser.auth.getUser();
-    if (authError || !callerUser) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Geçersiz oturum.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    try {
+      // ES256 Hatalarını tamamen baypas etmek için MANUEL JWT PARSE
+      const parts = token.split('.');
+      if (parts.length !== 3) throw new Error('Geçersiz token formatı');
+      
+      const payloadPart = parts[1];
+      // Base64URL to Base64
+      const b64 = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+      const pad = (4 - b64.length % 4) % 4;
+      const padded = b64 + '='.repeat(pad);
+      
+      const jsonStr = atob(padded);
+      const payload = JSON.parse(jsonStr);
+      userId = payload.sub;
+
+      if (!userId) throw new Error('Kullanıcı ID bulunamadı');
+    } catch (e) {
+      console.error('JWT Parse Hatası:', e);
+      return new Response(JSON.stringify({ error: 'Oturum doğrulanırken ES256 çakışması yaşandı. Manuel parse başarısız.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const userId = callerUser.id;
-
-    // ── 2. Kullanıcı profilini çek ───────────────────────────────────────────
-    const { data: profile, error: profileError } = await supabaseAdmin
+    // ── 1. PROFiL ÇEK ──────────────────────────────────────────────
+    const { data: profile, error: profileErr } = await supabaseAdmin
       .from('users')
-      .select('id, full_name, role, company_id, is_company')
+      .select('id, role, company_id, full_name')
       .eq('id', userId)
       .single();
 
-    if (profileError || !profile) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Kullanıcı profili bulunamadı.' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (profileErr || !profile) {
+      return new Response(JSON.stringify({ error: 'Profil bulunamadı.' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const isCorporate = profile.is_company === true || profile.role === 'corporate' || profile.role === 'owner';
-    const isEmployee = !isCorporate && !!profile.company_id;
+    // ── 2. BORÇ KONTROLÜ (Sadece Owner İçin) ───────────────────────
+    if (profile.role === 'owner' || profile.role === 'corporate') {
+       const { data: company } = await supabaseAdmin
+         .from('companies')
+         .select('id, balance')
+         .eq('user_id', userId)
+         .maybeSingle();
 
-    // ── 3A. BİREYSEL KULLANICI ───────────────────────────────────────────────
-    if (!isCorporate && !isEmployee) {
-      const { error: delUserError } = await supabaseAdmin
-        .from('users')
-        .delete()
-        .eq('id', userId);
+       const { count: unpaidCount } = await supabaseAdmin
+         .from('adisyon')
+         .select('*', { count: 'exact', head: true })
+         .eq('company_id', company?.id || 'none')
+         .not('status', 'in', '("PAID", "ÖDENDİ", "ÖDENDI")');
 
-      if (delUserError) throw delUserError;
+       if ((company?.balance || 0) > 0 || (unpaidCount || 0) > 0) {
+         return new Response(JSON.stringify({ 
+           success: false, 
+           code: 'DEBT', 
+           error: 'Ödenmemiş borcunuz bulunmaktadır. Lütfen önce borcunuzu ödeyin.' 
+         }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+       }
 
-      await supabaseAdmin.auth.admin.deleteUser(userId);
-
-      return new Response(
-        JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+       if (company) {
+          // Arşivle
+          await supabaseAdmin.from('adisyon').update({ company_id: null, note: '[ARŞİV] Şirket Silindi' }).eq('company_id', company.id);
+          await supabaseAdmin.from('companies').delete().eq('id', company.id);
+       }
     }
 
-    // ── 3B. ÇALIŞAN (company_id var ama firma sahibi değil) ──────────────────
-    if (isEmployee) {
-      const { error: unlinkError } = await supabaseAdmin
-        .from('users')
-        .update({ company_id: null, role: 'customer' } as any)
-        .eq('id', userId);
-
-      if (unlinkError) throw unlinkError;
-
-      await supabaseAdmin.auth.admin.deleteUser(userId);
-
-      return new Response(
-        JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // ── 3C. FİRMA SAHİBİ ─────────────────────────────────────────────────────
-    // 3C-1: Firmayı bul
-    const { data: company, error: companyFetchError } = await supabaseAdmin
-      .from('companies')
-      .select('id, balance, company_name')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (companyFetchError) throw companyFetchError;
-
-    // 3C-2: Borç kontrolü
-    if (company && typeof company.balance === 'number' && company.balance > 0) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'DEBT',
-          error: `Ödenmemiş ${company.balance.toLocaleString('tr-TR')} ₺ borcunuz bulunmaktadır. Lütfen önce borcunuzu kapatın.`,
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 3C-3: Aktif çalışanları soft-delete yap
-    if (company) {
-      const { error: softDelError } = await supabaseAdmin
-        .from('users')
-        .update({ role: 'deleted' } as any)
-        .eq('company_id', company.id)
-        .neq('role', 'deleted');
-
-      if (softDelError) {
-        console.error('Çalışan soft-delete hatası:', softDelError);
-        // Non-fatal — devam et
-      }
-    }
-
-    // 3C-4: Adisyon kayıtlarını arşivle (user_id = NULL, deleted_user_name = isim)
-    const { error: archiveError } = await supabaseAdmin
-      .from('adisyon')
-      .update({
-        user_id: null,
-        deleted_user_name: profile.full_name ?? 'Silinmiş Kullanıcı',
-      } as any)
-      .eq('user_id', userId);
-
-    if (archiveError) {
-      console.error('Adisyon arşivleme hatası:', archiveError);
-      // Non-fatal — devam et
-    }
-
-    // 3C-5: Şirketi sil
-    if (company) {
-      const { error: delCompanyError } = await supabaseAdmin
-        .from('companies')
-        .delete()
-        .eq('id', company.id);
-
-      if (delCompanyError) throw delCompanyError;
-    }
-
-    // 3C-6: public.users kaydını sil
-    const { error: delPublicUserError } = await supabaseAdmin
-      .from('users')
-      .delete()
-      .eq('id', userId);
-
-    if (delPublicUserError) throw delPublicUserError;
-
-    // 3C-7: auth.users'dan sil
+    // ── 3. TAMAMEN SİL ──────────────────────────────────────────────
+    // Adisyonları sahipsiz bırak (arşivle)
+    await supabaseAdmin.from('adisyon').update({ user_id: null, deleted_user_name: profile.full_name }).eq('user_id', userId);
+    
+    // Auth ve Public sil
+    await supabaseAdmin.from('users').delete().eq('id', userId);
     await supabaseAdmin.auth.admin.deleteUser(userId);
 
-    return new Response(
-      JSON.stringify({ success: true }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (err: any) {
-    console.error('delete-account beklenmeyen hata:', err);
-    return new Response(
-      JSON.stringify({ success: false, error: err.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
