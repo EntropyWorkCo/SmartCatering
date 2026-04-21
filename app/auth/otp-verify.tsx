@@ -100,7 +100,7 @@ export default function OtpVerifyScreen() {
                     });
                     if (sessionError) throw sessionError;
 
-                    // EK DÜZELTME 1: Firma Sahipleri için Adres/Şirket bilgilerini işle
+                    // EK DÜZELTME: Firma Sahipleri için Adres/Şirket bilgilerini işle
                     if (role === "owner" && address) {
                         try {
                             const { data: { user: newUser } } = await supabase.auth.getUser();
@@ -111,29 +111,9 @@ export default function OtpVerifyScreen() {
                                     companyPhone: "", 
                                     invoiceAddress: address
                                 });
-                                console.log("Adres şirket tablosuna başarıyla işlendi.");
                             }
                         } catch (addrErr) {
                             console.error("Adres şirket tablosuna işlenirken hata:", addrErr);
-                        }
-                    }
-
-                    // EK DÜZELTME 2: Bireysel üyelerin rolünü 'individual' olarak kesinleştir
-                    if (role === "individual") {
-                        try {
-                            const { data: { user: newUser } } = await supabase.auth.getUser();
-                            if (newUser) {
-                                await supabase
-                                    .from("users")
-                                    .update({ 
-                                        role: 'individual',
-                                        is_company: false 
-                                    })
-                                    .eq("id", newUser.id);
-                                console.log("Bireysel rolü veritabanında kesinleştirildi.");
-                            }
-                        } catch (indErr) {
-                            console.error("Bireysel rolü güncellenirken hata:", indErr);
                         }
                     }
 
