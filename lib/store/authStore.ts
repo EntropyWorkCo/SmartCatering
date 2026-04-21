@@ -2,45 +2,34 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { supabase } from "../supabase";
 
+export type UserRole = 'admin' | 'firma_sahibi' | 'firma_calisan' | 'bireysel' | null;
+
 interface AuthState {
   session: any | null;
   user: any | null;
-  role: string | null;
+  role: UserRole;
+  firmaId: string | null;
   isAdmin: boolean;
   loading: boolean;
   initialized: boolean;
-  setSession: (session: any) => void;
-  setLoading: (loading: boolean) => void;
-  setIsAdmin: (isAdmin: boolean) => void;
-  setRole: (role: string | null) => void;
+  subscription: any | null;
+  
   initialize: (force?: boolean) => Promise<void>;
   signOut: () => Promise<void>;
+  setRole: (role: UserRole) => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   user: null,
   role: null,
+  firmaId: null,
   isAdmin: false,
   loading: true,
   initialized: false,
+  subscription: null,
 
-  setSession: (session) => {
-    const role = session?.user?.app_metadata?.role || session?.user?.user_metadata?.role || null;
-    set({ 
-      session, 
-      user: session?.user || null,
-      role,
-      isAdmin: role === 'admin',
-      loading: false 
-    });
-  },
-
-  setLoading: (loading) => set({ loading }),
-  
-  setIsAdmin: (isAdmin) => set({ isAdmin }),
-
-  setRole: (role) => set({ role, isAdmin: role === 'admin' }),
+  setRole: (role: UserRole) => set({ role, loading: false }),
 
   initialize: async (force = false) => {
     if (get().initialized && !force) return;
@@ -52,7 +41,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       let finalSession = session;
 
       if (sessionError) {
-        console.warn("Auth initialization session error:", sessionError.message);
         if (sessionError.message.includes("Refresh Token") || sessionError.status === 400) {
           await supabase.auth.signOut();
           await AsyncStorage.removeItem("isAdmin");
@@ -71,62 +59,48 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
 
-      // 2. Resolve Role and Admin Status
-      const role = finalSession?.user?.app_metadata?.role || finalSession?.user?.user_metadata?.role || null;
-      let isAdmin = role === 'admin';
-      
-      if (!role && finalSession?.user && !(finalSession as any).isSoftUser) {
-        const { data: adminData } = await supabase.rpc("is_admin");
-        isAdmin = !!adminData;
-        await AsyncStorage.setItem("isAdmin", isAdmin ? "true" : "false");
-      } else if (!role) {
-        const adminFlag = await AsyncStorage.getItem("isAdmin");
-        isAdmin = adminFlag === "true";
-      }
+      // 2. Resolve Full Role
+      const result = await resolveRoleData(finalSession);
       
       set({ 
         session: finalSession, 
         user: finalSession?.user || null,
-        role,
-        isAdmin: isAdmin,
+        role: result.role,
+        firmaId: result.firmaId,
+        isAdmin: result.role === 'admin',
         loading: false,
         initialized: true
       });
 
-      // 3. Listen for changes
-      supabase.auth.onAuthStateChange(async (_event, session) => {
-        let currentSession = session;
-        
-        if (!session) {
-          const softUserStr = await AsyncStorage.getItem("softUser");
-          if (softUserStr) {
-            try {
-              const softUser = JSON.parse(softUserStr);
-              currentSession = { user: softUser, isSoftUser: true } as any;
-            } catch (e) {}
+      // 3. Listen for changes (Only if not already listening)
+      if (!get().subscription) {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+          console.log("🔄 Auth Store Change:", _event);
+          
+          let currentSession = session;
+          if (!session) {
+            const softUserStr = await AsyncStorage.getItem("softUser");
+            if (softUserStr) {
+                try {
+                    const softUser = JSON.parse(softUserStr);
+                    currentSession = { user: softUser, isSoftUser: true } as any;
+                } catch (e) {}
+            }
           }
-        }
 
-        const currentRole = currentSession?.user?.app_metadata?.role || currentSession?.user?.user_metadata?.role || null;
-        let isNowAdmin = currentRole === 'admin';
-        
-        if (!currentRole && currentSession?.user && !(currentSession as any).isSoftUser) {
-          const { data: adminData } = await supabase.rpc("is_admin");
-          isNowAdmin = !!adminData;
-          await AsyncStorage.setItem("isAdmin", isNowAdmin ? "true" : "false");
-        } else if (!currentRole) {
-          const adminFlag = await AsyncStorage.getItem("isAdmin");
-          isNowAdmin = adminFlag === "true";
-        }
-        
-        set({ 
-          session: currentSession, 
-          user: currentSession?.user || null,
-          role: currentRole,
-          isAdmin: isNowAdmin,
-          loading: false
+          const freshResult = await resolveRoleData(currentSession);
+          
+          set({ 
+            session: currentSession, 
+            user: currentSession?.user || null,
+            role: freshResult.role,
+            firmaId: freshResult.firmaId,
+            isAdmin: freshResult.role === 'admin',
+            loading: false
+          });
         });
-      });
+        set({ subscription });
+      }
     } catch (error) {
       console.error("Auth store initialization failed:", error);
       set({ loading: false, initialized: true });
@@ -134,9 +108,77 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
-    await supabase.auth.signOut();
-    await AsyncStorage.removeItem("isAdmin");
-    await AsyncStorage.removeItem("softUser");
-    set({ session: null, user: null, role: null, isAdmin: false, loading: false });
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn("SignOut error:", e);
+    }
+    await AsyncStorage.multiRemove(["isAdmin", "softUser", "userRole"]);
+    set({ session: null, user: null, role: null, firmaId: null, isAdmin: false, loading: false });
   }
 }));
+
+/**
+ * Rol hesaplama mantığını merkezi bir yardımcı fonksiyona taşıyoruz.
+ */
+async function resolveRoleData(session: any): Promise<{ role: UserRole, firmaId: string | null }> {
+    if (!session?.user) {
+        return { role: null, firmaId: null };
+    }
+
+    const userId = session.user.id;
+    const isSoftUser = !!session.isSoftUser;
+
+    // 1. ADIM: Admin Kontrolü
+    const isAdminStorage = await AsyncStorage.getItem("isAdmin");
+    if (isAdminStorage === "true") {
+        return { role: 'admin', firmaId: null };
+    }
+
+    // RPC check for admin
+    if (!isSoftUser) {
+        const { data: isAdminRPC } = await supabase.rpc("is_admin");
+        if (isAdminRPC) {
+            await AsyncStorage.setItem("isAdmin", "true");
+            return { role: 'admin', firmaId: null };
+        }
+    }
+
+    // 2. ADIM: Cache'lenmiş Rol Kontrolü (Hız için)
+    const cachedRole = await AsyncStorage.getItem("userRole");
+    if (cachedRole) {
+        return { role: cachedRole as any, firmaId: null }; // Firma ID gerekiyorsa aşağıda detaylı çözülecek ama yönlendirme için bu yeterli
+    }
+
+    // 3. ADIM: Metadata Kontrolü
+    let role = session.user.app_metadata?.role || session.user.user_metadata?.role;
+    let firmaId = session.user.app_metadata?.firma_id || session.user.user_metadata?.firma_id;
+
+    if (role && role === 'admin') return { role: 'admin', firmaId: null };
+
+    // 3. ADIM: Veritabanı (Public.Users) Kontrolü
+    if (!role && !isSoftUser) {
+        const { data: profile } = await supabase
+            .from("users")
+            .select("role, company_id, is_company")
+            .eq("id", userId)
+            .maybeSingle();
+
+        if (profile) {
+            if (profile.role === 'admin') role = 'admin';
+            else if (profile.role === 'owner' || profile.role === 'corporate' || profile.is_company) role = 'firma_sahibi';
+            else if (profile.company_id) role = 'firma_calisan';
+            else role = 'bireysel';
+            
+            firmaId = profile.company_id;
+        }
+    }
+
+    // Fallback
+    if (!role) role = 'bireysel';
+
+    return { 
+        role: role as UserRole, 
+        firmaId: firmaId || null 
+    };
+}

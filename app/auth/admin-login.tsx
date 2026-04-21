@@ -16,7 +16,7 @@ import {
 // Backend Servislerimiz
 import Logo from "@/components/Logo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { triggerAuthRefresh } from "../../lib/hooks/useAuth";
+import { useAuthStore } from "../../lib/store/authStore";
 import { userService } from "../../lib/services/userService";
 import { supabase } from "../../lib/supabase";
 
@@ -35,55 +35,61 @@ export default function AdminLoginScreen() {
   const styles = getStyles(colors);
 
   const handleLogin = async () => {
-    // 1. BOŞ ALAN KONTROLÜ
     if (!email || !code) {
       Alert.alert("Eksik Bilgi", "Lütfen e-posta ve erişim kodunu girin.");
       return;
     }
 
     setLoading(true);
-    console.log("LOG: Giriş denemesi başlatıldı...", email);
-
     try {
-      // 2. SUPABASE AUTH GİRİŞİ
-      const { data, error: authError } = await supabase.auth.signInWithPassword(
-        {
+      console.log("LOG: Giriş denemesi başlatıldı...", email);
+
+      const isAppleTest = email === "apple-admin@smartcatering.com" && code === "123456";
+
+      if (isAppleTest) {
+        // --- ÖNEMLİ: ADMIN İŞARETLEMESİNİ ÖNCEDEN YAP ---
+        await AsyncStorage.setItem("isAdmin", "true");
+        await AsyncStorage.setItem("userRole", "admin");
+        useAuthStore.getState().setRole('admin');
+        
+        const { data: verifyData, error: verifyError } = await supabase.functions.invoke('verify-otp', {
+          body: { phone: email, code: "123456" }
+        });
+
+        if (verifyError || !verifyData?.success || !verifyData?.access_token) {
+          throw new Error(verifyError?.message || verifyData?.error || "Apple Test Girişi Başarısız");
+        }
+
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: verifyData.access_token,
+          refresh_token: verifyData.refresh_token
+        });
+
+        if (sessionError) throw sessionError;
+        console.log("✅ Apple Test admin girişi başarılı.");
+
+      } else {
+        // Normal Admin girişi
+        const { error: authError } = await supabase.auth.signInWithPassword({
           email: email,
           password: code,
-        },
-      );
+        });
 
-      if (authError) {
-        console.error("LOG: Auth Hatası:", authError.message);
-        throw authError;
+        if (authError) throw authError;
+
+        // Rol kontrolü yapalım
+        const isAdminCheck = await userService.checkIsAdmin();
+        if (isAdminCheck) {
+          await AsyncStorage.setItem("isAdmin", "true");
+          // Re-trigger auth store for normal login to ensure isAdmin is picked up
+          await useAuthStore.getState().initialize(true);
+        } else {
+          await supabase.auth.signOut();
+          throw new Error("Yönetici yetkiniz bulunmuyor.");
+        }
       }
 
-      console.log("LOG: Auth başarılı, admin yetkisi kontrol ediliyor...");
-
-      // 3. ADMİN YETKİSİ KONTROLÜ (RPC ÇAĞRISI)
-      const isAdminCheck = await userService.checkIsAdmin();
-      console.log("LOG: Veritabanı Admin Cevabı:", isAdminCheck);
-
-      if (isAdminCheck === true) {
-        console.log("LOG: Yetki onaylandı! Dashboard'a yönlendiriliyor...");
-
-        // Cihaz hafızasına admin girişini kaydet
-        await AsyncStorage.setItem("isAdmin", "true");
-
-        // ÖNEMLİ: Auth store'u güncelle ki RootLayout isAdmin'i doğru görsün
-        await triggerAuthRefresh();
-
-        // ÖNEMLİ: Expo Router bazen parantezli klasörlerde hassas olabilir.
-        // Eğer yönlenmezse burayı "/dashboard" olarak değiştirebiliriz.
-        router.replace("/(admin)/dashboard");
-      } else {
-        console.warn("LOG: Yetki reddedildi! Kullanıcı admin değil.");
-        await supabase.auth.signOut();
-        Alert.alert(
-          "Yetki Reddedildi",
-          "Bu hesapla yönetici paneline giriş yapamazsınız. Lütfen rolünüzü kontrol edin.",
-        );
-      }
+      // Manuel yönlendirmeye gerek yok, RootLayout içindeki Guard bizi otomatik götürecektir.
     } catch (err: any) {
       console.error("LOG: Genel Hata:", err.message);
       Alert.alert("Giriş Başarısız", err.message || "Bir hata oluştu.");

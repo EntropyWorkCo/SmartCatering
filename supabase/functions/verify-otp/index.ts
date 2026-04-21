@@ -31,42 +31,69 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: false, error: 'Telefon ve kod zorunludur' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    // --- APPLE REVIEW MAGIC CODE BYPASS START ---
+    const appleTestNumbers = ["+905551000001", "+905551000002", "apple-admin@smartcatering.com"];
+    const magicCode = "123456";
+    let isMagicLogin = false;
+
+    if (appleTestNumbers.includes(phone) && code === magicCode) {
+        console.log("🍎 Apple Test Girişi (Magic Code):", phone);
+        isMagicLogin = true;
+    }
+    // --- APPLE REVIEW MAGIC CODE BYPASS END ---
+
     // 1. Verify OTP using admin client (bypasses RLS)
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     
-    const { data: otpData, error: otpError } = await supabaseAdmin
-        .from('otp_codes')
-        .select('*')
-        .eq('phone', phone)
-        .eq('code', code)
-        .eq('is_used', false)
-        .gte('created_at', fiveMinutesAgo)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+    let { data: otpData, error: otpError } = isMagicLogin 
+        ? { data: { id: 'magic', phone }, error: null } 
+        : await supabaseAdmin
+            .from('otp_codes')
+            .select('*')
+            .eq('phone', phone)
+            .eq('code', code)
+            .eq('is_used', false)
+            .gte('created_at', fiveMinutesAgo)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
 
     if (otpError || !otpData) {
         return new Response(JSON.stringify({ success: false, error: 'Geçersiz veya süresi dolmuş kod' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // Mark code as used
-    await supabaseAdmin
-        .from('otp_codes')
-        .update({ is_used: true })
-        .eq('id', otpData.id);
+    // Mark code as used (skip for magic login)
+    if (!isMagicLogin && otpData) {
+        await supabaseAdmin
+            .from('otp_codes')
+            .update({ is_used: true })
+            .eq('id', otpData.id);
+    }
 
     // 2. Normalize phone and check if user exists in public.users
-    let basePhone = phone.replace(/[^0-9]/g, "");
-    if (basePhone.startsWith("90") && basePhone.length > 10) basePhone = basePhone.slice(2);
-    if (basePhone.startsWith("0")) basePhone = basePhone.slice(1);
-    
-    // Check all legacy formats
-    const { data: existingUser } = await supabaseAdmin
-        .from("users")
-        .select("*")
-        .or(`phone.eq."${basePhone}",phone.eq."0${basePhone}",phone.eq."+90${basePhone}"`)
-        .limit(1)
-        .single();
+    let existingUser;
+    if (phone === "apple-admin@smartcatering.com") {
+        // Apple Test için sistemdeki herhangi bir admini alıyoruz
+        const { data } = await supabaseAdmin
+            .from("users")
+            .select("*")
+            .eq("role", "admin")
+            .limit(1)
+            .maybeSingle();
+        existingUser = data;
+    } else {
+        let basePhone = phone.replace(/[^0-9]/g, "");
+        if (basePhone.startsWith("90") && basePhone.length > 10) basePhone = basePhone.slice(2);
+        if (basePhone.startsWith("0")) basePhone = basePhone.slice(1);
+        
+        const { data } = await supabaseAdmin
+            .from("users")
+            .select("*")
+            .or(`phone.eq."${basePhone}",phone.eq."0${basePhone}",phone.eq."+90${basePhone}"`)
+            .limit(1)
+            .maybeSingle();
+        existingUser = data;
+    }
 
     if (!existingUser) {
         // User doesn't exist, tell frontend to register it
@@ -75,7 +102,12 @@ serve(async (req) => {
 
     // 3. Kullanıcı var → güvenli oturum aç
     const userId = existingUser.id;
-    // auth.users'daki email formatı — kullanıcıya asla gösterilmez, sadece internal
+    
+    // auth.users'daki email formatı için basePhone'u mevcut kullanıcıdan türetmeliyiz
+    let basePhone = existingUser.phone.replace(/[^0-9]/g, "");
+    if (basePhone.startsWith("90") && basePhone.length > 10) basePhone = basePhone.slice(2);
+    if (basePhone.startsWith("0")) basePhone = basePhone.slice(1);
+    
     const authEmail = `${basePhone}@meydan.internal`;
 
     // 3a. auth.users kaydını kontrol et (çalışanlar public.users'a direkt eklenir,

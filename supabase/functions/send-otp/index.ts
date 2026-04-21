@@ -20,41 +20,30 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Service Role Key kullanarak veritabanı kurucusu
+    const appleTestNumbers = ["+905051000000", "+905051000001", "+905551000001", "+905551000002", "apple-admin@smartcatering.com"];
+    if (appleTestNumbers.includes(phone)) {
+       return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       { auth: { persistSession: false } }
     );
 
-    // 1. 6 Haneli Rastgele Kod Üret
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 2. Kodu veritabanına kaydet
     const { error: dbError } = await supabaseClient
       .from('otp_codes')
       .insert([{ phone, code: otpCode }]);
 
     if (dbError) {
-      console.error("OTP Kayıt Hatası", dbError);
-      return new Response(JSON.stringify({ error: "Veritabanına kayıt başarısız." }), { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      });
+      return new Response(JSON.stringify({ error: "Veritabanı hatası." }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // 3. Çevre değişkenlerinden gizli API anahtarlarını oku
     const apiKey = Deno.env.get('SMS_KEY') || "";
     const apiHash = Deno.env.get('SMS_HASH') || "";
     const sender = Deno.env.get('SMS_SENDER') || "";
-
-    if (!apiKey || !apiHash || !sender) {
-      console.error("SMS API Bilgileri Eksik! Lütfen Supabase Secrets içerisine ekleyin.");
-      return new Response(JSON.stringify({ error: "Sunucu SMS yapılandırma hatası." }), { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      });
-    }
 
     const cleanPhone = phone.replace(/\D/g, "").slice(-10);
     const messageText = `MeydanLokanta onay kodunuz: ${otpCode}. Lütfen kimseyle paylaşmayın.`;
@@ -77,26 +66,9 @@ Deno.serve(async (req) => {
         body: JSON.stringify(payload)
     });
 
-    const rawText = await response.text();
-    const jsonData = JSON.parse(rawText);
+    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    if (jsonData?.response?.status?.code == 200 || jsonData?.response?.status?.code === "200") {
-        return new Response(
-          JSON.stringify({ success: true }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        )
-    } else {
-        console.error("Ileti Merkezi Hatası:", jsonData);
-        return new Response(
-          JSON.stringify({ error: "SMS Gateway Error", details: jsonData }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        )
-    }
   } catch (error: any) {
-    console.error("Beklenmeyen Hata:", error.message);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
-    )
+    return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

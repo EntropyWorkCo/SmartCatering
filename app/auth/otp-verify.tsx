@@ -1,6 +1,6 @@
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
-import { triggerAuthRefresh } from "@/lib/hooks/useAuth";
+import { useAuthStore } from "@/lib/store/authStore";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -118,83 +118,60 @@ export default function OtpVerifyScreen() {
                     }
 
                     Alert.alert("Başarılı", "Hesabınız oluşturuldu!");
-                    await triggerAuthRefresh();
-                    router.replace("/(tabs)/home");
+                    console.log("✅ Kayıt ve oturum başarılı.");
+                    // Guard bizi otomatik yönlendirecektir.
                 } else {
                     Alert.alert("Başarılı", "Hesabınız oluşturuldu! Lütfen giriş yapın.");
                     router.replace("/auth/login");
                 }
             } else {
-                // LOGIN MODE
+                // GİRİŞ MODU (LOGIN MODE)
                 if (!result.user_exists) {
                     Alert.alert("Kayıt Bulunamadı", "Bu numarayla eşleşen hesabınız bulunamadı. Lütfen kayıt olmayı deneyin.");
                     setLoading(false);
                     return;
                 }
 
-                // If role is employee, we need to check if they have a company_id
-                // The edge function returned the user record!
                 const existingUser = result.user;
-
-                // Silinmiş hesap engeli
                 if (existingUser?.role === 'deleted') {
-                    Alert.alert("Hesap Silinmiş", "Bu hesap bağlı bulunduğu firma tarafından silinmiştir veya askıya alınmıştır. Giriş yapılamaz.");
+                    Alert.alert("Hesap Silinmiş", "Bu hesap bağlı bulunduğu firma tarafından silinmiştir veya askıya alınmıştır.");
                     setLoading(false);
                     return;
                 }
 
+                // --- ÖNEMLİ: ROL TESPİTİ VE ÖNCEDEN KAYIT ---
                 const isActuallyOwner = existingUser?.role === 'owner' || existingUser?.role === 'corporate';
                 const isActuallyEmployee = existingUser?.company_id && (existingUser?.role === 'customer' || existingUser?.role === 'employee');
 
-                // Yetki Çapraz Giriş Engeli
+                // Yetki kontrolleri
                 if (role === 'owner' && !isActuallyOwner) {
-                    Alert.alert("Giriş Hatası", "Bu numara bir firma sahibi hesabına ait değildir.");
-                    setLoading(false);
-                    return;
+                    Alert.alert("Hata", "Bu numara bir firma sahibi hesabına ait değildir.");
+                    setLoading(false); return;
                 }
                 
                 if (role === 'individual' && (isActuallyOwner || isActuallyEmployee)) {
-                    Alert.alert("Giriş Hatası", "Bu numara kurumsal/firma hesabına aittir. Lütfen ilgili sekmeden giriş yapın.");
-                    setLoading(false);
-                    return;
+                    Alert.alert("Hata", "Bu numara kurumsal hesaba aittir. Lütfen ilgili sekmeden giriş yapın.");
+                    setLoading(false); return;
                 }
 
-                if (role === 'employee') {
-                    if (!isActuallyEmployee) {
-                        Alert.alert("Hata", "Bu numara için kayıtlı bir çalışan hesabı bulunamadı.");
-                        setLoading(false);
-                        return;
-                    }
+                // Giriş yapmadan ÖNCE hafızayı hazırla ki Store anında doğru görsün
+                // Hem rolü hem de adminlik durumunu önbelleğe alıyoruz (Hız için kritik)
+                const userRole = existingUser?.role || 'bireysel';
+                await AsyncStorage.setItem("userRole", userRole);
+                useAuthStore.getState().setRole(userRole as any);
 
+                if (isActuallyEmployee) {
                     await AsyncStorage.setItem("softUser", JSON.stringify(existingUser));
-                    
-                    // We also need to set the session
-                    const { error: sessionError } = await supabase.auth.setSession({
-                        access_token: result.access_token,
-                        refresh_token: result.refresh_token,
-                    });
-                    
-                    if (sessionError) throw sessionError;
-                    
-                    await triggerAuthRefresh();
-                    router.replace("/(tabs)/home");
-                    return;
                 }
-
-                // Normal Login (Owner/Individual) - use Edge Function's tokens directly
+                
+                // Oturumu başlat
                 const { error: sessionError } = await supabase.auth.setSession({
                     access_token: result.access_token,
                     refresh_token: result.refresh_token,
                 });
 
-                if (sessionError) {
-                    Alert.alert("Giriş Başarısız", "Oturum oluşturulamadı: " + sessionError.message);
-                    setLoading(false);
-                    return;
-                }
-
-                await triggerAuthRefresh();
-                router.replace("/(tabs)/home");
+                if (sessionError) throw sessionError;
+                console.log("✅ Giriş başarılı, yönlendiriliyor...");
             }
         } catch (error: any) {
             Alert.alert("Hata Oluştu", error.message);
