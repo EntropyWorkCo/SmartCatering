@@ -9,7 +9,10 @@ import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { userService } from "@/lib/services/userService";
+import { deleteAccount } from "@/lib/services/authService";
+import { supabase } from "@/lib/supabase";
 import { useResolvedTheme } from "@/lib/store/themeStore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function AccountInfoScreen() {
     const router = useRouter();
@@ -95,6 +98,66 @@ export default function AccountInfoScreen() {
                         } finally {
                             setSaving(false);
                         }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleDeleteAccount = async () => {
+        let title = "Hesabımı Sil";
+        let message = "Hesabınız kalıcı olarak silinecek. Bu işlem geri alınamaz.";
+
+        // Rol bazlı mesaj özelleştirme
+        if (profile?.role === 'corporate' || profile?.role === 'owner') {
+            message = "Firma hesabınız, tüm çalışanlarınızın bağlantıları ve verileriniz kalıcı olarak silinecek. Ödenmemiş borcunuzun bulunmaması gerekir.";
+        } else if (profile?.company_id) {
+            message = "Firma bağlantınız kesilecek ve kişisel hesabınız kalıcı olarak silinecek.";
+        }
+
+        Alert.alert(
+            title,
+            message,
+            [
+                { text: "Vazgeç", style: "cancel" },
+                {
+                    text: "Devam Et",
+                    style: "destructive",
+                    onPress: () => {
+                        Alert.alert(
+                            "Son Onay",
+                            "Emin misiniz? Tüm verileriniz yok olacak.",
+                            [
+                                { text: "Hayır, Vazgeç", style: "cancel" },
+                                {
+                                    text: "Evet, Hesabımı Sil",
+                                    style: "destructive",
+                                    onPress: async () => {
+                                        setSaving(true);
+                                        try {
+                                            const result = await deleteAccount();
+                                            if (result.success) {
+                                                // Temizlik ve Yönlendirme
+                                                await AsyncStorage.multiRemove(['softUser', 'isAdmin']);
+                                                await supabase.auth.signOut();
+                                                Alert.alert("Hoşçakalın", "Hesabınız başarıyla silindi.");
+                                                router.replace("/welcome" as any);
+                                            } else {
+                                                if (result.code === 'DEBT') {
+                                                    Alert.alert("Borç Engeli", result.error || "Ödenmemiş borcunuz bulunmaktadır.");
+                                                } else {
+                                                    Alert.alert("Hata", result.error || "Hesap silinirken bir sorun oluştu.");
+                                                }
+                                            }
+                                        } catch (error: any) {
+                                            Alert.alert("Hata", "Beklenmeyen bir hata oluştu.");
+                                        } finally {
+                                            setSaving(false);
+                                        }
+                                    }
+                                }
+                            ]
+                        );
                     }
                 }
             ]
@@ -200,6 +263,15 @@ export default function AccountInfoScreen() {
                         Ad ve Telefon bilgileriniz güvenlik için değiştirilemez. adres bilginiz ise siparişlerinizde otomatik kullanılır.
                     </Text>
                 </View>
+
+                <TouchableOpacity 
+                    style={styles.deleteBtn} 
+                    onPress={handleDeleteAccount}
+                    disabled={saving}
+                >
+                    <MaterialIcons name="delete-forever" size={20} color={colors.danger} />
+                    <Text style={styles.deleteBtnText}>HESABIMI KALICI OLARAK SİL</Text>
+                </TouchableOpacity>
             </ScrollView>
         </SafeAreaView>
     );
@@ -274,11 +346,23 @@ const getStyles = (colors: any) => StyleSheet.create({
         shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5
     },
     saveBtnText: { color: colors.background, fontSize: 16, fontWeight: "bold" },
-    downgradeBtn: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-        marginTop: 32, padding: 12, borderRadius: 12,
-        borderWidth: 1, borderColor: colors.danger + '40',
+    downgradeBtnText: { color: colors.danger, fontSize: 14, fontWeight: '600' },
+    deleteBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        marginTop: 24,
+        paddingVertical: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: colors.danger + '30',
         backgroundColor: colors.danger + '08'
     },
-    downgradeBtnText: { color: colors.danger, fontSize: 14, fontWeight: '600' }
+    deleteBtnText: {
+        color: colors.danger,
+        fontSize: 14,
+        fontWeight: 'bold',
+        letterSpacing: 0.5
+    }
 });

@@ -244,9 +244,10 @@ export const adisyonService = {
         .from("companies")
         .select("user_id")
         .eq("id", companyId)
-        .single();
+        .maybeSingle();
 
       if (companyError) throw companyError;
+      if (!company) return []; // Firma silinmişse sipariş listesi boş dönsün
 
       // 2. Get all employees in the company
       const { data: users, error: userError } = await supabase

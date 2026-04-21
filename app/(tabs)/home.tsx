@@ -121,8 +121,13 @@ export default function HomeScreen() {
       try {
         const data = await adisyonService.getCompanyOrders(actualCompanyId);
         setCompanyOrders(data || []);
-      } catch (e) {
-        console.error("Owner orders load error:", e);
+      } catch (e: any) {
+        // Eğer veri bulunamazsa (PGRST116) veya firma silinmişse listeyi temizle, hata basma
+        if (e.code === 'PGRST116') {
+           setCompanyOrders([]);
+        } else {
+           console.error("Owner orders load error:", e);
+        }
       } finally {
         setCompanyOrdersLoading(false);
       }

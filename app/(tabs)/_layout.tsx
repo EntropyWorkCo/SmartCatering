@@ -33,12 +33,19 @@ export default function TabLayout() {
 
     fetchUnreadCount();
 
+    const channelName = `unread-msgs-${user.id}`;
     const channel = supabase
-      .channel('user-messages-unread-tabs')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+      .channel(channelName)
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'messages',
+        filter: `user_id=eq.${user.id}` // Sadece bu kullanıcının mesajlarını dinle
+      }, () => {
         fetchUnreadCount();
-      })
-      .subscribe();
+      });
+      
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);

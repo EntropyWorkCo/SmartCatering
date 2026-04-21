@@ -8,8 +8,10 @@ export const userService = {
       .from("users")
       .select("*")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
+    
     if (error) throw error;
+    if (!data) return null; // Kullanıcı veritabanında yoksa null dön
 
     // Şirket bilgilerini çek ve profile ekle
     const { data: companyData } = await supabase
@@ -95,7 +97,7 @@ export const userService = {
         full_name: data.fullName,
         phone: data.phone,
         ...(data.address !== undefined ? { address: data.address } : {}),
-      })
+      } as any)
       .eq("id", userId);
 
     if (error) throw error;
@@ -153,21 +155,31 @@ export const userService = {
     return data;
   },
 
-  async addEmployee(companyId: string, fullName: string, phone: string, role: string = "customer", isCompany: boolean = true) {
-    const id = uuidv4();
-    const { error } = await supabase
-      .from("users")
-      .insert({
-        id,
-        full_name: fullName,
-        phone,
-        company_id: companyId,
-        is_company: isCompany,
-        role
-      });
-    if (error) throw error;
-    return id;
+  async addEmployee(
+    companyId: string,
+    fullName: string,
+    phone: string,
+    role: string = "customer",
+    isCompany: boolean = true
+  ) {
+    console.log("AddEmployee Başlatıldı:", { companyId, fullName, phone });
+    const { data, error } = await (supabase.rpc as any)("upsert_employee", {
+      p_company_id: companyId,
+      p_full_name: fullName,
+      p_is_company: isCompany,
+      p_phone: phone,
+      p_role: role
+    });
+
+    if (error) {
+      console.error("Çalışan ekleme/güncelleme hatası:", error);
+      throw error;
+    }
+    
+    console.log("AddEmployee Başarılı. Kayıt ID:", data);
+    return data;
   },
+
 
   async deleteEmployee(employeeId: string) {
     // Soft delete by setting role to "deleted". We keep company_id intact because

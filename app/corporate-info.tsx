@@ -121,12 +121,14 @@ export default function CorporateInfoScreen() {
 
     const loadEmployees = async () => {
         if (!actualCompanyId) return;
+        console.log("LoadEmployees Çağrıldı. ID:", actualCompanyId);
         setEmpLoading(true);
         try {
             const data = await userService.getCompanyEmployees(actualCompanyId);
+            console.log("Gelen Çalışan Sayısı:", data?.length || 0);
             setEmployees(data || []);
         } catch (e) {
-            console.error(e);
+            console.error("LoadEmployees Hatası:", e);
         } finally {
             setEmpLoading(false);
         }
@@ -205,13 +207,24 @@ export default function CorporateInfoScreen() {
 
         try {
             setEmpLoading(true);
-            await userService.addEmployee(actualCompanyId, newEmpName, isGuest ? "Misafir" : formattedPhone, isGuest ? "guest" : "customer", true);
+            await userService.addEmployee(
+                actualCompanyId, 
+                newEmpName, 
+                isGuest ? "Misafir" : formattedPhone, 
+                isGuest ? "guest" : "customer", 
+                true
+            );
+            
             setNewEmpName("");
             setNewEmpPhone("");
+            
+            // Listeyi anında yenile
             await loadEmployees();
-            Alert.alert("Başarılı", isGuest ? "Misafir eklendi." : "Çalışan eklendi.");
+            
+            Alert.alert("Başarılı", isGuest ? "Misafir eklendi." : "Çalışan eklendi/güncellendi.");
         } catch (e: any) {
-            Alert.alert("Hata", "Eklenemedi: " + e.message);
+            console.error("Add employee error:", e);
+            Alert.alert("Hata", "Eklenemedi: " + (e.message || "Bilinmeyen hata"));
         } finally {
             setEmpLoading(false);
         }

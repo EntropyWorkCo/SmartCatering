@@ -116,3 +116,39 @@ export const normalizePhone = (phone: string): string | null => {
     
     return `+90${cleaned}`;
 };
+
+/**
+ * Mevcut oturumdaki kullanıcının hesabını güvenli şekilde siler.
+ * Rol bazlı silme mantığı delete-account Edge Function içinde çalışır.
+ * @returns { success, code?, error? }
+ *   code = 'DEBT' → ödenmemiş borç var
+ */
+export const deleteAccount = async (): Promise<{
+  success: boolean;
+  code?: string;
+  error?: string;
+}> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session) {
+      return { success: false, error: 'Aktif oturum bulunamadı.' };
+    }
+
+    const { data, error } = await supabase.functions.invoke('delete-account', {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (error) {
+      console.error('deleteAccount Edge Function hatası:', error);
+      return { success: false, error: error.message };
+    }
+
+    return data; // { success, code?, error? }
+  } catch (e: any) {
+    console.error('deleteAccount beklenmeyen hata:', e);
+    return { success: false, error: e.message };
+  }
+};
