@@ -61,7 +61,14 @@ export default function RootLayout() {
     }
 
     // User is logged in
+    // Role null iken ve loading false iken (yani tespit bitti ama role bulunamadıysa) yönlendirme yapabiliriz.
+    // Ancak henüz roleLoading ise kesinlikle beklemeliyiz.
     if (inAuthGroup || segments.length < 1) {
+      if (roleLoading) {
+        console.log("⏳ Waiting for role resolution...");
+        return;
+      }
+
       let targetPath: any = "";
       
       switch(role) {
@@ -74,9 +81,8 @@ export default function RootLayout() {
           targetPath = "/(tabs)";
           break;
         default:
-          // Geçiş sürecinde rol tespiti yapılamazsa kullanıcıyı sistemden atmıyoruz, 
-          // varsayılan olarak (tabs) grubuna yönlendiriyoruz.
-          if (!roleLoading && segments.length < 1) {
+          // Hiçbir rol tespit edilemezse bireysele fallback (Sadece tespit bittiyse)
+          if (!roleLoading) {
             console.log("🚀 REDIRECTING TO DEFAULT: /(tabs)");
             targetPath = "/(tabs)";
           }
