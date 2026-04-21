@@ -175,7 +175,9 @@ export default function HomeScreen() {
 
     const unpaid = orders.filter((o) => {
       const status = (o.status || "").toUpperCase();
-      return !["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ", "COMPLETED", "TAMAMLANDI"].includes(status);
+      // Sadece İptal edilenler ve Ödenenler borçtan düşer. 
+      // TAMAMLANDI (COMPLETED) olsa bile ödenmediyse borçta görünmelidir.
+      return !["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ"].includes(status);
     });
 
     const now = new Date();
@@ -196,7 +198,13 @@ export default function HomeScreen() {
   }, [orders, timeFilter]);
 
   const currentDebt = useMemo(() => {
-    return filteredUnpaidOrders.reduce((acc, curr) => acc + (curr.total_amount || 0), 0);
+    return filteredUnpaidOrders.reduce((acc, curr) => {
+      // Ödeme kayıtları toplam borcu azaltır
+      if (curr.order_type === 'MANUAL_PAYMENT') {
+        return acc - (curr.total_amount || 0);
+      }
+      return acc + (curr.total_amount || 0);
+    }, 0);
   }, [filteredUnpaidOrders]);
 
   // Last order based on date
@@ -251,16 +259,27 @@ export default function HomeScreen() {
       const dateFormatted = `${d.toLocaleDateString('tr-TR')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
       const statusLabel = getLocalizedStatus(o.status);
       
+      // Detay belirleme: Eğer yemek yoksa (manuel girişse) notu göster
+      let itemDescription = o.adisyon_items?.map((item: any) => `${item.quantity}x ${item.menu_items?.name || 'Yemek'}`).join('<br>');
+      if (!itemDescription && o.note) {
+          itemDescription = o.note;
+      } else if (!itemDescription) {
+          itemDescription = o.order_type === 'MANUAL_DEBT' ? 'Borç Girişi' : (o.order_type === 'MANUAL_PAYMENT' ? 'Ödeme Kaydı' : 'Detay yok');
+      }
+
+      // Tutar belirleme: Manuel ödemeyse eksi/bilgilendirme
+      const amount = o.order_type === 'MANUAL_PAYMENT' ? `-${o.total_amount}` : `${o.total_amount}`;
+      
       return `
         <tr style="border-bottom: 1px solid #f1f5f9;">
             <td style="padding: 12px; font-size: 11px; color: #64748b;">${dateFormatted}</td>
             <td style="padding: 12px; font-size: 12px; color: #1e293b; font-weight: 500;">
-              ${o.adisyon_items?.map((item: any) => `${item.quantity}x ${item.menu_items?.name || 'Yemek'}`).join('<br>') || 'Detay yok'}
+              ${itemDescription}
             </td>
             <td style="padding: 12px; font-size: 11px; font-weight: bold; color: ${statusLabel === 'ÖDENDİ' ? '#10b981' : '#f97316'}; text-align: center;">
               ${statusLabel}
             </td>
-            <td style="padding: 12px; font-size: 13px; font-weight: 900; color: #1e293b; text-align: right;">₺${o.total_amount?.toLocaleString("tr-TR")}</td>
+            <td style="padding: 12px; font-size: 13px; font-weight: 900; color: ${o.order_type === 'MANUAL_PAYMENT' ? '#10b981' : '#1e293b'}; text-align: right;">₺${amount.toLocaleString()}</td>
         </tr>
       `;
     }).join('');

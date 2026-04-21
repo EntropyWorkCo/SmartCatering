@@ -33,38 +33,74 @@ export default function OrderRatingScreen() {
     const [itemRatings, setItemRatings] = useState<{ [key: string]: number }>({});
     const [comment, setComment] = useState("");
     const [submitting, setSubmitting] = useState(false);
+    const [hasRated, setHasRated] = useState(false);
+    const [existingRating, setExistingRating] = useState<any>(null);
 
     useEffect(() => {
-        const id = Array.isArray(orderId) ? orderId[0] : orderId;
+        const id = (Array.isArray(orderId) ? orderId[0] : orderId) || "";
         if (!id) {
             Alert.alert("Hata", "Sipariş bulunamadı.", [{ text: "Tamam", onPress: () => router.canGoBack() ? router.back() : router.replace("/(tabs)/home") }]);
             return;
         }
 
+        const safeOrderId: string = id; // Explicit string guarantee
+
         const fetchOrderDetails = async () => {
+            console.log("Değerlendirme Kontrolü Başladı. Sipariş ID:", safeOrderId);
             try {
-                const { data, error } = await supabase
+                // 1. Sipariş detaylarını çek
+                const { data: orderData, error: orderErr } = await supabase
                     .from("adisyon")
                     .select("*, adisyon_items(*, menu_items(name))")
-                    .eq("id", id)
+                    .eq("id", safeOrderId)
                     .single();
 
-                if (error) throw error;
+                if (orderErr) throw orderErr;
+                setOrder(orderData);
 
-                setOrder(data);
-                const initialRatings: { [key: string]: number } = {};
-                data.adisyon_items?.forEach((item: any) => {
-                    initialRatings[item.id] = 0;
-                });
-                setItemRatings(initialRatings);
-            } catch (error) {
-                console.error(error);
-                Alert.alert("Hata", "Sipariş detayları yüklenemedi.");
-                if (router.canGoBack()) {
-                    router.back();
-                } else {
-                    router.replace("/(tabs)/past-orders");
+                // 2. Bu sipariş için önceden verilmiş feedback var mı?
+                const { data: feedbackData, error: feedbackErr } = await supabase
+                    .from("feedbacks")
+                    .select("*")
+                    .eq("order_id", safeOrderId)
+                    .limit(1);
+
+                if (feedbackErr) {
+                    console.error("Feedback sorgu hatası:", feedbackErr);
                 }
+
+                console.log("Sorgulanan Sipariş için bulanan feedback:", feedbackData);
+
+                if (feedbackData && feedbackData.length > 0) {
+                    const fb = feedbackData[0];
+                    console.log("Bu sipariş ÖNCEDEN DEĞERLENDİRİLMİŞ.");
+                    setHasRated(true);
+                    setExistingRating(fb);
+                    
+                    try {
+                        const parsedNote = JSON.parse(fb.note || "{}");
+                        setComment(parsedNote.text || "");
+                        
+                        const restoredRatings: { [key: string]: number } = {};
+                        orderData.adisyon_items?.forEach((item: any) => {
+                            const detail = (parsedNote.details || []).find((d: any) => d.name === item.menu_items?.name);
+                            restoredRatings[item.id] = detail ? detail.rating : 0;
+                        });
+                        setItemRatings(restoredRatings);
+                    } catch (e) {
+                         setComment(fb.note || "");
+                    }
+                } else {
+                    console.log("Bu sipariş HENÜZ değerlendirilmemiş.");
+                    const initialRatings: { [key: string]: number } = {};
+                    orderData.adisyon_items?.forEach((item: any) => {
+                        initialRatings[item.id] = 0;
+                    });
+                    setItemRatings(initialRatings);
+                }
+            } catch (error) {
+                console.error("Detay getirme hatası:", error);
+                Alert.alert("Hata", "Sipariş detayları yüklenemedi.");
             } finally {
                 setLoading(false);
             }
@@ -94,7 +130,8 @@ export default function OrderRatingScreen() {
                     rating: itemRatings[item.id]
                 }));
 
-            const id = Array.isArray(orderId) ? orderId[0] : orderId;
+            const safeId: string = (Array.isArray(orderId) ? orderId[0] : orderId) || "";
+            if (!safeId) throw new Error("Sipariş ID bulunamadı.");
             
             // Bypass missing rating_details column by combining data into the note field
             const combinedNote = JSON.stringify({
@@ -103,14 +140,14 @@ export default function OrderRatingScreen() {
             });
 
             await supabase.from("feedbacks").insert({
-                user_id: user?.id,
-                order_id: id,
+                user_id: user?.id || "",
+                order_id: safeId,
                 rating: generalRating,
                 note: combinedNote
             });
 
             Alert.alert("Başarılı", "Değerlendirmeniz kaydedildi. Geri bildiriminiz için teşekkür ederiz!", [
-                { text: "Tamam", onPress: () => router.push("/(tabs)/past-orders") }
+                { text: "Tamam", onPress: () => router.replace("/(tabs)/past-orders") }
             ]);
         } catch (error: any) {
             Alert.alert("Hata", error.message || "Değerlendirme gönderilemedi.");
@@ -167,11 +204,20 @@ export default function OrderRatingScreen() {
                                 {date.toLocaleDateString('tr-TR')} {date.getHours().toString().padStart(2, '0')}:{date.getMinutes().toString().padStart(2, '0')}
                             </Text>
                         </View>
-                        <Text style={styles.summaryHelpText}>Lütfen yediğiniz ürünleri puanlayın.</Text>
+                        <Text style={styles.summaryHelpText}>
+                            {hasRated ? "Bu siparişi daha önce değerlendirdiniz." : "Lütfen yediğiniz ürünleri puanlayın."}
+                        </Text>
                     </View>
 
                     <View style={styles.ratingSection}>
-                        <Text style={styles.sectionTitle}>Menü İçeriği</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Menü İçeriği</Text>
+                            {hasRated && (
+                                <View style={{ backgroundColor: '#10b98120', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+                                    <Text style={{ color: '#10b981', fontSize: 11, fontWeight: '900' }}>DEĞERLENDİRİLDİ</Text>
+                                </View>
+                            )}
+                        </View>
                         
                         {order.adisyon_items?.map((item: any) => (
                             <View key={item.id} style={styles.ratingRow}>
@@ -183,8 +229,9 @@ export default function OrderRatingScreen() {
                                     {[1, 2, 3, 4, 5].map((star) => (
                                         <TouchableOpacity
                                             key={star}
-                                            onPress={() => setItemRatings(prev => ({ ...prev, [item.id]: star }))}
+                                            onPress={() => !hasRated && setItemRatings(prev => ({ ...prev, [item.id]: star }))}
                                             style={styles.starBtn}
+                                            disabled={hasRated}
                                         >
                                             <MaterialIcons
                                                 name={itemRatings[item.id] >= star ? "star" : "star-border"}
@@ -201,7 +248,7 @@ export default function OrderRatingScreen() {
                     <View style={styles.commentSection}>
                         <Text style={styles.sectionTitle}>Mesajınız (İsteğe Bağlı)</Text>
                         <TextInput
-                            style={styles.commentInput}
+                            style={[styles.commentInput, hasRated && { opacity: 0.8, backgroundColor: colors.background }]}
                             placeholder="Siparişle ilgili eklemek istedikleriniz..."
                             placeholderTextColor={colors.muted}
                             value={comment}
@@ -209,20 +256,24 @@ export default function OrderRatingScreen() {
                             multiline
                             numberOfLines={4}
                             textAlignVertical="top"
+                            editable={!hasRated}
                         />
                     </View>
 
                     <TouchableOpacity
-                        style={[styles.submitBtn, (submitting || (!Object.values(itemRatings).some(r => r > 0) && !comment.trim())) && { opacity: 0.5 }]}
+                        style={[
+                            styles.submitBtn, 
+                            (submitting || hasRated || (!Object.values(itemRatings).some(r => r > 0) && !comment.trim())) && { opacity: 0.5, backgroundColor: hasRated ? '#10b981' : colors.primary }
+                        ]}
                         onPress={submitRating}
-                        disabled={submitting || (!Object.values(itemRatings).some(r => r > 0) && !comment.trim())}
+                        disabled={submitting || hasRated || (!Object.values(itemRatings).some(r => r > 0) && !comment.trim())}
                     >
                         {submitting ? (
                             <ActivityIndicator color="#fff" size="small" />
                         ) : (
                             <>
-                                <MaterialIcons name="send" size={20} color="#fff" />
-                                <Text style={styles.submitBtnText}>Değerlendirmeyi Gönder</Text>
+                                <MaterialIcons name={hasRated ? "check-circle" : "send"} size={20} color="#fff" />
+                                <Text style={styles.submitBtnText}>{hasRated ? "Değerlendirildi" : "Değerlendirmeyi Gönder"}</Text>
                             </>
                         )}
                     </TouchableOpacity>
