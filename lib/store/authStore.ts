@@ -35,74 +35,39 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (get().initialized && !force) return;
 
     try {
-      // 1. Get Session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       let finalSession = session;
-
-      if (sessionError) {
-        if (sessionError.message.includes("Refresh Token") || sessionError.status === 400) {
-          await supabase.auth.signOut();
-          await AsyncStorage.removeItem("isAdmin");
-          await AsyncStorage.removeItem("softUser");
-        }
-        finalSession = null;
-      } else if (!session) {
+      if (sessionError || !session) {
         const softUserStr = await AsyncStorage.getItem("softUser");
         if (softUserStr) {
           try {
             const softUser = JSON.parse(softUserStr);
             finalSession = { user: softUser, isSoftUser: true } as any;
-          } catch (e) {
-            console.error("SoftUser parse error:", e);
-          }
+          } catch (e) {}
         }
       }
 
-      // 2. Resolve Full Role
-      const result = await resolveRoleData(finalSession);
-      
+      // Sadece ana verileri set et, rolü ihtiyaca göre useUserRole veya ekranlar çözsün
       set({ 
         session: finalSession, 
         user: finalSession?.user || null,
-        role: result.role,
-        firmaId: result.firmaId,
-        isAdmin: result.role === 'admin',
         loading: false,
         initialized: true
       });
 
-      // 3. Listen for changes (Only if not already listening)
       if (!get().subscription) {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-          console.log("🔄 Auth Store Change:", _event);
-          
-          let currentSession = session;
-          if (!session) {
-            const softUserStr = await AsyncStorage.getItem("softUser");
-            if (softUserStr) {
-                try {
-                    const softUser = JSON.parse(softUserStr);
-                    currentSession = { user: softUser, isSoftUser: true } as any;
-                } catch (e) {}
-            }
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+          console.log("🔄 Auth State:", _event);
+          if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
+            set({ session, user: session?.user || null, loading: false });
+          } else if (_event === 'SIGNED_OUT') {
+            set({ session: null, user: null, role: null, loading: false });
           }
-
-          const freshResult = await resolveRoleData(currentSession);
-          
-          set({ 
-            session: currentSession, 
-            user: currentSession?.user || null,
-            role: freshResult.role,
-            firmaId: freshResult.firmaId,
-            isAdmin: freshResult.role === 'admin',
-            loading: false
-          });
         });
         set({ subscription });
       }
     } catch (error) {
-      console.error("Auth store initialization failed:", error);
       set({ loading: false, initialized: true });
     }
   },
@@ -129,35 +94,52 @@ async function resolveRoleData(session: any): Promise<{ role: UserRole, firmaId:
     const userId = session.user.id;
     const isSoftUser = !!session.isSoftUser;
 
-    // 1. ADIM: Admin Kontrolü
+    // 1. ADIM: Admin Kontrolü (Önce Cache, sonra Raporlama)
     const isAdminStorage = await AsyncStorage.getItem("isAdmin");
     if (isAdminStorage === "true") {
         return { role: 'admin', firmaId: null };
     }
 
-    // RPC check for admin
+    // RPC check for admin - Sadece gerçek kullanıcılar için ve hata yakalamalı
     if (!isSoftUser) {
-        const { data: isAdminRPC } = await supabase.rpc("is_admin");
-        if (isAdminRPC) {
-            await AsyncStorage.setItem("isAdmin", "true");
-            return { role: 'admin', firmaId: null };
+        try {
+            const { data: isAdminRPC } = await supabase.rpc("is_admin");
+            if (isAdminRPC) {
+                await AsyncStorage.setItem("isAdmin", "true");
+                return { role: 'admin', firmaId: null };
+            }
+        } catch (e) {
+            console.warn("Admin RPC check bypassed or failed");
         }
     }
 
-    // 2. ADIM: Cache'lenmiş Rol Kontrolü (Hız için)
-    const cachedRole = await AsyncStorage.getItem("userRole");
-    if (cachedRole) {
-        return { role: cachedRole as any, firmaId: null }; // Firma ID gerekiyorsa aşağıda detaylı çözülecek ama yönlendirme için bu yeterli
+    // 2. ADIM: Metadata Kontrolü (Hızlı Yol)
+    let roleFromMetadata = session.user.app_metadata?.role || session.user.user_metadata?.role;
+    let firmaIdFromMetadata = session.user.app_metadata?.firma_id || session.user.user_metadata?.firma_id;
+
+    // Database'deki 'owner' veya 'corporate' rollerini bizim sistemdeki 'firma_sahibi'ne map ediyoruz
+    const mapRole = (r: string): UserRole => {
+        if (r === "admin") return "admin";
+        if (r === "owner" || r === "corporate" || r === "firma_sahibi") return "firma_sahibi";
+        if (r === "employee" || r === "staff" || r === "firma_calisan") return "firma_calisan";
+        return "bireysel";
+    };
+
+    if (roleFromMetadata) {
+        return { 
+            role: mapRole(roleFromMetadata), 
+            firmaId: firmaIdFromMetadata || null 
+        };
     }
 
-    // 3. ADIM: Metadata Kontrolü
-    let role = session.user.app_metadata?.role || session.user.user_metadata?.role;
-    let firmaId = session.user.app_metadata?.firma_id || session.user.user_metadata?.firma_id;
+    // 3. ADIM: Cache'lenmiş Rol Kontrolü
+    const cachedRole = await AsyncStorage.getItem("userRole");
+    if (cachedRole) {
+        return { role: mapRole(cachedRole), firmaId: null };
+    }
 
-    if (role && role === 'admin') return { role: 'admin', firmaId: null };
-
-    // 3. ADIM: Veritabanı (Public.Users) Kontrolü
-    if (!role && !isSoftUser) {
+    // 4. ADIM: Veritabanı (Public.Users) Kontrolü (En son çare)
+    if (!isSoftUser) {
         const { data: profile } = await supabase
             .from("users")
             .select("role, company_id, is_company")
@@ -165,20 +147,17 @@ async function resolveRoleData(session: any): Promise<{ role: UserRole, firmaId:
             .maybeSingle();
 
         if (profile) {
+            let role: UserRole = "bireysel";
             if (profile.role === 'admin') role = 'admin';
             else if (profile.role === 'owner' || profile.role === 'corporate' || profile.is_company) role = 'firma_sahibi';
             else if (profile.company_id) role = 'firma_calisan';
-            else role = 'bireysel';
             
-            firmaId = profile.company_id;
+            return { 
+                role, 
+                firmaId: profile.company_id || null 
+            };
         }
     }
 
-    // Fallback
-    if (!role) role = 'bireysel';
-
-    return { 
-        role: role as UserRole, 
-        firmaId: firmaId || null 
-    };
+    return { role: 'bireysel', firmaId: null };
 }

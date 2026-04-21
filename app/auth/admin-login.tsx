@@ -89,7 +89,8 @@ export default function AdminLoginScreen() {
         }
       }
 
-      // Manuel yönlendirmeye gerek yok, RootLayout içindeki Guard bizi otomatik götürecektir.
+      // Manuel yönlendirme ekleyerek takılmaları önlüyoruz
+      router.replace("/(admin)/dashboard");
     } catch (err: any) {
       console.error("LOG: Genel Hata:", err.message);
       Alert.alert("Giriş Başarısız", err.message || "Bir hata oluştu.");

@@ -171,6 +171,10 @@ export default function OtpVerifyScreen() {
                 });
 
                 if (sessionError) throw sessionError;
+
+                // MANUEL YÖNLENDİRME (Hız için - Guard'ı beklemiyoruz)
+                const target = userRole === 'admin' ? "/(admin)/dashboard" : "/(tabs)";
+                router.replace(target as any);
                 console.log("✅ Giriş başarılı, yönlendiriliyor...");
             }
         } catch (error: any) {

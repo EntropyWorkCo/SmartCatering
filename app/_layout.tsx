@@ -51,34 +51,17 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
     }
   }, [loaded]);
 
-  // 2. Auth Guard (Navigasyon)
+  // 2. Auth Guard (Navigasyon - Sadece Temel Güvenlik)
   useEffect(() => {
     if (loading) return;
 
-    requestAnimationFrame(() => {
-      const inAuthGroup = segments[0] === "auth" || segments[0] === "welcome";
-      const isModalOrRating = segments[0] === "modal" || segments[0] === "order-rating";
-      
-      if (!user) {
-        if (!inAuthGroup && !isModalOrRating) {
-          router.replace("/welcome");
-        }
-        return;
-      }
-
-      if (inAuthGroup || segments.length < 1) {
-        let targetPath: any = "";
-        switch(role) {
-          case 'admin': targetPath = "/(admin)/dashboard"; break;
-          case 'firma_sahibi':
-          case 'firma_calisan':
-          case 'bireysel': targetPath = "/(tabs)"; break;
-          default: targetPath = "/(tabs)"; break;
-        }
-        if (targetPath) router.replace(targetPath);
-      }
-    });
-  }, [user, role, segments, loading]);
+    const inAuthGroup = segments[0] === "auth" || segments[0] === "welcome";
+    const isModalOrRating = segments[0] === "modal" || segments[0] === "order-rating";
+    
+    if (!user && !inAuthGroup && !isModalOrRating && segments.length > 0) {
+        router.replace("/welcome");
+    }
+  }, [user, segments, loading]);
 
   if (!loaded) return null;
 

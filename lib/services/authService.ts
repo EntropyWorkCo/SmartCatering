@@ -3,12 +3,24 @@ import { supabase } from '../supabase';
 // Supabase Edge Function üzerinden İletiMerkezi API entegrasyonu
 export const sendOtp = async (phone: string): Promise<boolean> => {
     try {
-        const { data, error } = await supabase.functions.invoke('send-otp', {
-            body: { phone }
+        const supabaseUrl = "https://vruwzmljqfvnerenwzpy.supabase.co";
+        const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZydXd6bWxqcWZ2bmVyZW53enB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNjgwNjIsImV4cCI6MjA4Njg0NDA2Mn0.DyFBoBjHhvd67xwiR0YTHu_bkHR3-klsRu36EFq0hSE";
+
+        // SDK yerine direkt fetch kullanarak kütüphane hatalarını bypass ediyoruz
+        const response = await fetch(`${supabaseUrl}/functions/v1/send-otp`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseAnonKey}`,
+                'apikey': supabaseAnonKey
+            },
+            body: JSON.stringify({ phone })
         });
 
-        if (error || !data?.success) {
-            console.error("OTP Gönderim Hatası (Edge Function):", error?.message || data?.error);
+        const data = await response.json();
+
+        if (!response.ok || !data?.success) {
+            console.error("OTP Gönderim Hatası (Direct Fetch):", data?.error || response.status);
             return false;
         }
 
@@ -26,17 +38,23 @@ export const sendOtp = async (phone: string): Promise<boolean> => {
  */
 export const verifyOtp = async (phone: string, code: string): Promise<any> => {
     try {
-        const { data, error } = await supabase.functions.invoke('verify-otp', {
-            body: { phone, code },
+        const supabaseUrl = "https://vruwzmljqfvnerenwzpy.supabase.co";
+        const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZydXd6bWxqcWZ2bmVyZW53enB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNjgwNjIsImV4cCI6MjA4Njg0NDA2Mn0.DyFBoBjHhvd67xwiR0YTHu_bkHR3-klsRu36EFq0hSE";
+
+        const response = await fetch(`${supabaseUrl}/functions/v1/verify-otp`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseAnonKey}`,
+                'apikey': supabaseAnonKey
+            },
+            body: JSON.stringify({ phone, code }),
         });
 
-        if (error) {
-            console.error("verifyOtp Hatası:", error);
-            return { success: false, error: error.message };
-        }
+        const data = await response.json();
 
-        if (data && data.success) {
-            return data; // { success: true, user_exists: true/false, access_token, etc. }
+        if (response.ok && data.success) {
+            return data;
         } else {
             return { success: false, error: data?.error || "Doğrulama başarısız" };
         }
