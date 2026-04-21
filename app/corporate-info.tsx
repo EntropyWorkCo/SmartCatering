@@ -73,7 +73,7 @@ export default function CorporateInfoScreen() {
     }, [user?.id]);
 
     const actualCompanyId = fetchedCompanyId || profile?.corporate_info?.id || profile?.company_id;
-    const isCompanyOwner = !!profile?.corporate_info || profile?.is_company === true || profile?.role === 'corporate';
+    const isCompanyOwner = profile?.role === 'owner' || profile?.role === 'corporate';
 
     useEffect(() => {
         if (!authLoading && !profileLoading && !isCompanyOwner) {
@@ -120,14 +120,21 @@ export default function CorporateInfoScreen() {
     }, [activeTab, actualCompanyId]);
 
     const loadEmployees = async () => {
-        if (!actualCompanyId) return;
-        console.log("LoadEmployees Çağrıldı. ID:", actualCompanyId);
+        if (!actualCompanyId) {
+            console.log("LoadEmployees: actualCompanyId bulunamadı.");
+            return;
+        }
+        
         setEmpLoading(true);
         try {
             const data = await userService.getCompanyEmployees(actualCompanyId);
-            console.log("Gelen Çalışan Sayısı:", data?.length || 0);
             setEmployees(data || []);
-        } catch (e) {
+            
+            if (!data || data.length === 0) {
+                // Sessizce ama geliştirme için log'layarak
+                console.log("Çalışan listesi boş döndü. Firma ID:", actualCompanyId);
+            }
+        } catch (e: any) {
             console.error("LoadEmployees Hatası:", e);
         } finally {
             setEmpLoading(false);

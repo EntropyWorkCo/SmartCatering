@@ -20,6 +20,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { sendOtp, verifyOtp, registerUser } from "../../lib/services/authService";
+import { userService } from "../../lib/services/userService";
 import { supabase } from "../../lib/supabase";
 
 export default function OtpVerifyScreen() {
@@ -99,6 +100,25 @@ export default function OtpVerifyScreen() {
                     });
                     if (sessionError) throw sessionError;
 
+                    // EK DÜZELTME: Kayıt sırasında girilen adresin şirket tablosuna (companies) 
+                    // de işlendiğinden emin olalım (Edge function bazen kaçırabiliyor)
+                    if (role === "owner" && address) {
+                        try {
+                            const { data: { user: newUser } } = await supabase.auth.getUser();
+                            if (newUser) {
+                                await userService.updateCorporateInfo(newUser.id, {
+                                    companyName: companyName,
+                                    taxNumber: vkn,
+                                    companyPhone: "", // Telefon formda yoksa boş geçebiliriz
+                                    invoiceAddress: address
+                                });
+                                console.log("Adres şirket tablosuna başarıyla işlendi.");
+                            }
+                        } catch (addrErr) {
+                            console.error("Adres şirket tablosuna işlenirken hata:", addrErr);
+                        }
+                    }
+
                     Alert.alert("Başarılı", "Hesabınız oluşturuldu!");
                     await triggerAuthRefresh();
                     router.replace("/(tabs)/home");
@@ -125,25 +145,25 @@ export default function OtpVerifyScreen() {
                     return;
                 }
 
-                const isActuallyCompany = existingUser?.is_company === true 
-                                        || existingUser?.role === 'owner' 
-                                        || existingUser?.role === 'corporate';
+                const isActuallyOwner = existingUser?.role === 'owner' || existingUser?.role === 'corporate';
+                const isActuallyEmployee = existingUser?.company_id && (existingUser?.role === 'customer' || existingUser?.role === 'employee');
 
-                // Yetki Çapraz Giriş Engeli (Bireysel üyeler Kurumsal'dan, Kurumsallar Bireyselden giremesin)
-                if (role === 'owner' && !isActuallyCompany) {
-                    Alert.alert("Giriş Hatası", "Bu numara bireysel hesaba aittir. Firma sahibi girişi yapılamaz.");
+                // Yetki Çapraz Giriş Engeli
+                if (role === 'owner' && !isActuallyOwner) {
+                    Alert.alert("Giriş Hatası", "Bu numara bir firma sahibi hesabına ait değildir.");
                     setLoading(false);
                     return;
                 }
                 
-                if (role === 'individual' && isActuallyCompany) {
-                    Alert.alert("Giriş Hatası", "Bu numara kurumsal hesaba aittir. Lütfen Firma / Çalışan girişini kullanın.");
+                if (role === 'individual' && (isActuallyOwner || isActuallyEmployee)) {
+                    Alert.alert("Giriş Hatası", "Bu numara kurumsal/firma hesabına aittir. Lütfen ilgili sekmeden giriş yapın.");
                     setLoading(false);
                     return;
                 }
+
                 if (role === 'employee') {
-                    if (!existingUser?.company_id || !existingUser?.is_company) {
-                        Alert.alert("Hata", "Firma kaydınız doğrulanamadı.");
+                    if (!isActuallyEmployee) {
+                        Alert.alert("Hata", "Bu numara için kayıtlı bir çalışan hesabı bulunamadı.");
                         setLoading(false);
                         return;
                     }

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
+import { userService } from "../services/userService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type UserRole = 'admin' | 'firma_sahibi' | 'firma_calisan' | 'bireysel';
 
@@ -43,6 +45,17 @@ export function useUserRole() {
              else resolvedRole = 'bireysel';
              
              resolvedFirmaId = profile.company_id;
+          }
+        }
+
+        // 4. Öncelik: Kesin Admin Kontrolü (Hala çözülemediyse veya bireysel görünüyorsa)
+        if (!resolvedRole || resolvedRole === 'bireysel') {
+          const isAdminStorage = await AsyncStorage.getItem("isAdmin");
+          if (isAdminStorage === "true") {
+            resolvedRole = 'admin';
+          } else {
+            const isAdmin = await userService.checkIsAdmin();
+            if (isAdmin) resolvedRole = 'admin';
           }
         }
 

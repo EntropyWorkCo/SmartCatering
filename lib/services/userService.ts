@@ -28,7 +28,7 @@ export const userService = {
         companyPhone: companyData.company_phone,
         invoiceAddress: companyData.address
       };
-    } else if (data.is_company === true || (data as any).role === 'corporate') {
+    } else if (data.is_company === true || (data as any).role === 'owner' || (data as any).role === 'corporate') {
       // Kayıt henüz yoksa boş bir yapı ekle ki UI'da görünsün ve düzenlenebilsin
       (data as any).corporate_info = {
         id: null,
@@ -82,8 +82,8 @@ export const userService = {
       .from("users")
       .update({
         is_company: true,
-        role: "corporate"
-      } as any) // Type error'u önlemek için as any kullanıyoruz (database.types güncellenecek)
+        role: "owner"
+      } as any)
       .eq("id", userId);
 
     if (userUpdateError) {
@@ -91,16 +91,28 @@ export const userService = {
     }
   },
   async updateProfile(userId: string, data: { fullName: string, phone: string, address?: string }) {
-    const { error } = await supabase
-      .from("users")
-      .update({
-        full_name: data.fullName,
-        phone: data.phone,
-        ...(data.address !== undefined ? { address: data.address } : {}),
-      } as any)
-      .eq("id", userId);
+    try {
+      // 1. Public tabloyu güncelle
+      const { error } = await supabase
+        .from("users")
+        .update({
+          full_name: data.fullName,
+          phone: data.phone,
+          ...(data.address !== undefined ? { address: data.address } : {}),
+        } as any)
+        .eq("id", userId);
 
-    if (error) throw error;
+      if (error) throw error;
+
+      // 2. Auth metadata'yı senkronize et (İsmi her iki yerde de aynı görmek için)
+      await supabase.auth.updateUser({
+        data: { full_name: data.fullName }
+      });
+
+    } catch (error) {
+      console.error("updateProfile hatası:", error);
+      throw error;
+    }
   },
 
   async checkIsAdmin() {
@@ -145,14 +157,28 @@ export const userService = {
   },
 
   async getCompanyEmployees(companyId: string) {
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("company_id", companyId)
-      .neq("role", "deleted")
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-    return data;
+    if (!companyId) return [];
+    
+    try {
+      // Daha geniş bir sorgu: Sadece company_id değil, hata payını azaltmak için fetch'i güçlendiriyoruz
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, full_name, phone, role, created_at, company_id, is_company")
+        .eq("company_id", companyId)
+        .neq("role", "deleted")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("GetCompanyEmployees Error:", error);
+        throw error;
+      }
+      
+      // console.log(`${companyId} için ${data?.length || 0} çalışan bulundu.`);
+      return data || [];
+    } catch (err: any) {
+      console.error("getCompanyEmployees unexpected error:", err);
+      return [];
+    }
   },
 
   async addEmployee(
@@ -162,8 +188,9 @@ export const userService = {
     role: string = "customer",
     isCompany: boolean = true
   ) {
-    console.log("AddEmployee Başlatıldı:", { companyId, fullName, phone });
-    const { data, error } = await (supabase.rpc as any)("upsert_employee", {
+    // this.log("AddEmployee Başlatıldı:", { companyId, fullName, phone });
+    // 1. RPC ile ekle (Şifreleme ve Auth işlemleri için)
+    const { data, error: rpcError } = await (supabase.rpc as any)("upsert_employee", {
       p_company_id: companyId,
       p_full_name: fullName,
       p_is_company: isCompany,
@@ -171,11 +198,45 @@ export const userService = {
       p_role: role
     });
 
-    if (error) {
-      console.error("Çalışan ekleme/güncelleme hatası:", error);
-      throw error;
+    if (rpcError) {
+        console.error("AddEmployee RPC Hatası:", rpcError);
+        throw rpcError;
     }
-    
+
+    // 2. DOĞRUDAN GÜNCELLEME (ID Üzerinden Kesin Eşleşme)
+    // RPC bazen 'data' olarak yeni eklenen kullanıcının ID'sini döndürür.
+    const newUserId = data?.id || data;
+
+    if (newUserId && typeof newUserId === 'string' && newUserId.length > 20) {
+        // console.log("Yeni Kullanıcı ID üzerinden güncelleniyor:", newUserId);
+        try {
+            await supabase
+                .from("users")
+                .update({ 
+                    company_id: companyId, 
+                    is_company: true,
+                    role: role 
+                })
+                .eq("id", newUserId);
+        } catch (e) {
+            console.warn("ID bazlı güncelleme hatası:", e);
+        }
+    } else {
+        // Fallback: Telefon ile güncelle
+        try {
+            await supabase
+                .from("users")
+                .update({ 
+                    company_id: companyId, 
+                    is_company: true,
+                    role: role 
+                })
+                .eq("phone", phone);
+        } catch (e) {
+            console.warn("Fallback güncelleme hatası:", e);
+        }
+    }
+
     console.log("AddEmployee Başarılı. Kayıt ID:", data);
     return data;
   },

@@ -24,6 +24,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { billingService } from "@/lib/services/billingService";
 import { notificationService } from "@/lib/services/notificationService";
+import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 
@@ -35,7 +36,8 @@ export default function ProfileScreen() {
 
     const { user } = useAuth();
     const { profile, loading, refresh } = useProfile(user?.id);
-    const isCompanyOwner = !!profile?.corporate_info || profile?.is_company === true || profile?.role === 'corporate';
+    const actualCompanyId = profile?.corporate_info?.id || profile?.company_id;
+    const isCompanyOwner = profile?.role === 'owner' || profile?.role === 'corporate';
 
     // Sekme her odaklandığında veriyi yenile (Örn: Kurumsal Bilgiler'den dönünce)
     useFocusEffect(
@@ -116,12 +118,27 @@ export default function ProfileScreen() {
     };
 
     const handleSave = async () => {
+        if (!user?.id) return;
+        
+        if (!fullName.trim()) {
+            Alert.alert("Hata", "Lütfen ad soyad giriniz.");
+            return;
+        }
+
         setSaving(true);
-        // Dummy save for UI representation context
-        setTimeout(() => {
-            setSaving(false);
+        try {
+            await userService.updateProfile(user.id, {
+                fullName,
+                phone: profile?.phone || ""
+            });
             Alert.alert("Başarılı", "Profiliniz güncellendi.");
-        }, 1000);
+            await refresh(); // Veriyi tazeleyelim
+        } catch (error: any) {
+            console.error("Profil güncelleme hatası:", error);
+            Alert.alert("Hata", "Profil güncellenirken bir hata oluştu.");
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleLogout = async () => {
@@ -144,7 +161,9 @@ export default function ProfileScreen() {
             <View style={styles.header}>
                 <View style={{ flex: 1 }}>
                     <Text style={styles.title}>Hesabım</Text>
-                    <Text style={{ fontSize: 11, color: colors.muted, marginTop: 4 }}>[{isCompanyOwner ? "Firma Sahibi Yetkisi Aktif" : "Bireysel Mod / Yetki Yok"}]</Text>
+                    <Text style={{ fontSize: 11, color: colors.muted, marginTop: 4 }}>
+                        [{isCompanyOwner ? "Firma Sahibi Yetkisi Aktif" : (profile?.company_id || profile?.is_company ? "Kurumsal Çalışan Modu Aktif" : "Bireysel Mod / Yetki Yok")}]
+                    </Text>
                 </View>
                 <ThemeSwitcher />
             </View>

@@ -200,12 +200,14 @@ export default function AccountInfoScreen() {
 
                 <View style={styles.formGroup}>
                     <Text style={styles.label}>Ad Soyad</Text>
-                    <View style={[styles.inputContainer, styles.readOnlyInput]}>
-                        <MaterialIcons name="person" size={20} color={colors.muted} />
+                    <View style={styles.inputContainer}>
+                        <MaterialIcons name="person" size={20} color={colors.primary} />
                         <TextInput
-                            style={[styles.input, { color: colors.muted }]}
+                            style={styles.input}
                             value={fullName}
-                            editable={false}
+                            onChangeText={setFullName}
+                            placeholder="Adınız ve Soyadınız"
+                            placeholderTextColor={colors.muted}
                         />
                     </View>
                 </View>
@@ -260,7 +262,7 @@ export default function AccountInfoScreen() {
                 <View style={styles.infoBox}>
                     <MaterialIcons name="info-outline" size={20} color={colors.muted} />
                     <Text style={styles.infoText}>
-                        Ad ve Telefon bilgileriniz güvenlik için değiştirilemez. adres bilginiz ise siparişlerinizde otomatik kullanılır.
+                        Telefon bilgileriniz güvenlik için değiştirilemez. Ad ve adres bilginiz ise siparişlerinizde otomatik kullanılır.
                     </Text>
                 </View>
 
