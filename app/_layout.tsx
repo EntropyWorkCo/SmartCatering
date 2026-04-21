@@ -39,29 +39,70 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
     initialize();
   }, []);
 
-  const loading = !loaded || authLoading;
+  // GÜVENLİK KİLİDİ: Eğer oturum kontrolü 5 saniye içinde tamamlanmazsa (bozuk token vb.) 
+  // beyaz ekranda takılı kalmamak için yüklemeyi zorla bitir.
+  const [forceLoad, setForceLoad] = React.useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setForceLoad(true);
+    }, 2000); // 2 saniye yeterli
+    return () => clearTimeout(timer);
+  }, []);
+
+  const loading = !loaded || (authLoading && !forceLoad);
 
   // 1. Splash Screen Kontrolü
   useEffect(() => {
-    if (loaded) {
+    // Hem fontlar yüklendiğinde HEM DE zorla açma (forceLoad) tetiklendiğinde splash'i kapat
+    if (loaded || forceLoad) {
       const timer = setTimeout(() => {
         SplashScreen.hideAsync().catch(() => {});
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [loaded]);
+  }, [loaded, forceLoad]);
 
-  // 2. Auth Guard (Navigasyon - Sadece Temel Güvenlik)
+  // 2. Auth Guard & Yönlendirme Mantığı
   useEffect(() => {
     if (loading) return;
 
     const inAuthGroup = segments[0] === "auth" || segments[0] === "welcome";
     const isModalOrRating = segments[0] === "modal" || segments[0] === "order-rating";
     
-    if (!user && !inAuthGroup && !isModalOrRating && segments.length > 0) {
-        router.replace("/welcome");
+    // Kullanıcı giriş yapmamışsa
+    if (!user) {
+        if (!inAuthGroup && !isModalOrRating) {
+            console.log("🚀 YÖNLENDİRİLİYOR: /welcome");
+            router.replace("/welcome");
+        }
+        return;
     }
-  }, [user, segments, loading]);
+
+    // Kullanıcı giriş yapmışsa ve ana sayfadaysa (veya auth sayfalarındaysa) yönlendir
+    if (inAuthGroup || segments.length === 0) {
+        let targetPath: any = "";
+        
+        switch(role) {
+            case 'admin':
+                targetPath = "/(admin)/dashboard";
+                break;
+            case 'firma_sahibi':
+            case 'firma_calisan':
+            case 'bireysel':
+                targetPath = "/(tabs)";
+                break;
+            default:
+                // Henüz rol belirlenmediyse (nadir durum)
+                if (!authLoading) targetPath = "/(tabs)";
+                break;
+        }
+
+        if (targetPath) {
+            console.log("🚀 ROL BAZLI YÖNLENDİRME:", targetPath);
+            router.replace(targetPath);
+        }
+    }
+  }, [user, role, segments, loading, authLoading]);
 
   if (!loaded) return null;
 
@@ -80,7 +121,7 @@ function RootLayoutNav({ user, role, loading }: any) {
     const deferredTimer = setTimeout(() => {
       // ÖNEMLİ: Expo SDK 53+ Versiyonunda Android Expo Go bildirimleri desteklemiyor.
       // Bu hata uygulamanın donmasına neden olmasın diye Expo Go'da bu kısmı atlıyoruz.
-      const isAndroidExpoGo = Platform.OS === 'android' && Constants.appOwnership === 'expo';
+      const isAndroidExpoGo = Platform.OS === 'android' && (Constants.appOwnership as any) === 'expo';
       if (isAndroidExpoGo) {
         console.log("⚠️ Android Expo Go: Bildirim sistemi devre dışı bırakıldı (SDK 53+ Kısıtlaması).");
       }

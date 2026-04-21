@@ -34,10 +34,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initialize: async (force = false) => {
     if (get().initialized && !force) return;
 
+    // 1. ÖNCE DİNLEYİCİYİ BAŞLAT (Herhangi bir mesajı kaçırmamak için)
+    if (!get().subscription) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        console.log("🔄 Auth State:", _event);
+        if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED' || _event === 'INITIAL_SESSION') {
+          set({ session, user: session?.user || null, loading: false });
+        } else if (_event === 'SIGNED_OUT') {
+          set({ session: null, user: null, role: null, loading: false });
+        }
+      });
+      set({ subscription });
+    }
+
+    // 2. SONRA OTURUMU KONTROL ET
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       let finalSession = session;
+
+      // KRİTİK HATA KONTROLÜ
+      if (sessionError && (sessionError.message.includes("Refresh Token") || sessionError.status === 400)) {
+        console.warn("🔄 Bozuk oturum tespit edildi, temizleniyor...");
+        await get().signOut();
+        return;
+      }
+
       if (sessionError || !session) {
         const softUserStr = await AsyncStorage.getItem("softUser");
         if (softUserStr) {
@@ -48,25 +70,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
 
-      // Sadece ana verileri set et, rolü ihtiyaca göre useUserRole veya ekranlar çözsün
       set({ 
         session: finalSession, 
         user: finalSession?.user || null,
         loading: false,
         initialized: true
       });
-
-      if (!get().subscription) {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-          console.log("🔄 Auth State:", _event);
-          if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
-            set({ session, user: session?.user || null, loading: false });
-          } else if (_event === 'SIGNED_OUT') {
-            set({ session: null, user: null, role: null, loading: false });
-          }
-        });
-        set({ subscription });
-      }
     } catch (error) {
       set({ loading: false, initialized: true });
     }
