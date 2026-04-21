@@ -39,10 +39,11 @@ export function useUserRole() {
             .single();
           
           if (profile) {
-             if (profile.role === 'admin') resolvedRole = 'admin';
-             else if (profile.role === 'corporate' || profile.is_company) resolvedRole = 'firma_sahibi';
-             else if (profile.company_id) resolvedRole = 'firma_calisan';
-             else resolvedRole = 'bireysel';
+              if (profile.role === 'admin') resolvedRole = 'admin';
+              else if (profile.role === 'owner' || profile.role === 'corporate' || profile.is_company) resolvedRole = 'firma_sahibi';
+              else if (profile.role === 'individual') resolvedRole = 'bireysel';
+              else if (profile.company_id || profile.role === 'customer') resolvedRole = 'firma_calisan';
+              else resolvedRole = 'bireysel';
              
              resolvedFirmaId = profile.company_id;
           }
