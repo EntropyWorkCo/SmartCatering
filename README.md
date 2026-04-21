@@ -1,67 +1,55 @@
-# Smart Catering Mobile App 🍲🚀
+# Smart Catering Management System 🍲🚀
 
-A fast, modern, and comprehensive comprehensive catering management application built with **React Native (Expo)** and **Supabase**. It provides dedicated interfaces for both individual/corporate customers and administrators, handling everything from daily menus to corporate debt tracking.
+This project is an **Internship Project** developed at **Entropy Work Co.** The system consists of a mobile application for customers and a comprehensive web panel for business management.
 
-## 🌟 Key Features
+## 🏗️ Project Structure
 
-### For Customers (Individual & Corporate)
-- **Daily & Weekly Menus:** Browse the "Menu of the Day" with dynamic availability statuses.
-- **Tabldot Packages:** Choose predefined meal packages (2, 3, or 4 options).
-- **Cart & Order Management:** Add items to the cart, review the summary, and place orders.
-- **Debt & Balance Tracking:** View current debt balances and download detailed PDF statements with timestamps (Daily, Weekly, Monthly filters).
-- **Order History:** Access all past orders with detailed breakdowns and receipts.
+The project is divided into two main components:
+1.  **Web Admin Panel (`catering-admin-web`):** A comprehensive management interface for administrators and business owners, featuring menu management, customer tracking, and financial reporting.
+2.  **Mobile Application (Root):** An application for individual and corporate customers to view daily menus, place orders, and track their debts.
 
-### For Administrators
-- **Menu Management:** Add, edit, or remove menu items and categories. Mark items as "Sold Out".
-- **Customer Management:** View and manage user accounts, split by 'Individual' and 'Corporate' lists.
-- **Order Tracking:** Approve pending orders, monitor live order statuses.
-- **Financial Dashboard:** Track total debts, collect payments (Tahsilat), and generate professional PDF statements for corporate and individual clients.
+---
+
+## 🚀 Installation and Setup
+
+### 1. Web Admin Panel (Vite + React)
+To set up the management panel:
+```bash
+cd catering-admin-web
+npm install
+npm run dev
+```
+*   **Access:** Open `http://localhost:5173` in your browser.
+*   **Configuration:** Supabase connection details are defined in `src/lib/supabase.ts`. SMS services use the keys provided in the `.env` file.
+
+### 2. Mobile Application (React Native + Expo)
+To set up the customer application:
+```bash
+# Ensure you are in the root directory
+npm install
+npx expo start
+```
+*   **Configuration:** You must create a `.env` file in the root directory and add the following credentials:
+    ```env
+    EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+    EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+    ```
+
+---
 
 ## 🛠️ Tech Stack
 
-- **Frontend:** React Native, Expo, React Navigation, Expo Router
-- **Backend & Database:** Supabase (PostgreSQL, Authentication)
+- **Frontend:** React Native (Expo), React (Vite)
+- **Backend & Database:** Supabase (PostgreSQL, Auth)
 - **State Management:** Zustand
-- **Styling:** Custom StyleSheet (Light & Dark Theme Support)
-- **Utilities:** Expo Print (PDF Generation), Expo Sharing
+- **Reporting:** Expo Print & html2pdf.js (PDF Generation)
 
-## 🚀 Getting Started
-
-### Prerequisites
-- Node.js installed
-- Expo CLI (`npm install -g expo-cli`)
-- A Supabase account and project
-
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/EntropyWorkCo/SmartCatering.git
-   cd SmartCatering
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Configure Environment Variables:
-   Create a `.env` file in the root directory and add your Supabase credentials:
-   ```env
-   EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
-   EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
-
-4. Run the app:
-   ```bash
-   npx expo start
-   ```
-
-## 👨‍💻 Developed By
-
-This project was passionately developed by:
+## 👨‍💻 Developers
+Developed as part of the **Entropy Work Co.** internship program:
 - **Ayşe Şevval Malkoç**
 - **Sena Tuncer**
 
+---
+
 ## 📄 License
-This project is for educational and portfolio purposes. Feel free to explore the code!
+This project is currently under development and was produced as an internship project within Entropy Work Co.
