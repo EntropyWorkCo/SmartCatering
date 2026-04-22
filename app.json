@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Meydan Lokanta",
-    "slug": "meydan-lokanta",
+    "slug": "smartcatering",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.mobileapp"
+      "bundleIdentifier": "com.entropywork.smartcatering"
     },
     "android": {
       "googleServicesFile": "./google-services.json",
@@ -26,7 +26,7 @@
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.anonymous.mobileapp"
+      "package": "com.entropywork.smartcatering"
     },
     "web": {
       "bundler": "metro",
@@ -51,9 +51,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "015fe52a-f654-4607-8023-0504fa4302b2"
+        "projectId": "de0c5b9d-8af0-44b2-8441-3be30b372aa0"
       }
     },
-    "owner": "senatuncer"
+    "owner": "entropywork"
   }
 }
