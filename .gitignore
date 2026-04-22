@@ -8,6 +8,7 @@ node_modules/
 dist/
 web-build/
 expo-env.d.ts
+credentials.json
 
 # Native
 .kotlin/
@@ -39,3 +40,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# build
+build/
+*.aab
+*.apk
