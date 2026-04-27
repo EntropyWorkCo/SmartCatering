@@ -39,13 +39,13 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
     initialize();
   }, []);
 
-  // GÜVENLİK KİLİDİ: Eğer oturum kontrolü 5 saniye içinde tamamlanmazsa (bozuk token vb.) 
+  // GÜVENLİK KİLİDİ: Eğer oturum kontrolü 4 saniye içinde tamamlanmazsa (bozuk token vb.) 
   // beyaz ekranda takılı kalmamak için yüklemeyi zorla bitir.
   const [forceLoad, setForceLoad] = React.useState(false);
   useEffect(() => {
     const timer = setTimeout(() => {
       setForceLoad(true);
-    }, 2000); // 2 saniye yeterli
+    }, 4000); // 4 saniye (Android açılış hızı için daha güvenli)
     return () => clearTimeout(timer);
   }, []);
 
@@ -56,7 +56,9 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
     // Hem fontlar yüklendiğinde HEM DE zorla açma (forceLoad) tetiklendiğinde splash'i kapat
     if (loaded || forceLoad) {
       const timer = setTimeout(() => {
-        SplashScreen.hideAsync().catch(() => {});
+        SplashScreen.hideAsync().catch((err) => {
+          console.warn("Splash screen hide error:", err);
+        });
       }, 500);
       return () => clearTimeout(timer);
     }
@@ -79,7 +81,7 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
     }
 
     // Kullanıcı giriş yapmışsa ve ana sayfadaysa (veya auth sayfalarındaysa) yönlendir
-    if (inAuthGroup || segments.length === 0) {
+    if (inAuthGroup || !segments[0]) {
         let targetPath: any = "";
         
         switch(role) {

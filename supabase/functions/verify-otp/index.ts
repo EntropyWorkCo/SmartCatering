@@ -32,11 +32,11 @@ serve(async (req) => {
     }
 
     // --- APPLE REVIEW MAGIC CODE BYPASS START ---
-    const appleTestNumbers = ["+905551000001", "+905551000002", "apple-admin@smartcatering.com"];
-    const magicCode = "123456";
+    const appleTestNumbers = ["+905551000001", "+905551000002", "apple-admin@smartcatering.com", "admin@meydan.com"];
+    const magicCodes = ["123456", "1234"];
     let isMagicLogin = false;
 
-    if (appleTestNumbers.includes(phone) && code === magicCode) {
+    if (appleTestNumbers.includes(phone) && magicCodes.includes(code)) {
         console.log("🍎 Apple Test Girişi (Magic Code):", phone);
         isMagicLogin = true;
     }
@@ -72,8 +72,8 @@ serve(async (req) => {
 
     // 2. Normalize phone and check if user exists in public.users
     let existingUser;
-    if (phone === "apple-admin@smartcatering.com") {
-        // Apple Test için sistemdeki herhangi bir admini alıyoruz
+    if (phone === "apple-admin@smartcatering.com" || phone === "admin@meydan.com") {
+        // Test ve Ana Admin için sistemdeki herhangi bir admini alıyoruz
         const { data } = await supabaseAdmin
             .from("users")
             .select("*")

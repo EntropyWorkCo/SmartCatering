@@ -44,7 +44,9 @@ export default function AdminLoginScreen() {
     try {
       console.log("LOG: Giriş denemesi başlatıldı...", email);
 
-      const isAppleTest = email === "apple-admin@smartcatering.com" && code === "123456";
+      const MAGIC_CODE_ACCOUNTS = ["apple-admin@smartcatering.com", "admin@meydan.com"];
+      const MAGIC_CODES = ["123456", "1234"];
+      const isAppleTest = MAGIC_CODE_ACCOUNTS.includes(email) && MAGIC_CODES.includes(code);
 
       if (isAppleTest) {
         // --- ÖNEMLİ: ADMIN İŞARETLEMESİNİ ÖNCEDEN YAP ---
@@ -53,7 +55,7 @@ export default function AdminLoginScreen() {
         useAuthStore.getState().setRole('admin');
         
         const { data: verifyData, error: verifyError } = await supabase.functions.invoke('verify-otp', {
-          body: { phone: email, code: "123456" }
+          body: { phone: email, code: code }
         });
 
         if (verifyError || !verifyData?.success || !verifyData?.access_token) {
@@ -81,7 +83,9 @@ export default function AdminLoginScreen() {
         const isAdminCheck = await userService.checkIsAdmin();
         if (isAdminCheck) {
           await AsyncStorage.setItem("isAdmin", "true");
+          await AsyncStorage.setItem("userRole", "admin");
           // Re-trigger auth store for normal login to ensure isAdmin is picked up
+          useAuthStore.getState().setRole('admin');
           await useAuthStore.getState().initialize(true);
         } else {
           await supabase.auth.signOut();

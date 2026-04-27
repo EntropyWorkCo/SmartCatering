@@ -36,12 +36,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     // 1. ÖNCE DİNLEYİCİYİ BAŞLAT (Herhangi bir mesajı kaçırmamak için)
     if (!get().subscription) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
         console.log("🔄 Auth State:", _event);
         if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED' || _event === 'INITIAL_SESSION') {
-          set({ session, user: session?.user || null, loading: false });
+          const { role, firmaId } = await resolveRoleData(session);
+          set({ 
+            session, 
+            user: session?.user || null, 
+            role, 
+            firmaId, 
+            isAdmin: role === 'admin',
+            loading: false 
+          });
         } else if (_event === 'SIGNED_OUT') {
-          set({ session: null, user: null, role: null, loading: false });
+          set({ session: null, user: null, role: null, firmaId: null, isAdmin: false, loading: false });
         }
       });
       set({ subscription });
@@ -70,9 +78,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
 
+      const { role, firmaId } = await resolveRoleData(finalSession);
+
       set({ 
         session: finalSession, 
         user: finalSession?.user || null,
+        role,
+        firmaId,
+        isAdmin: role === 'admin',
         loading: false,
         initialized: true
       });
