@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Platform, Alert, useColorScheme } from "react-native";
+import { Platform, Alert, useColorScheme, ActivityIndicator, View } from "react-native";
 import { Stack, useSegments, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -45,7 +45,7 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
   useEffect(() => {
     const timer = setTimeout(() => {
       setForceLoad(true);
-    }, 4000); // 4 saniye (Android açılış hızı için daha güvenli)
+    }, 6000); // 6 saniye — yavaş ağlarda rol belirlenmeden yönlendirme olmasın
     return () => clearTimeout(timer);
   }, []);
 
@@ -64,49 +64,83 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
     }
   }, [loaded, forceLoad]);
 
+  const pendingWelcomeRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // 2. Auth Guard & Yönlendirme Mantığı
   useEffect(() => {
     if (loading) return;
 
     const inAuthGroup = segments[0] === "auth" || segments[0] === "welcome";
     const isModalOrRating = segments[0] === "modal" || segments[0] === "order-rating";
-    
+
     // Kullanıcı giriş yapmamışsa
     if (!user) {
-        if (!inAuthGroup && !isModalOrRating) {
+      if (inAuthGroup || isModalOrRating) {
+        // Giriş sayfasındayız, varsa bekleyen yönlendirmeyi iptal et (Geri atmasın)
+        if (pendingWelcomeRef.current) {
+          clearTimeout(pendingWelcomeRef.current);
+          pendingWelcomeRef.current = null;
+        }
+      } else {
+        // Korumalı sayfadayız (Tabs gibi) ve kullanıcı yok -> Welcome'a yönlendir
+        // Zaten bir sayaç varsa tekrar başlatma
+        if (!pendingWelcomeRef.current) {
+          pendingWelcomeRef.current = setTimeout(() => {
             console.log("🚀 YÖNLENDİRİLİYOR: /welcome");
             router.replace("/welcome");
+            pendingWelcomeRef.current = null;
+          }, 1500);
         }
-        return;
+      }
+      return;
+    }
+
+    // Kullanıcı giriş yaptı — bekleyen /welcome redirect'ini iptal et
+    if (pendingWelcomeRef.current) {
+      clearTimeout(pendingWelcomeRef.current);
+      pendingWelcomeRef.current = null;
     }
 
     // Kullanıcı giriş yapmışsa ve ana sayfadaysa (veya auth sayfalarındaysa) yönlendir
     if (inAuthGroup || !segments[0]) {
-        let targetPath: any = "";
-        
-        switch(role) {
-            case 'admin':
-                targetPath = "/(admin)/dashboard";
-                break;
-            case 'firma_sahibi':
-            case 'firma_calisan':
-            case 'bireysel':
-                targetPath = "/(tabs)";
-                break;
-            default:
-                // Henüz rol belirlenmediyse (nadir durum)
-                if (!authLoading) targetPath = "/(tabs)";
-                break;
-        }
+      let targetPath: any = "";
 
-        if (targetPath) {
-            console.log("🚀 ROL BAZLI YÖNLENDİRME:", targetPath);
-            router.replace(targetPath);
-        }
+      switch (role) {
+        case "admin":
+          targetPath = "/(admin)/dashboard";
+          break;
+        case "firma_sahibi":
+        case "firma_calisan":
+        case "bireysel":
+          targetPath = "/(tabs)";
+          break;
+        default:
+          if (!authLoading) targetPath = "/(tabs)";
+          break;
+      }
+
+      if (targetPath) {
+        console.log("🚀 ROL BAZLI YÖNLENDİRME:", targetPath);
+        router.replace(targetPath);
+      }
     }
   }, [user, role, segments, loading, authLoading]);
 
-  if (!loaded) return null;
+  // User set olduğu an /welcome timer'ını iptal et (loading bitmese bile)
+  useEffect(() => {
+    if (user && pendingWelcomeRef.current) {
+      clearTimeout(pendingWelcomeRef.current);
+      pendingWelcomeRef.current = null;
+    }
+  }, [user]);
+
+  if (!loaded) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator size="large" color="#f59e0b" />
+      </View>
+    );
+  }
 
   return <RootLayoutNav user={user} role={role} loading={loading} />;
 }

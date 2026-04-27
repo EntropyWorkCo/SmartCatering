@@ -78,18 +78,7 @@ export default function LoginTabsScreen() {
             // Fakat Login işlemi için önce bu numaranın sistemde kayıtlı olup olmadığını (Supabase) kontrol etsek iyi olur.
             // (Güvenli yaklaşım: Phone Auth olmadığı için email üzerinden dummy check)
 
-            if (mode === 'login') {
-                const fakeEmail = `${cleanPhone}@meydan.com`;
-                // Sadece numara sistemde var mı diye dummy sorgu atıyoruz (Login denemesi)
-                const { error } = await supabase.auth.signInWithPassword({
-                    email: fakeEmail,
-                    password: `dummy-will-fail`, // Sadece email/user var mı diye bakmak istiyoruz ama Supabase direkt signIn limitliyor.
-                 });
-                 // Aslında Supabase Auth limitlerine takılmamak için direk OTP'ye yollayıp hatayı orada vermek daha güvenilir.
-                 // Biz şimdilik direk OTP ekranına yollayalım, numarayı bilerek yanlış girse bile OTP ekranına gider ama son adımda signIn patlar.
-            }
-
-            // OTP GÖNDERME SİMÜLASYONU
+            // OTP GÖNDERME
             const otpSent = await sendOtp(cleanPhone);
             
             if (otpSent) {

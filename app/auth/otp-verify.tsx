@@ -1,6 +1,5 @@
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
-import { useAuthStore } from "@/lib/store/authStore";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -154,28 +153,46 @@ export default function OtpVerifyScreen() {
                     setLoading(false); return;
                 }
 
-                // Giriş yapmadan ÖNCE hafızayı hazırla ki Store anında doğru görsün
-                // Hem rolü hem de adminlik durumunu önbelleğe alıyoruz (Hız için kritik)
+                console.log("🔵 [1] existingUser.role:", existingUser?.role, "| access_token var mı:", !!result.access_token);
+
+                // Rol bilgisini DB'den değil doğrudan existingUser'dan alıyoruz (hızlı)
                 const userRole = existingUser?.role || 'bireysel';
                 await AsyncStorage.setItem("userRole", userRole);
-                useAuthStore.getState().setRole(userRole as any);
 
                 if (isActuallyEmployee) {
                     await AsyncStorage.setItem("softUser", JSON.stringify(existingUser));
                 }
-                
+
+                // Token kontrolü
+                if (!result.access_token || !result.refresh_token) {
+                    Alert.alert("Giriş Hatası", "Sunucudan oturum token'ı alınamadı. Lütfen tekrar deneyin.");
+                    setLoading(false);
+                    return;
+                }
+
+                console.log("🔵 [2] setSession çağrılıyor...");
+
                 // Oturumu başlat
                 const { error: sessionError } = await supabase.auth.setSession({
                     access_token: result.access_token,
                     refresh_token: result.refresh_token,
                 });
 
-                if (sessionError) throw sessionError;
+                console.log("🔵 [3] setSession bitti. Hata:", sessionError?.message || "YOK");
 
-                // MANUEL YÖNLENDİRME (Hız için - Guard'ı beklemiyoruz)
-                const target = userRole === 'admin' ? "/(admin)/dashboard" : "/(tabs)";
+                if (sessionError) {
+                    Alert.alert("Oturum Hatası", sessionError.message);
+                    setLoading(false);
+                    return;
+                }
+
+                // Hedefi DB rolüne göre belirle (admin mi değil mi)
+                const isAdmin = userRole === 'admin';
+                const target = isAdmin ? "/(admin)/dashboard" : "/(tabs)";
+
+                console.log("🔵 [4] router.replace çağrılıyor:", target);
                 router.replace(target as any);
-                console.log("✅ Giriş başarılı, yönlendiriliyor...");
+                console.log("🔵 [5] router.replace tamamlandı");
             }
         } catch (error: any) {
             Alert.alert("Hata Oluştu", error.message);

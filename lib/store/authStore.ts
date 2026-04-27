@@ -109,12 +109,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
  * Rol hesaplama mantığını merkezi bir yardımcı fonksiyona taşıyoruz.
  */
 async function resolveRoleData(session: any): Promise<{ role: UserRole, firmaId: string | null }> {
-    if (!session?.user) {
-        return { role: null, firmaId: null };
-    }
+    if (!session?.user) return { role: 'bireysel', firmaId: null };
+    
+    const timeoutPromise = new Promise<{ role: UserRole, firmaId: string | null }>((resolve) => {
+        setTimeout(() => {
+            console.warn("⚠️ Rol çözümleme zaman aşımı.");
+            resolve({ role: 'bireysel', firmaId: null });
+        }, 3500);
+    });
 
-    const userId = session.user.id;
-    const isSoftUser = !!session.isSoftUser;
+    const logicPromise = (async (): Promise<{ role: UserRole, firmaId: string | null }> => {
+        const userId = session.user.id;
+        const isSoftUser = !!session.isSoftUser;
 
     // 1. ADIM: Admin Kontrolü (Önce Cache, sonra Raporlama)
     const isAdminStorage = await AsyncStorage.getItem("isAdmin");
@@ -182,4 +188,7 @@ async function resolveRoleData(session: any): Promise<{ role: UserRole, firmaId:
     }
 
     return { role: 'bireysel', firmaId: null };
+    })();
+
+    return Promise.race([logicPromise, timeoutPromise]);
 }
