@@ -25,10 +25,11 @@ import * as Notifications from "expo-notifications";
 if (Platform.OS !== 'android' || Constants.appOwnership !== 'expo') {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,   // Eski sürümler için
-      shouldShowBanner: true,  // Yeni Expo sürümleri için
+      shouldShowAlert: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
+      shouldShowList: true,
+      shouldShowBanner: true,
     }),
   });
 }
