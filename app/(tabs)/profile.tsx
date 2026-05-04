@@ -15,7 +15,11 @@ import {
     TextInput,
     TouchableOpacity,
     View,
-    RefreshControl
+    RefreshControl,
+    Keyboard,
+    KeyboardAvoidingView,
+    TouchableWithoutFeedback,
+    Platform
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -313,58 +317,66 @@ export default function ProfileScreen() {
 
             </ScrollView>
 
-            {/* Feedback Modal */}
             <Modal
                 visible={feedbackModalVisible}
                 animationType="slide"
                 transparent
                 onRequestClose={() => setFeedbackModalVisible(false)}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContainer}>
-                        <View style={styles.modalHeader}>
-                            <MaterialIcons name="rate-review" size={28} color={colors.primary} />
-                            <Text style={styles.modalTitle}>Görüşünüzü Paylaşın</Text>
-                        </View>
-                        <Text style={styles.modalSubtitle}>
-                            Uygulamayı daha iyi yapabilmemiz için düşüncelerinizi bizimle paylaşın. Her geri bildirim bizim için değerli! 💬
-                        </Text>
-                        <TextInput
-                            style={styles.modalInput}
-                            placeholder="Deneyiminizi, önerilerinizi veya karşılaştığınız sorunları buraya yazabilirsiniz..."
-                            placeholderTextColor={colors.muted}
-                            value={feedbackText}
-                            onChangeText={setFeedbackText}
-                            multiline
-                            numberOfLines={5}
-                            textAlignVertical="top"
-                            maxLength={500}
-                        />
-                        <Text style={[styles.modalSubtitle, { textAlign: 'right', marginTop: 4, fontSize: 11 }]}>
-                            {feedbackText.length}/500
-                        </Text>
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity
-                                style={[styles.modalBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.surfaceBorder }]}
-                                onPress={() => { setFeedbackModalVisible(false); setFeedbackText(""); }}
-                                disabled={feedbackSending}
-                            >
-                                <Text style={[styles.modalBtnText, { color: colors.text }]}>Vazgeç</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.modalBtn, { backgroundColor: colors.primary, flex: 1.5 }]}
-                                onPress={handleSendFeedback}
-                                disabled={feedbackSending || !feedbackText.trim()}
-                            >
-                                {feedbackSending ? (
-                                    <ActivityIndicator color="#fff" size="small" />
-                                ) : (
-                                    <Text style={[styles.modalBtnText, { color: '#fff' }]}>Gönder 🚀</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <View style={styles.modalOverlay}>
+                        <KeyboardAvoidingView 
+                            behavior={Platform.OS === "ios" ? "padding" : "height"}
+                            style={{ width: '100%' }}
+                        >
+                            <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                                <View style={styles.modalContainer}>
+                                    <View style={styles.modalHeader}>
+                                        <MaterialIcons name="rate-review" size={28} color={colors.primary} />
+                                        <Text style={styles.modalTitle}>Görüşünüzü Paylaşın</Text>
+                                    </View>
+                                    <Text style={styles.modalSubtitle}>
+                                        Uygulamayı daha iyi yapabilmemiz için düşüncelerinizi bizimle paylaşın. Her geri bildirim bizim için değerli! 💬
+                                    </Text>
+                                    <TextInput
+                                        style={styles.modalInput}
+                                        placeholder="Deneyiminizi, önerilerinizi veya karşılaştığınız sorunları buraya yazabilirsiniz..."
+                                        placeholderTextColor={colors.muted}
+                                        value={feedbackText}
+                                        onChangeText={setFeedbackText}
+                                        multiline
+                                        numberOfLines={5}
+                                        textAlignVertical="top"
+                                        maxLength={500}
+                                    />
+                                    <Text style={[styles.modalSubtitle, { textAlign: 'right', marginTop: 4, fontSize: 11 }]}>
+                                        {feedbackText.length}/500
+                                    </Text>
+                                    <View style={styles.modalActions}>
+                                        <TouchableOpacity
+                                            style={[styles.modalBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.surfaceBorder }]}
+                                            onPress={() => { setFeedbackModalVisible(false); setFeedbackText(""); }}
+                                            disabled={feedbackSending}
+                                        >
+                                            <Text style={[styles.modalBtnText, { color: colors.text }]}>Vazgeç</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.modalBtn, { backgroundColor: colors.primary, flex: 1.5 }]}
+                                            onPress={handleSendFeedback}
+                                            disabled={feedbackSending || !feedbackText.trim()}
+                                        >
+                                            {feedbackSending ? (
+                                                <ActivityIndicator color="#fff" size="small" />
+                                            ) : (
+                                                <Text style={[styles.modalBtnText, { color: '#fff' }]}>Gönder 🚀</Text>
+                                            )}
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            </TouchableWithoutFeedback>
+                        </KeyboardAvoidingView>
                     </View>
-                </View>
+                </TouchableWithoutFeedback>
             </Modal>
 
         </SafeAreaView>

@@ -4,7 +4,11 @@ import { Platform, Alert, useColorScheme, ActivityIndicator, View, LogBox } from
 // Supabase'in arka plandaki refresh token yenileme mekanizması token geçerliliğini yitirdiğinde
 // bu hatayı fırlatır. Uygulamayı bozmaz, ancak geliştirme modunda ekranda kırmızı kutu çıkar.
 // Bunu gizlemek için:
-LogBox.ignoreLogs(['AuthApiError: Invalid Refresh Token', 'Refresh Token Not Found']);
+LogBox.ignoreLogs([
+  'AuthApiError: Invalid Refresh Token', 
+  'Refresh Token Not Found',
+  'No native splash screen registered'
+]);
 import { Stack, useSegments, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -74,14 +78,22 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
 
   // 1. Splash Screen Kontrolü
   useEffect(() => {
-    // Hem fontlar yüklendiğinde HEM DE zorla açma (forceLoad) tetiklendiğinde splash'i kapat
+    let isMounted = true;
+    
     if (loaded || forceLoad) {
-      const timer = setTimeout(() => {
-        SplashScreen.hideAsync().catch((err) => {
-          console.warn("Splash screen hide error:", err);
-        });
+      const timer = setTimeout(async () => {
+        if (!isMounted) return;
+        try {
+          await SplashScreen.hideAsync();
+        } catch (err) {
+          // Bu hata genellikle hot-reload sırasında zaten kapalı olduğu için çıkar, görmezden geliyoruz.
+        }
       }, 500);
-      return () => clearTimeout(timer);
+      
+      return () => {
+        isMounted = false;
+        clearTimeout(timer);
+      };
     }
   }, [loaded, forceLoad]);
 
