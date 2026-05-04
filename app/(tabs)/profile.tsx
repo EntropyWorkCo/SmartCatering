@@ -7,6 +7,7 @@ import {
     ActivityIndicator,
     Alert,
     Image,
+    Modal,
     ScrollView,
     StyleSheet,
     Switch,
@@ -23,6 +24,7 @@ import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { billingService } from "@/lib/services/billingService";
+import { feedbackService } from "@/lib/services/feedbackService";
 import { notificationService } from "@/lib/services/notificationService";
 import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -51,6 +53,11 @@ export default function ProfileScreen() {
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
     const [saving, setSaving] = useState(false);
     const [balance, setBalance] = useState<number | null>(null);
+
+    // Feedback Modal State
+    const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
+    const [feedbackText, setFeedbackText] = useState("");
+    const [feedbackSending, setFeedbackSending] = useState(false);
 
     const [refreshing, setRefreshing] = useState(false);
     const onRefresh = React.useCallback(async () => {
@@ -146,6 +153,27 @@ export default function ProfileScreen() {
         await AsyncStorage.removeItem("isAdmin");
         const { error } = await supabase.auth.signOut();
         router.replace("/welcome");
+    };
+
+    const handleSendFeedback = async () => {
+        if (!feedbackText.trim()) {
+            Alert.alert("Boş Mesaj", "Lütfen görüşünüzü yazınız.");
+            return;
+        }
+        if (!user?.id) return;
+
+        setFeedbackSending(true);
+        try {
+            await feedbackService.submitAppFeedback(user.id, feedbackText.trim());
+            setFeedbackText("");
+            setFeedbackModalVisible(false);
+            Alert.alert("Teşekkürler! 🙏", "Görüşünüz başarıyla iletildi. Daha iyi bir deneyim için değerlendirmeniz bizim için çok değerli.");
+        } catch (error: any) {
+            console.error("Görüş gönderme hatası:", error);
+            Alert.alert("Hata", "Görüş gönderilemedi, lütfen tekrar deneyin.");
+        } finally {
+            setFeedbackSending(false);
+        }
     };
 
     if (loading) {
@@ -259,6 +287,13 @@ export default function ProfileScreen() {
                         <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
                     </TouchableOpacity>
 
+                    {/* Uygulama Geri Bildirimi — Feedback Modal Tetikleyici */}
+                    <TouchableOpacity style={[styles.linkItem, { borderColor: colors.primary + '40', backgroundColor: colors.primary + '08' }]} onPress={() => setFeedbackModalVisible(true)}>
+                        <MaterialIcons name="rate-review" size={24} color={colors.primary} />
+                        <Text style={[styles.linkText, { color: colors.primary }]}>Uygulama Hakkında Görüşünüzü Paylaşın</Text>
+                        <MaterialIcons name="chevron-right" size={24} color={colors.primary} />
+                    </TouchableOpacity>
+
                     <View style={styles.linkItem}>
                         <MaterialIcons name="notifications-none" size={24} color={colors.text} />
                         <Text style={styles.linkText}>Bildirimler</Text>
@@ -277,6 +312,61 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
 
             </ScrollView>
+
+            {/* Feedback Modal */}
+            <Modal
+                visible={feedbackModalVisible}
+                animationType="slide"
+                transparent
+                onRequestClose={() => setFeedbackModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContainer}>
+                        <View style={styles.modalHeader}>
+                            <MaterialIcons name="rate-review" size={28} color={colors.primary} />
+                            <Text style={styles.modalTitle}>Görüşünüzü Paylaşın</Text>
+                        </View>
+                        <Text style={styles.modalSubtitle}>
+                            Uygulamayı daha iyi yapabilmemiz için düşüncelerinizi bizimle paylaşın. Her geri bildirim bizim için değerli! 💬
+                        </Text>
+                        <TextInput
+                            style={styles.modalInput}
+                            placeholder="Deneyiminizi, önerilerinizi veya karşılaştığınız sorunları buraya yazabilirsiniz..."
+                            placeholderTextColor={colors.muted}
+                            value={feedbackText}
+                            onChangeText={setFeedbackText}
+                            multiline
+                            numberOfLines={5}
+                            textAlignVertical="top"
+                            maxLength={500}
+                        />
+                        <Text style={[styles.modalSubtitle, { textAlign: 'right', marginTop: 4, fontSize: 11 }]}>
+                            {feedbackText.length}/500
+                        </Text>
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                style={[styles.modalBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.surfaceBorder }]}
+                                onPress={() => { setFeedbackModalVisible(false); setFeedbackText(""); }}
+                                disabled={feedbackSending}
+                            >
+                                <Text style={[styles.modalBtnText, { color: colors.text }]}>Vazgeç</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.modalBtn, { backgroundColor: colors.primary, flex: 1.5 }]}
+                                onPress={handleSendFeedback}
+                                disabled={feedbackSending || !feedbackText.trim()}
+                            >
+                                {feedbackSending ? (
+                                    <ActivityIndicator color="#fff" size="small" />
+                                ) : (
+                                    <Text style={[styles.modalBtnText, { color: '#fff' }]}>Gönder 🚀</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
         </SafeAreaView>
     );
 }
@@ -352,5 +442,61 @@ const getStyles = (colors: any) => StyleSheet.create({
         borderColor: colors.primary + '30'
     },
     debtLabel: { fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
-    debtAmount: { fontSize: 24, fontWeight: '900' }
+    debtAmount: { fontSize: 24, fontWeight: '900' },
+
+    // Feedback Modal Stilleri
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        justifyContent: 'flex-end',
+    },
+    modalContainer: {
+        backgroundColor: '#fff',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        padding: 28,
+        paddingBottom: 40,
+        gap: 16,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: '900',
+        color: '#0f172a',
+    },
+    modalSubtitle: {
+        fontSize: 13,
+        color: '#64748b',
+        lineHeight: 20,
+    },
+    modalInput: {
+        borderWidth: 1.5,
+        borderColor: '#e2e8f0',
+        borderRadius: 16,
+        padding: 16,
+        fontSize: 15,
+        color: '#0f172a',
+        minHeight: 130,
+        backgroundColor: '#f8fafc',
+    },
+    modalActions: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 4,
+    },
+    modalBtn: {
+        flex: 1,
+        height: 52,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalBtnText: {
+        fontSize: 15,
+        fontWeight: 'bold',
+    },
 });

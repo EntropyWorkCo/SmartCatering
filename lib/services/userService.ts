@@ -221,7 +221,20 @@ export const userService = {
     role: string = "customer",
     isCompany: boolean = true
   ) {
-    // 1. RPC ile ekle (Şifreleme ve Auth işlemleri için)
+    // 1. Firmanın adresini önceden çek (çalışana otomatik atanacak)
+    let companyAddress: string | null = null;
+    try {
+      const { data: companyData } = await supabase
+        .from("companies")
+        .select("address")
+        .eq("id", companyId)
+        .maybeSingle();
+      companyAddress = companyData?.address?.trim() || null;
+    } catch (e) {
+      console.warn("Firma adresi çekilirken hata (kritik değil):", e);
+    }
+
+    // 2. RPC ile ekle (Şifreleme ve Auth işlemleri için)
     const { data, error: rpcError } = await (supabase.rpc as any)("upsert_employee", {
       p_company_id: companyId,
       p_full_name: fullName,
@@ -235,18 +248,22 @@ export const userService = {
         throw rpcError;
     }
 
-    // 2. DOĞRUDAN GÜNCELLEME (ID Üzerine Kesin Eşleşme)
+    // 3. DOĞRUDAN GÜNCELLEME (ID Üzerinden Kesin Eşleşme)
+    // RPC bazen 'data' olarak yeni eklenen kullanıcının ID'sini döndürür.
     const newUserId = data?.id || data;
+
+    const updatePayload: Record<string, any> = {
+      company_id: companyId,
+      is_company: true,
+      role: role,
+      ...(companyAddress ? { address: companyAddress } : {}),
+    };
 
     if (newUserId && typeof newUserId === 'string' && newUserId.length > 20) {
         try {
             await supabase
                 .from("users")
-                .update({ 
-                    company_id: companyId, 
-                    is_company: true,
-                    role: role 
-                })
+                .update(updatePayload)
                 .eq("id", newUserId);
         } catch (e) {
             console.warn("ID bazlı güncelleme hatası:", e);
@@ -256,11 +273,7 @@ export const userService = {
         try {
             await supabase
                 .from("users")
-                .update({ 
-                    company_id: companyId, 
-                    is_company: true,
-                    role: role 
-                })
+                .update(updatePayload)
                 .eq("phone", phone);
         } catch (e) {
             console.warn("Fallback güncelleme hatası:", e);
@@ -289,13 +302,28 @@ export const userService = {
 
   async uploadEmployeesCSV(companyId: string, employees: { fullName: string, phone: string }[]) {
     if (employees.length === 0) return;
+
+    // Firmanın adresini çek; toplu eklenen çalışanlara otomatik atanacak
+    let companyAddress: string | null = null;
+    try {
+      const { data: companyData } = await supabase
+        .from("companies")
+        .select("address")
+        .eq("id", companyId)
+        .maybeSingle();
+      companyAddress = companyData?.address?.trim() || null;
+    } catch (e) {
+      console.warn("CSV yükleme - firma adresi çekilirken hata (kritik değil):", e);
+    }
+
     const rows = employees.map(emp => ({
       id: uuidv4(),
       full_name: emp.fullName,
       phone: emp.phone,
       company_id: companyId,
       is_company: true,
-      role: "customer"
+      role: "customer",
+      ...(companyAddress ? { address: companyAddress } : {}),
     }));
 
     const { error } = await supabase

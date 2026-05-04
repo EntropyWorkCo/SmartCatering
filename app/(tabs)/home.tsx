@@ -423,55 +423,55 @@ export default function HomeScreen() {
           <View style={{ marginBottom: 32, marginTop: 16 }}>
              <Text style={[styles.sectionTitle, { marginBottom: 4 }]}>HIZLI TABLDOT (ŞİMDİ YE)</Text>
              
-
-
              <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 16, paddingHorizontal: 6, lineHeight: 16 }}>
                  * Restoranda yiyecekseniz <Text style={{fontWeight: 'bold', color: colors.text}}>4'LÜ TABLDOT</Text>, <Text style={{fontWeight: 'bold', color: colors.text}}>3'LÜ TABLDOT</Text> veya <Text style={{fontWeight: 'bold', color: colors.text}}>2'Lİ TABLDOT</Text> menülerinden birini seçebilirsiniz.
              </Text>
+             
              <View style={{ gap: 12 }}>
                 {TABLDOT_PACKAGES.map(pkg => {
                     const inCartCount = cartItems.find(i => i.menu_item_id === pkg.id)?.quantity || 0;
                     const cleanLabel = pkg.maxItems === 4 ? "4'LÜ TABLDOT" : pkg.maxItems === 3 ? "3'LÜ TABLDOT" : "2'Lİ TABLDOT";
                     
                     return (
-                        <View key={pkg.id} style={[styles.foodCard, { padding: 16, backgroundColor: colors.surface }]}>
-                            <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                                <View style={{ backgroundColor: colors.cardHighlight, width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
-                                    <Text style={{ fontSize: 20, fontWeight: '900', color: colors.primary }}>{pkg.maxItems}</Text>
+                        <View key={pkg.id} style={[styles.foodCard, { flexDirection: 'column', padding: 16, backgroundColor: colors.surface, gap: 16 }]}>
+                            {/* Üst Kısım: İkon (Sayı) Solda, Başlık/Açıklama Sağda */}
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <View style={{ backgroundColor: colors.cardHighlight, width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
+                                    <Text style={{ fontSize: 24, fontWeight: '900', color: colors.primary }}>{pkg.maxItems}</Text>
                                 </View>
-                                <View style={{ flex: 1, paddingRight: 8 }}>
-                                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }}>{cleanLabel}</Text>
-                                    <Text style={{ fontSize: 12, color: colors.muted, lineHeight: 16 }}>{pkg.desc}</Text>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ fontSize: 16, fontWeight: '900', color: colors.text, marginBottom: 4 }}>{cleanLabel}</Text>
+                                    <Text style={{ fontSize: 12, color: colors.muted, lineHeight: 18 }}>{pkg.desc}</Text>
                                 </View>
                             </View>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 12 }}>
-                                {!isCompany ? <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary }}>₺{pkg.price}</Text> : <View />}
+
+                            {/* Alt Kısım: Fiyat Solda, Butonlar Sağda */}
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                                {!isCompany && (
+                                    <Text style={{ fontSize: 20, fontWeight: '900', color: colors.primary }}>{`₺${pkg.price}`}</Text>
+                                )}
+                                {isCompany && <View />}
+
+                                {/* Sepet Kontrolü */}
                                 <View style={{ alignItems: 'flex-end' }}>
-                                    <Text style={{ fontSize: 12, fontWeight: '900', color: colors.primary, marginBottom: 8, textTransform: 'uppercase' }}>{cleanLabel}</Text>
                                     {inCartCount > 0 ? (
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: 8, padding: 4, gap: 8, borderWidth: 1, borderColor: colors.surfaceBorder }}>
-                                                <TouchableOpacity 
-                                                    onPress={() => useCartStore.getState().decrementItem(pkg.id)} 
-                                                    style={{ backgroundColor: colors.primary, width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }}>
-                                                    <MaterialIcons name="remove" size={14} color="#fff" />
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: 10, padding: 6, gap: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                                                <TouchableOpacity onPress={() => useCartStore.getState().decrementItem(pkg.id)} style={{ backgroundColor: colors.primary, width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                                                    <MaterialIcons name="remove" size={16} color="#fff" />
                                                 </TouchableOpacity>
-                                                <Text style={{ fontSize: 14, fontWeight: 'bold', color: colors.text }}>{inCartCount}</Text>
-                                                <TouchableOpacity 
-                                                    onPress={() => useCartStore.getState().addItem({ menu_item_id: pkg.id, name: cleanLabel, price: pkg.price, quantity: 1, is_package: true })} 
-                                                    style={{ backgroundColor: colors.primary, width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }}>
-                                                    <MaterialIcons name="add" size={14} color="#fff" />
+                                                <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.text, minWidth: 16, textAlign: 'center' }}>{inCartCount}</Text>
+                                                <TouchableOpacity onPress={() => useCartStore.getState().addItem({ menu_item_id: pkg.id, name: cleanLabel, price: pkg.price, quantity: 1, is_package: true })} style={{ backgroundColor: colors.primary, width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                                                    <MaterialIcons name="add" size={16} color="#fff" />
                                                 </TouchableOpacity>
                                             </View>
-                                            <TouchableOpacity 
-                                                onPress={() => router.push("/(tabs)/cart")}
-                                                style={{ backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>ONAYLA</Text>
-                                                <MaterialIcons name="chevron-right" size={14} color="#fff" />
+                                            <TouchableOpacity onPress={() => router.push("/(tabs)/cart")} style={{ backgroundColor: '#10b981', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                                <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>ONAYLA</Text>
+                                                <MaterialIcons name="chevron-right" size={16} color="#fff" />
                                             </TouchableOpacity>
                                         </View>
                                     ) : (
-                                        <TouchableOpacity 
+                                        <TouchableOpacity
                                             onPress={() => {
                                                 if (cartItemCount > 0 && orderMode !== 'eat_now' && orderMode !== null) {
                                                     Alert.alert("Sepet Sıfırlanacak", "Farklı modda ürünleriniz var, sepet boşaltılsın mı?", [
@@ -488,8 +488,8 @@ export default function HomeScreen() {
                                                     Alert.alert("Eklendi", `${cleanLabel} sepete eklendi.`);
                                                 }
                                             }}
-                                            style={{ backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 }}>
-                                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>EKLE & YE</Text>
+                                            style={{ backgroundColor: colors.primary, paddingHorizontal: 32, paddingVertical: 12, borderRadius: 16 }}>
+                                            <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>EKLE & YE</Text>
                                         </TouchableOpacity>
                                     )}
                                 </View>

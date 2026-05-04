@@ -7,11 +7,15 @@ import { router, useNavigation } from "expo-router";
 import React, { useState } from "react";
 import {
     Alert,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -138,10 +142,17 @@ export default function CartScreen() {
     };
 
     return (
+        <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <View style={[styles.container, { paddingTop: insets.top + 10 }]}>
             <View style={styles.header}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                     <TouchableOpacity onPress={() => {
+                        Keyboard.dismiss();
                         if (navigation.canGoBack()) navigation.goBack();
                         else router.push("/(tabs)/menu");
                     }} style={{ backgroundColor: colors.surface, padding: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
@@ -280,6 +291,8 @@ export default function CartScreen() {
                 </View>
             )}
         </View>
+        </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
     );
 }
 

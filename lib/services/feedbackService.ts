@@ -1,11 +1,27 @@
 import { supabase } from "../supabase";
 
 export const feedbackService = {
-  // Yeni bir değerlendirme gönder
-  async submitFeedback(userId: string, rating: number, comment?: string) {
+  // Yeni bir sipariş değerlendirmesi gönder
+  async submitFeedback(userId: string, rating: number, note?: string) {
     const { data, error } = await supabase
       .from("feedbacks")
-      .insert([{ user_id: userId, rating, comment }])
+      .insert([{ user_id: userId, rating, note }])
+      .select();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Uygulama hakkında genel geri bildirim gönder (yıldız puanı olmadan)
+  async submitAppFeedback(userId: string, note: string) {
+    const { data, error } = await supabase
+      .from("feedbacks")
+      .insert([{ 
+        user_id: userId, 
+        note, 
+        rating: null,
+        type: 'app_feedback'
+      }])
       .select();
 
     if (error) throw error;
