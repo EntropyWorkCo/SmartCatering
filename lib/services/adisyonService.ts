@@ -53,12 +53,8 @@ export const adisyonService = {
     try {
         const { notificationService } = require("./notificationService");
         
-        // - Puanlama Bildirimi Planla (Sadece Şimdi Ye)
-        if (orderType === "Şimdi Ye") {
-            notificationService.scheduleRatingNotification(15, adisyon.id);
-        }
-
-        // - Admin'e Canlı Sipariş Bildirimi Gönder (Sadece Paket ve Sipariş Ver için)
+        // - Admin'e Yeni Paket Servisi Bildirimi (Sadece "Sipariş Ver" / paket modunda)
+        // NOT: "Şimdi Ye" siparişleri restoran içi olduğundan admin'e bildirim gitmez
         if (orderType !== "Şimdi Ye") {
             (async () => {
                 try {
@@ -68,15 +64,14 @@ export const adisyonService = {
                         .eq("id", userId)
                         .single();
 
-                    const adminTokens = await notificationService.getAdminPushTokens();
-                    if (adminTokens.length > 0) {
-                       await notificationService.sendPushNotification(
-                           adminTokens,
-                           "Yeni Sipariş Alındı! 🛎️",
-                           `${userData?.full_name || "Bir müşteri"} yeni bir sipariş verdi.`,
-                           { url: "/(admin)/dashboard" }
-                       );
-                    }
+                    // Edge Function üzerinden gönder — admin uygulaması kapalı olsa da gelir
+                    await notificationService.sendViaEdgeFunction({
+                        type: "NEW_ORDER",
+                        title: "Yeni Paket Siparişi! 🛎️",
+                        body: `${userData?.full_name || "Bir müşteri"} yeni bir paket siparişi verdi.`,
+                        data: { url: "/(admin)/dashboard", screen: "dashboard" },
+                        adminOnly: true,
+                    });
                 } catch (err) {
                     console.error("Admin bildirimi hatası:", err);
                 }
@@ -162,15 +157,14 @@ export const adisyonService = {
     // 1. Durum: Hazırlanıyor (Müşteriye "Siparişiniz Alındı" bilgisi)
     if (status === 'PREPARING' || status === 'HAZIRLANIYOR') {
       try {
-        const tokens = await notificationService.getPushTokens(userId);
-        if (tokens.length > 0) {
-          await notificationService.sendPushNotification(
-            tokens,
-            "Siparişiniz Alındı 👨‍🍳",
-            "Yemeğiniz hazırlanmaya başladı. Afiyet olsun!",
-            { url: "/(tabs)/past-orders" }
-          );
-        }
+        // Edge Function üzerinden gönder — müşteri uygulaması kapalı olsa da banner gelir
+        await notificationService.sendViaEdgeFunction({
+          type: "ORDER_STATUS",
+          title: "Siparişiniz Alındı 👨‍🍳",
+          body: "Yemeğiniz hazırlanmaya başladı. Afiyet olsun!",
+          data: { url: "/(tabs)/past-orders", screen: "past-orders" },
+          userId,
+        });
       } catch (err) {
         console.error("Hazırlanıyor bildirimi hatası:", err);
       }
@@ -179,40 +173,33 @@ export const adisyonService = {
     // 2. Durum: Yola Çıktı (Sadece Paket/Sipariş Ver modunda)
     if ((status === 'READY' || status === 'Hazır' || status === 'HAZIR') && isDelivery) {
       try {
-        const tokens = await notificationService.getPushTokens(userId);
-        if (tokens.length > 0) {
-          /* 
-          // NOT: Bu bildirim artık mevcut Firebase backend tarafından yönetiliyor. 
-          // Çifte bildirim olmaması için buradan kaldırıldı.
-          await notificationService.sendPushNotification(
-            tokens,
-            `Siparişiniz Yola Çıktı! 🛵`,
-            `Yemeğiniz hazırlandı ve şu an yola çıktı. Afiyet olsun!`,
-            { url: "/(tabs)/past-orders" }
-          );
-          */
-        }
+        // Edge Function üzerinden gönder — müşteri uygulaması kapalı olsa da banner gelir
+        await notificationService.sendViaEdgeFunction({
+          type: "ORDER_STATUS",
+          title: "Siparişiniz Yola Çıktı! 🛵",
+          body: "Yemeğiniz hazırlandı ve şu an yola çıktı. Afiyet olsun!",
+          data: { url: "/(tabs)/past-orders", screen: "past-orders" },
+          userId,
+        });
       } catch (err) {
         console.error("Yola çıktı bildirimi hatası:", err);
       }
     }
 
-    // 3. Durum: Teslim Edildi (Müşteriye Puanlama Hatırlatması)
+    // 3. Durum: Teslim Edildi (Müşteriye hem teslimat bildirimi hem değerlendirme isteği)
     if (status === 'COMPLETED' || status === 'TAMAMLANDI') {
       try {
-        const tokens = await notificationService.getPushTokens(userId);
-        if (tokens.length > 0) {
-          /* 
-          // NOT: Bu bildirim artık mevcut Firebase backend tarafından yönetiliyor. 
-          // Çifte bildirim olmaması için buradan kaldırıldı.
-          await notificationService.sendPushNotification(
-            tokens,
-            "Siparişiniz Teslim Edildi ✅",
-            "Afiyet olsun! Bugünkü siparişinizi değerlendirmek ister misiniz?",
-            { url: `/(tabs)/order-rating?orderId=${data.id}` }
-          );
-          */
-        }
+        // 3a. "Teslim Edildi" bilgisi
+        await notificationService.sendViaEdgeFunction({
+          type: "ORDER_STATUS",
+          title: "Siparişiniz Teslim Edildi ✅",
+          body: "Afiyet olsun! Siparişiniz başarıyla teslim edildi.",
+          data: { url: "/(tabs)/past-orders", screen: "past-orders" },
+          userId,
+        });
+
+        // 3b. "Değerlendir" bildirimi — tıklandığında order-rating sayfasına gider
+        await notificationService.sendRatingNotification(userId, data.id);
       } catch (err) {
         console.error("Değerlendirme bildirim gönderme hatası:", err);
       }

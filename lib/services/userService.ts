@@ -2,6 +2,39 @@ import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from "../supabase";
 
+const SUPABASE_URL = "https://vruwzmljqfvnerenwzpy.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZydXd6bWxqcWZ2bmVyZW53enB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNjgwNjIsImV4cCI6MjA4Njg0NDA2Mn0.DyFBoBjHhvd67xwiR0YTHu_bkHR3-klsRu36EFq0hSE";
+
+/**
+ * Çalışan eklendikten sonra hoş geldin SMS'i gönderir.
+ * Hata olsa bile ana akışı bozmaz (fire-and-forget).
+ */
+async function sendWelcomeSms(phone: string, employeeName: string, companyId: string): Promise<void> {
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/send-welcome-sms`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ phone, employeeName, companyId }),
+    });
+
+    const result = await response.json();
+    if (result.success) {
+      console.log(`Hoş geldin SMS'i gönderildi → ${phone} (${employeeName})`);
+    } else {
+      console.warn('Hoş geldin SMS’i gönderilemedi:', result.error);
+    }
+  } catch (e) {
+    console.warn('sendWelcomeSms hatası (kritik değil):', e);
+  }
+}
+
 export const userService = {
   async getProfile(userId: string) {
     const { data, error } = await supabase
@@ -188,7 +221,6 @@ export const userService = {
     role: string = "customer",
     isCompany: boolean = true
   ) {
-    // this.log("AddEmployee Başlatıldı:", { companyId, fullName, phone });
     // 1. RPC ile ekle (Şifreleme ve Auth işlemleri için)
     const { data, error: rpcError } = await (supabase.rpc as any)("upsert_employee", {
       p_company_id: companyId,
@@ -203,12 +235,10 @@ export const userService = {
         throw rpcError;
     }
 
-    // 2. DOĞRUDAN GÜNCELLEME (ID Üzerinden Kesin Eşleşme)
-    // RPC bazen 'data' olarak yeni eklenen kullanıcının ID'sini döndürür.
+    // 2. DOĞRUDAN GÜNCELLEME (ID Üzerine Kesin Eşleşme)
     const newUserId = data?.id || data;
 
     if (newUserId && typeof newUserId === 'string' && newUserId.length > 20) {
-        // console.log("Yeni Kullanıcı ID üzerinden güncelleniyor:", newUserId);
         try {
             await supabase
                 .from("users")
@@ -238,6 +268,10 @@ export const userService = {
     }
 
     console.log("AddEmployee Başarılı. Kayıt ID:", data);
+
+    // 3. Hoş geldin SMS'i gönder (fire-and-forget — hata olsa çalışan kaydını bozmaz)
+    sendWelcomeSms(phone, fullName, companyId);
+
     return data;
   },
 
@@ -269,5 +303,11 @@ export const userService = {
       .insert(rows);
       
     if (error) throw error;
+
+    // Toplu ekleme başarılı → her çalışana hoş geldin SMS'i gönder
+    // Fire-and-forget: SMS hatası kayıt akışını bozmaz
+    for (const emp of employees) {
+      sendWelcomeSms(emp.phone, emp.fullName, companyId);
+    }
   }
 };

@@ -155,8 +155,6 @@ function RootLayoutNav({ user, role, loading }: any) {
     if (loading || !user?.id) return;
 
     const deferredTimer = setTimeout(() => {
-      // ÖNEMLİ: Expo SDK 53+ Versiyonunda Android Expo Go bildirimleri desteklemiyor.
-      // Bu hata uygulamanın donmasına neden olmasın diye Expo Go'da bu kısmı atlıyoruz.
       const isAndroidExpoGo = Platform.OS === 'android' && (Constants.appOwnership as any) === 'expo';
       if (isAndroidExpoGo) {
         console.log("⚠️ Android Expo Go: Bildirim sistemi devre dışı bırakıldı (SDK 53+ Kısıtlaması).");
@@ -165,51 +163,78 @@ function RootLayoutNav({ user, role, loading }: any) {
       let orderChannel: any;
       let customerOrderChannel: any;
       let responseListener: any;
+      let foregroundListener: any;
 
       try {
         if (!isAndroidExpoGo) {
           const Notifications = require("expo-notifications");
           
+          // Uygulama AÇIKKEN gelen bildirimler için handler
+          // (background/killed durumlar FCM/APNs tarafından OS düzeyinde handle edilir)
           Notifications.setNotificationHandler({
             handleNotification: async () => ({
-              shouldShowAlert: true,
+              shouldShowAlert: true,   // Uygulama açıkken de banner göster
               shouldPlaySound: true,
-              shouldSetBadge: false,
+              shouldSetBadge: true,
             }),
           });
 
+          // Uygulama AÇIKKEN bildirime tıklanınca yönlendirme
           responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
             const url = response.notification.request.content.data?.url;
-            if (url) router.push(url as any);
+            if (url) {
+              console.log('📲 Bildirim tıklandı (app açık), yönlendiriliyor:', url);
+              router.push(url as any);
+            }
           });
+
+          // ─── KILLED STATE DEEP LINK ─────────────────────────────────────────
+          // Uygulama tamamen kapalıyken bildirime tıklandığında:
+          // Expo Notifications, uygulamayı açar ve getLastNotificationResponseAsync()
+          // ile o anki bildirimi verir.
+          Notifications.getLastNotificationResponseAsync().then((response: any) => {
+            if (response) {
+              const url = response.notification?.request?.content?.data?.url;
+              if (url) {
+                console.log('📲 Killed state bildirim tıklaması, yönlendiriliyor:', url);
+                // Kısa gecikme: router henüz hazır olmayabilir
+                setTimeout(() => {
+                  router.push(url as any);
+                }, 500);
+              }
+            }
+          }).catch(() => {});
+          // ────────────────────────────────────────────────────────────────────
         }
 
+        // Admin: Yeni paket siparişi realtime dinleyicisi
         if (isAdmin) {
           orderChannel = supabase
             .channel('admin-orders-live-root')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'adisyon' }, (payload: any) => {
               if (payload.new?.order_type !== "Şimdi Ye") {
-                // Güvenli Bildirim Gönderimi
-                if (!isAndroidExpoGo) {
-                  const Notifications = require("expo-notifications");
-                  Notifications.scheduleNotificationAsync({
-                    content: { title: "Yeni Sipariş! 🛎️", body: "Paket siparişi düştü.", sound: true, data: { url: "/(admin)/dashboard" } },
-                    trigger: null,
-                  }).catch(() => {});
-                }
-                Alert.alert("Yeni Sipariş! 🛎️", "Yeni bir paket siparişi düştü.");
+                // Uygulama açıkken alert göster (bildirim Edge Function'dan zaten gidiyor)
+                Alert.alert("Yeni Paket Siparişi! 🛎️", "Yeni bir paket siparişi düştü.");
               }
             })
             .subscribe();
         }
 
+        // Müşteri: Sipariş durum güncellemelerini dinle
         customerOrderChannel = supabase
           .channel(`customer-status-${user.id}`)
           .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'adisyon', filter: `user_id=eq.${user.id}` }, (payload: any) => {
-             const status = (payload.new?.status || '').toString().toUpperCase();
-             if (['READY', 'HAZIR'].includes(status)) {
-               Alert.alert("Siparişiniz Yola Çıktı! 🛵", "Yemeğiniz yola çıktı, afiyet olsun!");
-             }
+            const status = (payload.new?.status || '').toString().toUpperCase();
+            
+            if (['READY', 'HAZIR'].includes(status)) {
+              // Uygulama açıkken alert (bildirim Edge Function'dan zaten gidiyor)
+              Alert.alert("Siparişiniz Yola Çıktı! 🛵", "Yemeğiniz yola çıktı, afiyet olsun!");
+            }
+
+            if (['COMPLETED', 'TAMAMLANDI'].includes(status)) {
+              // Uygulama açıkken alert (bildirim Edge Function'dan zaten gidiyor)
+              Alert.alert("Siparişiniz Teslim Edildi ✅", "Afiyet olsun! Değerlendirmenizi bekliyoruz.");
+            }
           })
           .subscribe();
 
@@ -219,6 +244,7 @@ function RootLayoutNav({ user, role, loading }: any) {
 
       return () => {
         if (responseListener) responseListener.remove();
+        if (foregroundListener) foregroundListener.remove();
         if (orderChannel) supabase.removeChannel(orderChannel);
         if (customerOrderChannel) supabase.removeChannel(customerOrderChannel);
       };

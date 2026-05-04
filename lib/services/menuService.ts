@@ -78,15 +78,14 @@ export const menuService = {
     if (error) throw error;
 
     try {
-      const tokens = await notificationService.getPushTokens();
-      if (tokens && tokens.length > 0) {
-        await notificationService.sendPushNotification(
-          tokens,
-          "Günün Menüsü Hazır! 🍽️",
-          "Lezzetli yemeklerimiz sizi bekliyor. Hemen menüye göz atın ve siparişinizi verin!",
-          { url: "/(tabs)/menu" }
-        );
-      }
+      // Edge Function üzerinden tüm kullanıcılara gönder (admin dahil) — uygulama kapalı olsa da gelir
+      await notificationService.sendViaEdgeFunction({
+        type: "DAILY_MENU",
+        title: "Günün Menüsü Hazır! 🍽️",
+        body: "Lezzetli yemeklerimiz sizi bekliyor. Hemen menüye göz atın ve siparişinizi verin!",
+        data: { url: "/(tabs)/menu", screen: "menu" },
+        broadcast: true, // Admin dahil herkes
+      });
     } catch (e) {
       console.log("Menü yayınlama bildirimi gönderilirken hata oluştu:", e);
     }
