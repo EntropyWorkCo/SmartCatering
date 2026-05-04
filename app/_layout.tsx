@@ -1,5 +1,10 @@
 import React, { useEffect } from "react";
-import { Platform, Alert, useColorScheme, ActivityIndicator, View } from "react-native";
+import { Platform, Alert, useColorScheme, ActivityIndicator, View, LogBox } from "react-native";
+
+// Supabase'in arka plandaki refresh token yenileme mekanizması token geçerliliğini yitirdiğinde
+// bu hatayı fırlatır. Uygulamayı bozmaz, ancak geliştirme modunda ekranda kırmızı kutu çıkar.
+// Bunu gizlemek için:
+LogBox.ignoreLogs(['AuthApiError: Invalid Refresh Token', 'Refresh Token Not Found']);
 import { Stack, useSegments, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";

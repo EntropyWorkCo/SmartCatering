@@ -29,7 +29,7 @@ serve(async (req) => {
       role,        // 'owner' | 'individual' | 'employee'
       companyName, // Only for owner
       vkn,         // Only for owner
-      address,     // Only for individual
+      address,     // For individual AND owner (firma adresi)
     } = await req.json();
 
     if (!phone || !name || !role) {
@@ -85,10 +85,11 @@ serve(async (req) => {
     }
 
     const userId = newAuthUser.user.id;
+    const trimmedAddress = address?.trim() || null;
 
     // ── 4. Create public.users row ───────────────────────────────────────────
-    // The trigger from auth.users → public.users may or may not exist.
-    // Upsert to be safe in case the trigger already ran.
+    // Adres hem bireysel hem firma sahibi için users tablosuna yazılır.
+    // Firma sahiplerinde bu adres "iş adresi" olarak kullanılır.
     const { error: publicUserError } = await supabaseAdmin
       .from('users')
       .upsert({
@@ -97,7 +98,7 @@ serve(async (req) => {
         phone: effectivePhone,
         is_company: isCompany,
         role: role === 'owner' ? 'owner' : role === 'employee' ? 'employee' : 'customer',
-        ...(address?.trim() && !isCompany ? { address } : {}),
+        ...(trimmedAddress ? { address: trimmedAddress } : {}),
       });
 
     if (publicUserError) {
@@ -111,6 +112,7 @@ serve(async (req) => {
     }
 
     // ── 5. Create companies row (if owner) ───────────────────────────────────
+    // Firma adresini companies.address alanına da kaydediyoruz.
     if (isCompany && companyName) {
       const { error: companyError } = await supabaseAdmin
         .from('companies')
@@ -118,6 +120,7 @@ serve(async (req) => {
           user_id: userId,
           company_name: companyName,
           tax_number: vkn || null,
+          ...(trimmedAddress ? { address: trimmedAddress } : {}),
         });
 
       if (companyError) {

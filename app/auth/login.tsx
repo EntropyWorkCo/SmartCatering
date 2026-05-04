@@ -8,6 +8,7 @@ import React, { useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Keyboard,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -113,7 +114,7 @@ export default function LoginTabsScreen() {
                     
                     {/* Üst Kısım */}
                     <View style={styles.header}>
-                        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/welcome")} style={styles.backButton}>
+                        <TouchableOpacity onPress={() => { Keyboard.dismiss(); router.canGoBack() ? router.back() : router.replace("/welcome"); }} style={styles.backButton}>
                             <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                         </TouchableOpacity>
                         <ThemeSwitcher />

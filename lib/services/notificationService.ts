@@ -89,7 +89,9 @@ export const notificationService = {
         const { Platform, Alert } = require("react-native");
         const title = "Yemeğiniz nasıldı? 🍽️";
         const body = "Bugünkü siparişinizi değerlendirerek bize yardımcı olmak ister misiniz?";
-        const targetUrl = orderId ? `/(tabs)/order-rating?orderId=${orderId}` : "/(tabs)/past-orders";
+        // Bildirime tıklanınca kullanıcıyı Geçmiş Siparişler'e gönder.
+        // Oradan siparişini bulup "Değerlendir" butonuna basabilir.
+        const targetUrl = "/(tabs)/past-orders";
 
         // Android Expo Go SDK 53+ restriction workaround: Simulate with Alert
         if (Platform.OS === "android" && isExpoGo) {

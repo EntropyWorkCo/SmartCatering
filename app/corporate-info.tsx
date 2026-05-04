@@ -6,7 +6,7 @@ import { useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import Papa from 'papaparse';
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import ThemeSwitcher from "@/components/ThemeSwitcher";
@@ -484,7 +484,7 @@ export default function CorporateInfoScreen() {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => router.push("/profile")}>
+                <TouchableOpacity style={styles.backBtn} onPress={() => { Keyboard.dismiss(); router.push("/profile"); }}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <View style={{ flex: 1 }}>
