@@ -16,6 +16,7 @@ interface EdgeNotificationOptions {
   userId?: string;      // Belirli bir kullanıcıya
   adminOnly?: boolean;  // Sadece admin(ler)e
   broadcast?: boolean;  // Herkese
+  excludeUserId?: string; // Bu userId'yi hariç tut (örn: sipariş veren kendisiyse)
 }
 
 export const notificationService = {
@@ -140,7 +141,7 @@ export const notificationService = {
       body: "Bugünkü siparişinizi değerlendirerek bize yardımcı olmak ister misiniz?",
       data: {
         // expo-router deep link — tıklandığında order-rating sayfasına gider
-        url: `/(tabs)/order-rating?orderId=${orderId}`,
+        url: `/order-rating?orderId=${orderId}`,
         screen: "order-rating",
         orderId,
       },

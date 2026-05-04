@@ -18,6 +18,21 @@ import { useAuthStore } from "@/lib/store/authStore";
 import { supabase } from "@/lib/supabase";
 import { NotificationRegister } from "@/components/NotificationRegister";
 
+import * as Notifications from "expo-notifications";
+
+// ─── GLOBAL BİLDİRİM HANDLER ───
+// Uygulama AÇIKKEN gelen bildirimlerin banner olarak düşmesini sağlar.
+if (Platform.OS !== 'android' || Constants.appOwnership !== 'expo') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,   // Eski sürümler için
+      shouldShowBanner: true,  // Yeni Expo sürümleri için
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+}
+
 export { ErrorBoundary } from "expo-router";
 
 SplashScreen.preventAutoHideAsync();
@@ -173,23 +188,17 @@ function RootLayoutNav({ user, role, loading }: any) {
       try {
         if (!isAndroidExpoGo) {
           const Notifications = require("expo-notifications");
-          
-          // Uygulama AÇIKKEN gelen bildirimler için handler
-          // (background/killed durumlar FCM/APNs tarafından OS düzeyinde handle edilir)
-          Notifications.setNotificationHandler({
-            handleNotification: async () => ({
-              shouldShowAlert: true,   // Uygulama açıkken de banner göster
-              shouldPlaySound: true,
-              shouldSetBadge: true,
-            }),
-          });
 
           // Uygulama AÇIKKEN bildirime tıklanınca yönlendirme
           responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
-            const url = response.notification.request.content.data?.url;
-            if (url) {
-              console.log('📲 Bildirim tıklandı (app açık), yönlendiriliyor:', url);
-              router.push(url as any);
+            const data = response.notification.request.content.data;
+            if (data?.url) {
+              console.log('📲 Bildirim tıklandı (app açık), yönlendiriliyor:', data.url);
+              if (data.screen === "order-rating" && data.orderId) {
+                router.push(`/order-rating?orderId=${data.orderId}` as any);
+              } else {
+                router.push(data.url as any);
+              }
             }
           });
 
@@ -199,26 +208,27 @@ function RootLayoutNav({ user, role, loading }: any) {
           // ile o anki bildirimi verir.
           Notifications.getLastNotificationResponseAsync().then((response: any) => {
             if (response) {
-              const url = response.notification?.request?.content?.data?.url;
-              if (url) {
-                console.log('📲 Killed state bildirim tıklaması, yönlendiriliyor:', url);
+              const data = response.notification?.request?.content?.data;
+              if (data?.url) {
+                console.log('📲 Killed state bildirim tıklaması, yönlendiriliyor:', data.url);
                 // Kısa gecikme: router henüz hazır olmayabilir
                 setTimeout(() => {
-                  router.push(url as any);
+                  if (data.screen === "order-rating" && data.orderId) {
+                    router.push(`/order-rating?orderId=${data.orderId}` as any);
+                  } else {
+                    router.push(data.url as any);
+                  }
                 }, 500);
               }
             }
           }).catch(() => {});
-          // ────────────────────────────────────────────────────────────────────
         }
 
-        // Admin: Yeni paket siparişi realtime dinleyicisi
         if (isAdmin) {
           orderChannel = supabase
             .channel('admin-orders-live-root')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'adisyon' }, (payload: any) => {
               if (payload.new?.order_type !== "Şimdi Ye") {
-                // Uygulama açıkken alert göster (bildirim Edge Function'dan zaten gidiyor)
                 Alert.alert("Yeni Paket Siparişi! 🛎️", "Yeni bir paket siparişi düştü.");
               }
             })
@@ -232,13 +242,21 @@ function RootLayoutNav({ user, role, loading }: any) {
             const status = (payload.new?.status || '').toString().toUpperCase();
             
             if (['READY', 'HAZIR'].includes(status)) {
-              // Uygulama açıkken alert (bildirim Edge Function'dan zaten gidiyor)
               Alert.alert("Siparişiniz Yola Çıktı! 🛵", "Yemeğiniz yola çıktı, afiyet olsun!");
             }
 
             if (['COMPLETED', 'TAMAMLANDI'].includes(status)) {
-              // Uygulama açıkken alert (bildirim Edge Function'dan zaten gidiyor)
-              Alert.alert("Siparişiniz Teslim Edildi ✅", "Afiyet olsun! Değerlendirmenizi bekliyoruz.");
+              Alert.alert(
+                "Siparişiniz Teslim Edildi ✅", 
+                "Afiyet olsun! Değerlendirmenizi bekliyoruz.",
+                [
+                  { text: "Kapat", style: "cancel" },
+                  { 
+                    text: "Değerlendir", 
+                    onPress: () => router.push(`/order-rating?orderId=${payload.new.id}` as any) 
+                  }
+                ]
+              );
             }
           })
           .subscribe();

@@ -71,6 +71,7 @@ export const adisyonService = {
                         body: `${userData?.full_name || "Bir müşteri"} yeni bir paket siparişi verdi.`,
                         data: { url: "/(admin)/dashboard", screen: "dashboard" },
                         adminOnly: true,
+                        excludeUserId: userId, // Siparişi veren kişiye bildirim gitmesin (admin hesabı olsa bile)
                     });
                 } catch (err) {
                     console.error("Admin bildirimi hatası:", err);
@@ -93,12 +94,12 @@ export const adisyonService = {
         .order("created_at", { ascending: false });
 
       if (error) {
-        console.error("Adisyon Select Error:", error);
+        console.error("Adisyon Select Error:", error?.message || error);
         throw error;
       }
       return data || [];
     } catch (error: any) {
-      console.error("getUserOrders error:", error);
+      console.error("getUserOrders error:", error?.message || error);
       throw error;
     }
   },
@@ -162,7 +163,7 @@ export const adisyonService = {
           type: "ORDER_STATUS",
           title: "Siparişiniz Alındı 👨‍🍳",
           body: "Yemeğiniz hazırlanmaya başladı. Afiyet olsun!",
-          data: { url: "/(tabs)/past-orders", screen: "past-orders" },
+          data: { url: "/past-orders", screen: "past-orders" },
           userId,
         });
       } catch (err) {
@@ -178,7 +179,7 @@ export const adisyonService = {
           type: "ORDER_STATUS",
           title: "Siparişiniz Yola Çıktı! 🛵",
           body: "Yemeğiniz hazırlandı ve şu an yola çıktı. Afiyet olsun!",
-          data: { url: "/(tabs)/past-orders", screen: "past-orders" },
+          data: { url: "/past-orders", screen: "past-orders" },
           userId,
         });
       } catch (err) {
@@ -194,7 +195,7 @@ export const adisyonService = {
           type: "ORDER_STATUS",
           title: "Siparişiniz Teslim Edildi ✅",
           body: "Afiyet olsun! Siparişiniz başarıyla teslim edildi.",
-          data: { url: "/(tabs)/past-orders", screen: "past-orders" },
+          data: { url: "/past-orders", screen: "past-orders" },
           userId,
         });
 

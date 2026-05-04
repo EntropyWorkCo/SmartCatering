@@ -85,19 +85,24 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const payload: NotificationPayload = await req.json();
-    const { type, title, body, data = {}, userId, adminOnly, broadcast } =
-      payload;
+    const payload: NotificationPayload & { excludeUserId?: string } = await req.json();
+    const { type, title, body, data = {}, userId, adminOnly, broadcast, excludeUserId } = payload;
 
     let tokens: string[] = [];
 
     if (adminOnly) {
       // Fetch admin tokens only
-      const { data: admins, error } = await supabase
+      let query = supabase
         .from("users")
         .select("push_token")
         .eq("role", "admin")
         .not("push_token", "is", null);
+
+      if (excludeUserId) {
+        query = query.neq("id", excludeUserId);
+      }
+
+      const { data: admins, error } = await query;
 
       if (error) throw error;
       tokens = (admins || [])
@@ -105,14 +110,18 @@ Deno.serve(async (req: Request) => {
         .filter((t: any): t is string => Boolean(t && t.trim()));
     } else if (userId) {
       // Fetch a specific user's token
-      const { data: user, error } = await supabase
-        .from("users")
-        .select("push_token, role")
-        .eq("id", userId)
-        .maybeSingle();
+      if (userId === excludeUserId) {
+        tokens = [];
+      } else {
+        const { data: user, error } = await supabase
+          .from("users")
+          .select("push_token, role")
+          .eq("id", userId)
+          .maybeSingle();
 
-      if (error) throw error;
-      if (user?.push_token) tokens = [user.push_token];
+        if (error) throw error;
+        if (user?.push_token) tokens = [user.push_token];
+      }
     } else if (broadcast) {
       // Fetch ALL user tokens (including admins — daily menu goes to everyone)
       const { data: allUsers, error } = await supabase
