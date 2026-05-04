@@ -97,7 +97,7 @@ export default function AdminCustomers() {
                                 if (ordersData) {
                                     const userOrders = ordersData.filter((o: any) => {
                                         const status = (o.status || "").toUpperCase();
-                                        return o.user_id === profile.id && !["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ", "COMPLETED", "TAMAMLANDI"].includes(status);
+                                        return o.user_id === profile.id && !["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ"].includes(status);
                                     });
                                     balance = userOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0);
                                 }
