@@ -1,5 +1,12 @@
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
+import Constants from 'expo-constants';
+import { useFonts } from "expo-font";
+import { Stack, useRouter, useSegments } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
-import { Platform, Alert, useColorScheme, ActivityIndicator, View, LogBox } from "react-native";
+import { ActivityIndicator, Alert, LogBox, Platform, useColorScheme, View } from "react-native";
 
 // Supabase'in arka plandaki refresh token yenileme mekanizması token geçerliliğini yitirdiğinde
 // bu hatayı fırlatır. Uygulamayı bozmaz, ancak geliştirme modunda ekranda kırmızı kutu çıkar.
@@ -9,18 +16,10 @@ LogBox.ignoreLogs([
   'Refresh Token Not Found',
   'No native splash screen registered'
 ]);
-import { Stack, useSegments, useRouter } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
-import { StatusBar } from "expo-status-bar";
-import { ThemeProvider, DarkTheme, DefaultTheme } from "@react-navigation/native";
-import { useFonts } from "expo-font";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
-import Constants from 'expo-constants';
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { NotificationRegister } from "@/components/NotificationRegister";
 import { useAuthStore } from "@/lib/store/authStore";
 import { supabase } from "@/lib/supabase";
-import { NotificationRegister } from "@/components/NotificationRegister";
 
 import * as Notifications from "expo-notifications";
 
