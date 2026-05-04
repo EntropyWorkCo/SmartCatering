@@ -70,7 +70,8 @@ export default function AdminReports() {
                             rating_details: parsedDetails,
                             note: parsedNote,
                             date: new Date(r.created_at).toLocaleDateString('tr-TR'),
-                            adisyon_id: r.order_id
+                            adisyon_id: r.order_id,
+                            type: r.type
                         };
                     });
                     setRatings(formatted);
@@ -693,6 +694,11 @@ const StatCard = ({ icon, label, score, color, trend, styles }: any) => (
 
 const FeedbackView = ({ onBack, ratings, colors, styles }: any) => {
     const insets = useSafeAreaInsets();
+    const [feedbackTab, setFeedbackTab] = useState<"ORDER" | "APP">("ORDER");
+
+    const filteredRatings = ratings.filter((r: any) => 
+        feedbackTab === "ORDER" ? r.type !== 'app_feedback' : r.type === 'app_feedback'
+    );
 
     return (
         <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
@@ -703,9 +709,24 @@ const FeedbackView = ({ onBack, ratings, colors, styles }: any) => {
                 <Text style={styles.title}>Müşteri Yorumları</Text>
             </View>
 
+            <View style={{ flexDirection: "row", marginHorizontal: 24, marginBottom: 16, backgroundColor: colors.surfaceBorder, padding: 4, borderRadius: 12 }}>
+                <TouchableOpacity
+                    style={[{ flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: 8 }, feedbackTab === "ORDER" && { backgroundColor: colors.surface }]}
+                    onPress={() => setFeedbackTab("ORDER")}
+                >
+                    <Text style={[{ fontSize: 13, fontWeight: "bold", color: colors.muted }, feedbackTab === "ORDER" && { color: colors.text }]}>SİPARİŞ YORUMLARI</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[{ flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: 8 }, feedbackTab === "APP" && { backgroundColor: colors.surface }]}
+                    onPress={() => setFeedbackTab("APP")}
+                >
+                    <Text style={[{ fontSize: 13, fontWeight: "bold", color: colors.muted }, feedbackTab === "APP" && { color: colors.text }]}>UYGULAMA GÖRÜŞLERİ</Text>
+                </TouchableOpacity>
+            </View>
+
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                {ratings.length > 0 ? (
-                    ratings.map((r: any) => (
+                {filteredRatings.length > 0 ? (
+                    filteredRatings.map((r: any) => (
                         <View key={r.id} style={styles.feedbackCard}>
                             <View style={styles.feedbackTop}>
                                 <View style={styles.feedbackUser}>
@@ -717,13 +738,15 @@ const FeedbackView = ({ onBack, ratings, colors, styles }: any) => {
                                         <Text style={styles.feedbackCompany}>{r.company || 'Bireysel'}</Text>
                                     </View>
                                 </View>
-                                <View style={styles.starsCont}>
-                                    {[1, 2, 3, 4, 5].map(i => (
-                                        <MaterialIcons key={i} name="star" size={16} color={i <= r.generalStars ? "#fbbf24" : colors.surfaceBorder} />
-                                    ))}
-                                </View>
+                                {r.type !== 'app_feedback' && (
+                                    <View style={styles.starsCont}>
+                                        {[1, 2, 3, 4, 5].map(i => (
+                                            <MaterialIcons key={i} name="star" size={16} color={i <= r.generalStars ? "#fbbf24" : colors.surfaceBorder} />
+                                        ))}
+                                    </View>
+                                )}
                             </View>
-                            {r.note ? <Text style={styles.feedbackNote}>"{r.note}"</Text> : null}
+                            {r.note ? <Text style={[styles.feedbackNote, r.type === 'app_feedback' && { fontStyle: 'normal', fontSize: 14, color: colors.text, marginTop: 8 }]}>"{r.note}"</Text> : null}
                             
                             {r.rating_details && ((Array.isArray(r.rating_details) && r.rating_details.length > 0) || (!Array.isArray(r.rating_details) && Object.keys(r.rating_details).length > 0)) && (
                                 <View style={styles.ratingDetailsBox}>

@@ -171,7 +171,7 @@ export default function SummaryScreen() {
 
         // Bireysel ise sipariş toplamlarını ekle, kurumsal ise adminin girdiği balance'ı göstereceğiz
         const statusUpper = (order.status || "").toUpperCase();
-        if (!["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ", "COMPLETED", "TAMAMLANDI"].includes(statusUpper)) {
+        if (!["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ"].includes(statusUpper)) {
            map[key].total += order.total_amount || 0;
         }
         
