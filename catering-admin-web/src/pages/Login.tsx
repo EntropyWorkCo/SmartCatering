@@ -96,7 +96,7 @@ export default function Login() {
                      type="email" 
                      required
                      className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-accent/10 focus:border-accent outline-none transition-all" 
-                     placeholder="admin@meydanlokanta.com"
+                     placeholder="admin@meydan.com"
                      value={email}
                      onChange={(e) => setEmail(e.target.value)}
                    />
