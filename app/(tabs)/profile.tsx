@@ -7,19 +7,19 @@ import {
     ActivityIndicator,
     Alert,
     Image,
+    Keyboard,
+    KeyboardAvoidingView,
     Modal,
+    Platform,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Switch,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
-    RefreshControl,
-    Keyboard,
-    KeyboardAvoidingView,
     TouchableWithoutFeedback,
-    Platform
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -29,7 +29,6 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { billingService } from "@/lib/services/billingService";
 import { feedbackService } from "@/lib/services/feedbackService";
-import { notificationService } from "@/lib/services/notificationService";
 import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";

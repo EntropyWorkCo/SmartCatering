@@ -121,10 +121,19 @@ export default function Layout() {
 
   const handleLogout = async () => {
     try {
+      // 1. Supabase oturumunu kapat
       await supabase.auth.signOut();
-      navigate("/login");
+      
+      // 2. LocalStorage ve SessionStorage'ı temizle
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // 3. Login sayfasına yönlendir
+      navigate("/login", { replace: true });
     } catch (error) {
       console.error("Çıkış yapılırken hata oluştu:", error);
+      // Hata olsa bile kullanıcıyı login'e fırlat (en güvenlisi)
+      navigate("/login", { replace: true });
     }
   };
 
@@ -316,18 +325,31 @@ export default function Layout() {
               </button>
 
               {showProfileMenu && (
-                <div className="absolute right-0 mt-4 w-56 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden z-50">
-                  <div className="p-4 border-b border-slate-100 dark:border-slate-800">
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">Admin Kullanıcı</p>
-                    <p className="text-xs text-slate-500">admin@meydan.app</p>
+                <div className="absolute right-0 mt-4 w-64 bg-white dark:bg-slate-900 rounded-[24px] shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="p-6 border-b border-slate-50 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-accent rounded-full flex items-center justify-center text-white font-black shadow-lg shadow-accent/20">A</div>
+                      <div>
+                        <p className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight">Admin Kullanıcı</p>
+                        <p className="text-[10px] text-slate-400 font-bold">admin@meydan.com</p>
+                      </div>
+                    </div>
                   </div>
                   <div className="p-2">
+                    <Link 
+                      to="/settings"
+                      onClick={() => setShowProfileMenu(false)}
+                      className="w-full flex items-center space-x-3 p-4 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-colors font-bold text-xs uppercase tracking-widest"
+                    >
+                      <Settings size={16} />
+                      <span>Sistem Ayarları</span>
+                    </Link>
                     <button 
                       onClick={handleLogout}
-                      className="w-full flex items-center space-x-3 p-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-colors font-medium text-sm"
+                      className="w-full flex items-center space-x-3 p-4 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-colors font-bold text-xs uppercase tracking-widest"
                     >
                       <LogOut size={16} />
-                      <span>Sistemden Çıkış Yap</span>
+                      <span>Güvenli Çıkış Yap</span>
                     </button>
                   </div>
                 </div>
