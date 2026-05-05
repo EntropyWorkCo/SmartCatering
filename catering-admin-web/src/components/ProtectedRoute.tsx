@@ -1,22 +1,23 @@
 import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 
 export function ProtectedRoute() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    function checkAuth() {
+    async function checkAuth() {
       try {
+        const { data: { session } } = await supabase.auth.getSession();
         const adminSession = localStorage.getItem("admin_session");
         
-        if (!adminSession) {
+        if (!session || !adminSession) {
           setIsAdmin(false);
           setLoading(false);
           return;
         }
 
-        // Session varsa admin olarak kabul et (zaten Login aşamasında tablo kontrol edildi)
         setIsAdmin(true);
         setLoading(false);
       } catch (error) {

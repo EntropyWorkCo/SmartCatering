@@ -24,27 +24,32 @@ export default function Login() {
     setError(null);
 
     try {
-      // Mobildeki mantığın aynısı: admins tablosundan sorgula
-      const { data: admin, error: authError } = await supabase
-        .from("admins")
-        .select("*")
-        .eq("email", email)
-        .eq("access_code", password) // 1234 burada access_code olarak kullanılıyor
-        .single();
+      // 1. Edge Function'ı çağır (Sihirli Kod kontrolü burada yapılıyor)
+      const { data, error: funcError } = await supabase.functions.invoke('verify-otp', {
+        body: { phone: email, code: password }
+      });
 
-      if (authError || !admin) {
-        throw new Error("Geçersiz e-posta veya güvenlik anahtarı.");
+      if (funcError || !data.success) {
+        throw new Error(data?.error || "Giriş başarısız. Lütfen bilgilerinizi kontrol edin.");
       }
 
-      // Başarılı giriş: Bilgileri yerel hafızaya kaydet
+      // 2. Gelen tokenlar ile oturumu başlat
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token
+      });
+
+      if (sessionError) throw sessionError;
+
+      // 3. Admin bilgisini yerel hafızaya da yedekle (Layout için)
       localStorage.setItem("admin_session", JSON.stringify({
-        id: admin.id,
-        email: admin.email,
-        name: "Admin Kullanıcı", // Tabloda name kolonu olmadığı için sabit isim verdik
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.full_name || "Admin Kullanıcı",
         login_at: new Date().toISOString()
       }));
 
-      // Ana sayfaya yönlendir
+      // 4. Ana sayfaya yönlendir
       navigate("/", { replace: true });
     } catch (err: any) {
       console.error("Login Error:", err);
