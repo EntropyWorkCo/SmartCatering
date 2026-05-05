@@ -16,3 +16,9 @@ applications:
       cache:
         paths:
           - node_modules/**
+
+# Rewrites for proxying /db to Supabase
+# rewrites:
+#   - source: /db/<*>
+#     target: https://your-supabase-project.supabase.co/db/<*>
+#     type: 200
