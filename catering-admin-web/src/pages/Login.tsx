@@ -10,7 +10,6 @@ import {
   AlertCircle
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import { userService } from "../lib/services/userService";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -41,7 +40,7 @@ export default function Login() {
       localStorage.setItem("admin_session", JSON.stringify({
         id: admin.id,
         email: admin.email,
-        name: admin.name || "Admin Kullanıcı",
+        name: "Admin Kullanıcı", // Tabloda name kolonu olmadığı için sabit isim verdik
         login_at: new Date().toISOString()
       }));
 

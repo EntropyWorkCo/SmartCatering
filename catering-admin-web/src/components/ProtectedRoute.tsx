@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
-import { supabase } from "../lib/supabase";
-import { userService } from "../lib/services/userService";
 
 export function ProtectedRoute() {
   const [loading, setLoading] = useState(true);
