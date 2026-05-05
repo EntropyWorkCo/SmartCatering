@@ -25,24 +25,28 @@ export default function Login() {
     setError(null);
 
     try {
-      // 1. Supabase Login
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      // Mobildeki mantığın aynısı: admins tablosundan sorgula
+      const { data: admin, error: authError } = await supabase
+        .from("admins")
+        .select("*")
+        .eq("email", email)
+        .eq("access_code", password) // 1234 burada access_code olarak kullanılıyor
+        .single();
 
-      if (authError) throw authError;
-
-      // 2. Admin Check
-      const isAdmin = await userService.checkIsAdmin();
-      
-      if (!isAdmin) {
-        await supabase.auth.signOut();
-        throw new Error("Bu panele erişim yetkiniz bulunmuyor. Sadece adminler giriş yapabilir.");
+      if (authError || !admin) {
+        throw new Error("Geçersiz e-posta veya güvenlik anahtarı.");
       }
 
-      // 3. Success
-      navigate("/");
+      // Başarılı giriş: Bilgileri yerel hafızaya kaydet
+      localStorage.setItem("admin_session", JSON.stringify({
+        id: admin.id,
+        email: admin.email,
+        name: admin.name || "Admin Kullanıcı",
+        login_at: new Date().toISOString()
+      }));
+
+      // Ana sayfaya yönlendir
+      navigate("/", { replace: true });
     } catch (err: any) {
       console.error("Login Error:", err);
       setError(err.message || "Giriş yapılırken bir hata oluştu.");

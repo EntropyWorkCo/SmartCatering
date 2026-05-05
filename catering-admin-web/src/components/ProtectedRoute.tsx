@@ -8,46 +8,27 @@ export function ProtectedRoute() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    let mounted = true;
-
-    async function checkAuth() {
+    function checkAuth() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const adminSession = localStorage.getItem("admin_session");
         
-        if (!session) {
-          if (mounted) {
-            setIsAdmin(false);
-            setLoading(false);
-          }
+        if (!adminSession) {
+          setIsAdmin(false);
+          setLoading(false);
           return;
         }
 
-        // Session varsa, is_admin yetkisini kontrol et
-        const hasAdminRole = await userService.checkIsAdmin();
-        
-        if (mounted) {
-          setIsAdmin(hasAdminRole === true);
-          setLoading(false);
-          
-          if (!hasAdminRole) {
-             // Yetkisiz kullanıcıysa çıkış yaptır
-             await supabase.auth.signOut();
-          }
-        }
+        // Session varsa admin olarak kabul et (zaten Login aşamasında tablo kontrol edildi)
+        setIsAdmin(true);
+        setLoading(false);
       } catch (error) {
         console.error("Auth check error:", error);
-        if (mounted) {
-          setIsAdmin(false);
-          setLoading(false);
-        }
+        setIsAdmin(false);
+        setLoading(false);
       }
     }
 
     checkAuth();
-
-    return () => {
-      mounted = false;
-    };
   }, []);
 
   if (loading) {
