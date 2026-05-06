@@ -21,7 +21,7 @@ export default function WelcomeScreen() {
       </View>
       <View style={styles.content}>
         <View style={styles.header}>
-          <Logo size="large" style={{ marginBottom: 20 }} />
+          <Logo size="large" style={{ marginBottom: 10 }} />
           <Text style={styles.title}>Hoş Geldiniz</Text>
           <Text style={styles.subtitle}>
             Lütfen devam etmek için giriş tipini seçin
@@ -80,7 +80,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   topBar: { paddingHorizontal: 24, paddingTop: 12, alignItems: 'flex-end' },
   content: { flex: 1, padding: 24, justifyContent: "center" },
-  header: { alignItems: "center", marginBottom: 60 },
+  header: { alignItems: "center", marginBottom: 30 },
   logoCircle: {
     width: 80,
     height: 80,
@@ -129,7 +129,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     color: colors.muted,
     letterSpacing: 0.5,
   },
-  footer: { marginTop: "auto", alignItems: "center", paddingTop: 40 },
+  footer: { marginTop: "auto", alignItems: "center", paddingTop: 20, paddingBottom: 40 },
   footerBrand: {
     fontSize: 10,
     fontWeight: "bold",

@@ -1,8 +1,7 @@
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
-import { MaterialIcons } from "@expo/vector-icons";
 import React from "react";
-import { StyleSheet, Text, View, ViewStyle } from "react-native";
+import { Image, StyleSheet, Text, View, ViewStyle } from "react-native";
 
 interface LogoProps {
   size?: "small" | "medium" | "large";
@@ -14,52 +13,47 @@ export default function Logo({ size = "medium", style }: LogoProps) {
   const colors = Colors[theme];
 
   const iconSizes = {
-    small: 20,
-    medium: 40,
-    large: 60,
+    small: 30,
+    medium: 80,
+    large: 120,
   };
 
   const fontSizes = {
-    small: 14,
-    medium: 24,
-    large: 36,
-  };
-
-  const letterSpacings = {
-    small: 2,
-    medium: 4,
-    large: 6,
+    small: 12,
+    medium: 30,
+    large: 44,
   };
 
   return (
     <View style={[styles.container, style]}>
-      {/* Icon Emblem */}
+      {/* Şık Logo Kartı (Beyaz kutu görüntüsünü tasarımın parçası haline getirir) */}
       <View style={[
-        styles.iconCircle, 
-        { 
-          width: iconSizes[size] * 1.8, 
-          height: iconSizes[size] * 1.8, 
-          borderRadius: (iconSizes[size] * 1.8) / 2.5, // Squircle look
-          backgroundColor: colors.surface,
-          borderColor: colors.primary,
-          borderWidth: size === "large" ? 3 : 2
+        styles.logoCard,
+        {
+          width: iconSizes[size] * 1.3,
+          height: iconSizes[size] * 1.3,
+          borderRadius: size === "large" ? 32 : 16,
+          marginBottom: size === "large" ? 20 : 10,
         }
       ]}>
-        <MaterialIcons 
-          name="restaurant" 
-          size={iconSizes[size]} 
-          color={colors.primary} 
+        <Image
+          source={require("@/assets/images/icon.png")}
+          style={{
+            width: "80%",
+            height: "80%",
+            resizeMode: "contain",
+          }}
         />
       </View>
 
-      {/* Text Branding */}
-      <View style={styles.textContainer}>
+      {/* Metin Branding */}
+      <View style={{ alignItems: "center" }}>
         <Text style={[
           styles.meydan, 
           { 
             fontSize: fontSizes[size], 
             color: colors.text,
-            letterSpacing: letterSpacings[size]
+            letterSpacing: size === "large" ? 6 : 3
           }
         ]}>
           MEYDAN
@@ -67,9 +61,10 @@ export default function Logo({ size = "medium", style }: LogoProps) {
         <Text style={[
           styles.lokanta, 
           { 
-            fontSize: fontSizes[size] * 0.5, 
-            color: colors.primary,
-            letterSpacing: letterSpacings[size] * 1.5
+            fontSize: fontSizes[size] * 0.4, 
+            color: "#E65100", 
+            letterSpacing: size === "large" ? 10 : 5,
+            fontWeight: "800"
           }
         ]}>
           LOKANTA
@@ -84,29 +79,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  iconCircle: {
+  logoCard: {
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
-    // Dynamic shadow based on theme could be added here
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  textContainer: {
-    alignItems: "center",
+    shadowRadius: 15,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
   },
   meydan: {
     fontWeight: "900",
     textAlign: "center",
-    fontFamily: "System",
   },
   lokanta: {
-    fontWeight: "600",
     textAlign: "center",
     textTransform: "uppercase",
-    marginTop: -4,
+    marginTop: -2,
   },
 });

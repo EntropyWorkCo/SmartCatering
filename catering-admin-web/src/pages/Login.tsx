@@ -73,12 +73,17 @@ export default function Login() {
              {/* Gradient Overlay */}
              <div className="absolute inset-0 bg-gradient-to-br from-accent/20 to-transparent"></div>
              
-             <div className="relative z-10 flex flex-col items-center">
-                <div className="w-20 h-20 bg-accent rounded-3xl flex items-center justify-center shadow-2xl shadow-accent/40 mb-6 group hover:rotate-12 transition-transform duration-500">
-                   <UtensilsCrossed className="text-white" size={36} />
+             <div className="relative z-10 flex flex-col items-center justify-center">
+                {/* Kase İkonu */}
+                <img src="/favicon.png" alt="Meydan Logo" className="h-32 w-auto mb-6 drop-shadow-2xl" />
+                
+                {/* Metin Branding */}
+                <div className="flex flex-col items-center">
+                   <h1 className="text-5xl font-black text-white tracking-widest italic leading-none">MEYDAN</h1>
+                   <h2 className="text-lg font-bold text-orange-500 tracking-[0.5em] uppercase mt-1">LOKANTA</h2>
                 </div>
-                <h1 className="text-3xl font-black text-white tracking-tight italic">Meydan Lokanta</h1>
-                <div className="flex items-center space-x-2 mt-2">
+
+                <div className="flex items-center space-x-2 mt-6">
                    <div className="h-[1px] w-4 bg-slate-600"></div>
                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.4em]">Admin Panel</p>
                    <div className="h-[1px] w-4 bg-slate-600"></div>

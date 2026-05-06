@@ -165,12 +165,12 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className="w-72 bg-[#0F172A] dark:bg-[#020617] text-white flex flex-col shadow-2xl z-20 border-r border-white/5">
         <div className="p-8 pb-12 flex items-center space-x-3">
-          <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center shadow-lg shadow-accent/20">
-            <UtensilsCrossed className="text-white" size={20} />
+          <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center shadow-lg border border-white/5 backdrop-blur-sm">
+            <img src="/favicon.png" alt="Logo" className="w-8 h-8 object-contain" />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold tracking-tight">Meydan Lokanta</h1>
-            <p className="text-[10px] text-slate-400 font-medium tracking-[0.2em] uppercase">Admin Console</p>
+            <h1 className="text-xl font-black tracking-tight text-white italic">MEYDAN</h1>
+            <p className="text-[10px] text-orange-500 font-black tracking-[0.3em] uppercase">LOKANTA</p>
           </div>
         </div>
 
