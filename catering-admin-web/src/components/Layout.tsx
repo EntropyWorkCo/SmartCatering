@@ -155,7 +155,7 @@ export default function Layout() {
     { path: "/orders", label: "Sipariş Yönetimi", icon: ShoppingBag },
     { path: "/menu", label: "Menü Yönetimi", icon: UtensilsCrossed },
     { path: "/customers", label: "Müşteriler", icon: Users },
-    { path: "/reports", label: "Raporlar", icon: BarChart3 },
+    { path: "/reports", label: "Özetler ve Borçlar", icon: BarChart3 },
     { path: "/messages", label: "Mesajlar", icon: MessageSquare },
     { path: "/settings", label: "Ayarlar", icon: Settings },
   ];

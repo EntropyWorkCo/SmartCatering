@@ -44,8 +44,8 @@ export default function AdminLoginScreen() {
     try {
       console.log("LOG: Giriş denemesi başlatıldı...", email);
 
-      const MAGIC_CODE_ACCOUNTS = ["apple-admin@smartcatering.com", "admin@meydan.com"];
-      const MAGIC_CODES = ["123456", "1234"];
+      const MAGIC_CODE_ACCOUNTS = ["admin@meydan.com"];
+      const MAGIC_CODES = ["992288"];
       const isAppleTest = MAGIC_CODE_ACCOUNTS.includes(email) && MAGIC_CODES.includes(code);
 
       if (isAppleTest) {

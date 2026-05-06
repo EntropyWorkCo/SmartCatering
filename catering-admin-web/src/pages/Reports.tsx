@@ -9,14 +9,19 @@ import {
   Loader2,
   User,
   Building2,
-  UtensilsCrossed
+  UtensilsCrossed,
+  Wallet,
+  PlusCircle,
+  CheckCircle2,
+  X
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { adisyonService } from "../lib/services/adisyonService";
 import { pdfService } from "../lib/services/pdfService";
+import { billingService } from "../lib/services/billingService";
 import * as XLSX from "xlsx";
 
-type ReportView = "MAIN" | "SALES" | "FEEDBACK" | "PERFORMANCE";
+type ReportView = "MAIN" | "SALES" | "FEEDBACK" | "PERFORMANCE" | "DEBTS";
 
 const parseFeedback = (f: any) => {
   let parsedNote = f.note || f.comment || '';
@@ -91,6 +96,7 @@ export default function Reports() {
   if (view === "SALES") return <SalesView onBack={() => setView("MAIN")} orders={orders} />;
   if (view === "FEEDBACK") return <FeedbackView onBack={() => setView("MAIN")} feedbacks={feedbacks} />;
   if (view === "PERFORMANCE") return <PerformanceView onBack={() => setView("MAIN")} feedbacks={feedbacks} />;
+  if (view === "DEBTS") return <DebtsView onBack={() => setView("MAIN")} />;
 
   const avgRating = feedbacks.filter(f => f.rating > 0).length > 0
     ? (feedbacks.filter(f => f.rating > 0).reduce((acc, f) => acc + f.rating, 0) / feedbacks.filter(f => f.rating > 0).length).toFixed(1)
@@ -99,8 +105,8 @@ export default function Reports() {
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       <div>
-        <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Raporlar & Analiz</h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium italic">İşletmenizin performansını ve müşteri memnuniyetini takip edin.</p>
+        <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Özetler ve Borçlar</h1>
+        <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium italic">İşletmenizin performansını ve müşteri borçlarını takip edin.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -121,6 +127,12 @@ export default function Reports() {
           title="Performans Analizi"
           description="Genel puan ortalaması ve müşteri değerlendirmeleri."
           onClick={() => setView("PERFORMANCE")}
+        />
+        <ReportCard 
+          icon={<Wallet className="text-rose-500" size={32} />}
+          title="Borç Yönetimi"
+          description="Şirket ve bireysel borç takibi, tahsilat işlemleri."
+          onClick={() => setView("DEBTS")}
         />
       </div>
     </div>
