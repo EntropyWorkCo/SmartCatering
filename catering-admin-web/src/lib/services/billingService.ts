@@ -38,6 +38,53 @@ export const billingService = {
   },
 
   /**
+   * Parçalı ödeme kaydı oluşturur ve bakiyeyi günceller.
+   */
+  async recordPayment(userId: string, companyId: string | null, amount: number, method: string, description: string) {
+    // 1. Ödemeyi 'payments' tablosuna kaydet
+    const { error: paymentError } = await supabase
+      .from("payments")
+      .insert([
+        {
+          user_id: userId,
+          company_id: companyId,
+          amount: amount,
+          payment_method: method,
+          description: description,
+          created_at: new Date().toISOString()
+        }
+      ]);
+
+    if (paymentError) throw paymentError;
+
+    // 2. Eğer kurumsal bir müşteri ise şirket bakiyesini güncelle
+    if (companyId) {
+      const { data: company } = await supabase
+        .from("companies")
+        .select("balance")
+        .eq("id", companyId)
+        .single();
+      
+      const currentBalance = company?.balance || 0;
+      const newBalance = Math.max(0, currentBalance - amount);
+
+      await this.updateCompanyBalance(companyId, newBalance);
+    } else {
+      // Bireysel müşteri ise mevcut sisteme uyum sağlamak için 
+      // pozitif tutarlı bir 'MANUAL_PAYMENT' adisyonu ekle
+      // Uygulama (home.tsx) bu tipi görünce borçtan çıkaracaktır.
+      await supabase.from("adisyon").insert([{
+        user_id: userId,
+        total_amount: amount, 
+        status: 'PENDING',
+        order_type: 'MANUAL_PAYMENT',
+        note: `Kısmi Ödeme: ${description}`,
+        created_at: new Date().toISOString()
+      }]);
+    }
+  },
+
+  /**
    * Şirketin borcunu (bakiyesini) manuel olarak günceller.
    * @param companyId Şirketin ID'si
    * @param balance Yeni bakiye tutarı

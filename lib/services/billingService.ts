@@ -71,6 +71,38 @@ export const billingService = {
   },
 
   /**
+   * Belirli bir kullanıcının (şirket veya bireysel) güncel bakiyesini çeker.
+   */
+  async getUserBalance(userId: string) {
+    // 1. Önce şirket bakiyesi var mı bak
+    const { data: company } = await supabase
+      .from("companies")
+      .select("balance")
+      .eq("user_id", userId)
+      .single();
+    
+    if (company) return company.balance || 0;
+
+    // 2. Şirket değilse adisyonlardan hesapla
+    const { data: orders } = await supabase
+      .from("adisyon")
+      .select("total_amount, status, order_type")
+      .eq("user_id", userId);
+    
+    if (!orders) return 0;
+
+    return orders.reduce((acc, curr) => {
+      const status = (curr.status || "").toUpperCase();
+      if (["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ"].includes(status)) return acc;
+      
+      if (curr.order_type === 'MANUAL_PAYMENT') {
+        return acc - (curr.total_amount || 0);
+      }
+      return acc + (curr.total_amount || 0);
+    }, 0);
+  },
+
+  /**
    * Belirli bir kullanıcının (şirketin) güncel bakiyesini çeker.
    */
   async getCompanyBalance(userId: string) {

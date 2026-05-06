@@ -53,6 +53,12 @@ export default function Customers() {
   const [ekstreEndDate, setEkstreEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [ekstreUnitPrice, setEkstreUnitPrice] = useState("0");
   const [ekstrePaymentStatus, setEkstrePaymentStatus] = useState<'ODENDI' | 'BEKLIYOR'>('BEKLIYOR');
+  
+  // Parçalı Ödeme Modalı State
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("Nakit");
+  const [paymentDescription, setPaymentDescription] = useState("");
 
   useEffect(() => {
     fetchCustomers();
@@ -232,6 +238,33 @@ export default function Customers() {
     }
   };
 
+  const handleRecordPayment = async () => {
+    if (!selectedAccount || !paymentAmount) return;
+    try {
+      setProcessing(true);
+      const amount = Number(paymentAmount);
+      
+      await billingService.recordPayment(
+        selectedAccount.userId || selectedAccount.id,
+        selectedAccount.companyId || null,
+        amount,
+        paymentMethod,
+        paymentDescription || "Kısmi Ödeme"
+      );
+
+      alert("Ödeme başarıyla kaydedildi.");
+      setPaymentModalVisible(false);
+      setPaymentAmount("");
+      setPaymentDescription("");
+      // Verileri tazele
+      fetchCustomers();
+    } catch (err: any) {
+      alert("Hata: " + err.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const openEkstreModal = (group: any) => {
     const today = new Date();
     const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -372,14 +405,27 @@ export default function Customers() {
                            <td className="px-6 py-5 text-right">
                                <div className="flex justify-end space-x-2">
                                   {(c.balance ?? 0) > 0 && (
-                                     <button 
-                                      onClick={() => handleClearDebt(c)}
-                                      className="flex items-center space-x-2 px-4 py-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all shadow-md shadow-emerald-100 active:scale-95 group" 
-                                      title="Borç Ödendi"
-                                     >
-                                        <CheckCircle2 size={16} className="group-hover:scale-110 transition-transform" />
-                                        <span className="text-xs font-bold whitespace-nowrap">BORÇ ÖDENDİ</span>
-                                     </button>
+                                     <>
+                                       <button 
+                                        onClick={() => {
+                                          setSelectedAccount(c);
+                                          setPaymentModalVisible(true);
+                                        }}
+                                        className="flex items-center space-x-2 px-4 py-2 bg-accent text-white rounded-xl hover:bg-accent/90 transition-all shadow-md shadow-accent/10 active:scale-95 group" 
+                                        title="Kısmi Ödeme Al"
+                                       >
+                                          <PlusCircle size={16} className="group-hover:scale-110 transition-transform" />
+                                          <span className="text-xs font-bold whitespace-nowrap">ÖDEME AL</span>
+                                       </button>
+                                       <button 
+                                        onClick={() => handleClearDebt(c)}
+                                        className="flex items-center space-x-2 px-4 py-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all shadow-md shadow-emerald-100 active:scale-95 group" 
+                                        title="Tüm Borç Ödendi"
+                                       >
+                                          <CheckCircle2 size={16} className="group-hover:scale-110 transition-transform" />
+                                          <span className="text-xs font-bold whitespace-nowrap">TÜMÜNÜ ÖDE</span>
+                                       </button>
+                                     </>
                                   )}
                                   <button className="p-2 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
                                     <MoreVertical size={18} />
@@ -408,26 +454,38 @@ export default function Customers() {
                              </div>
                              <div>
                                 <h3 className="text-lg font-black text-slate-900 leading-tight">{group.companyName}</h3>
-                                <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-1 flex items-center">
-                                   <Briefcase size={12} className="mr-1" />
+                                <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                                   <Briefcase size={12} className="inline mr-1" />
                                    {group.customers.length} Kayıtlı Çalışan
                                 </p>
                              </div>
-                          </div>
+                           </div>
 
-                          <div className="flex items-center space-x-8">
+                           <div className="flex items-center space-x-8">
                              {group.totalDebt > 0 ? (
                                 <div className="flex items-center space-x-2">
+                                   <button 
+                                     onClick={(e) => {
+                                       e.stopPropagation();
+                                       setSelectedAccount({ ...group, userId: group.customers[0]?.id });
+                                       setPaymentModalVisible(true);
+                                     }}
+                                     className="flex items-center space-x-2 px-6 py-3 bg-accent text-white rounded-2xl hover:bg-accent/90 transition-all shadow-lg shadow-accent/10 active:scale-95 group"
+                                     title="Kısmi Ödeme Al"
+                                   >
+                                      <PlusCircle size={20} className="group-hover:scale-110 transition-transform" />
+                                      <span className="text-sm font-black tracking-tight">ÖDEME AL</span>
+                                   </button>
                                    <button 
                                      onClick={(e) => {
                                        e.stopPropagation();
                                        handleClearDebt(group);
                                      }}
                                      className="flex items-center space-x-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 active:scale-95 group"
-                                     title="Borç Ödendi"
+                                     title="Tüm Borç Ödendi"
                                    >
                                       <CheckCircle2 size={20} className="group-hover:scale-110 transition-transform" />
-                                      <span className="text-sm font-black tracking-tight">BORÇ ÖDENDİ</span>
+                                      <span className="text-sm font-black tracking-tight">TÜMÜNÜ ÖDE</span>
                                    </button>
                                    <div className="flex flex-col text-right">
                                       <span className="text-xl font-black text-slate-900 italic">₺{group.totalDebt.toLocaleString("tr-TR")}</span>
@@ -670,6 +728,83 @@ export default function Customers() {
                              <span>PDF OLUŞTUR</span>
                           </>
                        )}
+                    </button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+      {/* Ödeme Alma Modalı */}
+      {paymentModalVisible && selectedAccount && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+           <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-300">
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between">
+                 <div>
+                    <h2 className="text-2xl font-black text-slate-900 leading-tight">Ödeme Al</h2>
+                    <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">
+                      {selectedAccount.companyName || selectedAccount.name}
+                    </p>
+                 </div>
+                 <button onClick={() => setPaymentModalVisible(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                    <X size={24} className="text-slate-400" />
+                 </button>
+              </div>
+
+              <div className="p-8 space-y-6">
+                 <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Ödeme Tutarı (₺)</label>
+                    <div className="relative">
+                       <input 
+                         type="number"
+                         value={paymentAmount}
+                         onChange={(e) => setPaymentAmount(e.target.value)}
+                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-xl font-black focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent transition-all"
+                         placeholder="0.00"
+                         autoFocus
+                       />
+                       <div className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 font-black">TL</div>
+                    </div>
+                 </div>
+
+                 <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Ödeme Yöntemi</label>
+                    <div className="grid grid-cols-2 gap-3">
+                       {["Nakit", "Kredi Kartı", "Havale/EFT"].map(m => (
+                          <button
+                            key={m}
+                            onClick={() => setPaymentMethod(m)}
+                            className={`py-3 rounded-xl text-xs font-bold border transition-all ${paymentMethod === m ? "bg-slate-900 text-white border-slate-900 shadow-lg shadow-slate-200" : "bg-white text-slate-500 border-slate-100 hover:bg-slate-50"}`}
+                          >
+                             {m}
+                          </button>
+                       ))}
+                    </div>
+                 </div>
+
+                 <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Açıklama (İsteğe Bağlı)</label>
+                    <input 
+                      type="text"
+                      value={paymentDescription}
+                      onChange={(e) => setPaymentDescription(e.target.value)}
+                      placeholder="Örn: Haftalık ödeme"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-accent"
+                    />
+                 </div>
+
+                 <div className="pt-4 flex items-center space-x-3">
+                    <button 
+                      onClick={() => setPaymentModalVisible(false)}
+                      className="flex-1 py-4 text-slate-500 font-black text-sm hover:bg-slate-50 rounded-2xl transition-colors"
+                    >
+                       İPTAL
+                    </button>
+                    <button 
+                      onClick={handleRecordPayment}
+                      disabled={processing || !paymentAmount}
+                      className="flex-[2] bg-emerald-500 py-4 rounded-2xl text-white font-black text-sm shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center space-x-2"
+                    >
+                       {processing ? <Loader2 className="animate-spin" size={18} /> : <span>ÖDEMEYİ KAYDET</span>}
                     </button>
                  </div>
               </div>

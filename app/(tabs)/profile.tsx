@@ -92,13 +92,13 @@ export default function ProfileScreen() {
                 setNotificationsEnabled(storedVal === "true");
             }
 
-            // Borç bakiyesini çek (Kurumsal ise)
-            if (profile?.is_company && user?.id) {
+            // Borç bakiyesini çek
+            if (user?.id) {
                 try {
-                    const balanceData = await billingService.getCompanyBalance(user.id);
-                    if (balanceData) setBalance(balanceData.balance);
+                    const debt = await billingService.getUserBalance(user.id);
+                    setBalance(debt);
                 } catch (err) {
-                    console.log("Bakiye çekilemedi (UUID hatası ihtimali):", err);
+                    console.log("Bakiye çekilemedi:", err);
                 }
             }
         };
@@ -254,10 +254,10 @@ export default function ProfileScreen() {
                         )}
                     </TouchableOpacity>
 
-                    {profile?.is_company && balance !== null && (
+                    {(balance !== null && balance > 0) && (
                         <View style={[styles.debtCard, { backgroundColor: colors.primary + '15' }]}>
                             <View>
-                                <Text style={[styles.debtLabel, { color: colors.muted }]}>ÖDENECEK TOPLAM BORÇ</Text>
+                                <Text style={[styles.debtLabel, { color: colors.muted }]}>GÜNCEL TOPLAM BORÇ</Text>
                                 <Text style={[styles.debtAmount, { color: colors.primary }]}>₺{balance.toLocaleString("tr-TR")}</Text>
                             </View>
                             <MaterialIcons name="account-balance-wallet" size={32} color={colors.primary} />

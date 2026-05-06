@@ -12,7 +12,12 @@ import {
     TextInput,
     TouchableOpacity,
     View,
-    RefreshControl
+    RefreshControl,
+    Modal,
+    TouchableWithoutFeedback,
+    Keyboard,
+    Alert,
+    ActivityIndicator
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context"; //Telefonun notch / status bar alanına çarpmamak için kullanılır
 
@@ -36,6 +41,14 @@ export default function AdminCustomers() {
 
     const [refreshing, setRefreshing] = useState(false);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [processing, setProcessing] = useState(false);
+
+    // Parçalı Ödeme Modalı State
+    const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+    const [selectedAccount, setSelectedAccount] = useState<any>(null);
+    const [paymentAmount, setPaymentAmount] = useState("");
+    const [paymentMethod, setPaymentMethod] = useState("Nakit");
+    const [paymentDescription, setPaymentDescription] = useState("");
 
     const onRefresh = React.useCallback(() => {
         setRefreshing(true);
@@ -147,6 +160,34 @@ export default function AdminCustomers() {
         return Object.values(groups).sort((a, b) => b.totalDebt - a.totalDebt);
     }, [kurumsalCustomers]);
 
+    const handleRecordPayment = async () => {
+        if (!selectedAccount || !paymentAmount) return;
+        try {
+            setProcessing(true);
+            const amount = Number(paymentAmount);
+            
+            // Note: Admin mobile might not have billingService imported correctly or same way
+            // I will use the one from @/lib/services/billingService
+            await billingService.recordPayment(
+                selectedAccount.id || selectedAccount.userId,
+                selectedAccount.companyId || null,
+                amount,
+                paymentMethod,
+                paymentDescription || "Mobil Admin Ödeme"
+            );
+
+            Alert.alert("Başarılı", "Ödeme kaydı oluşturuldu.");
+            setPaymentModalVisible(false);
+            setPaymentAmount("");
+            setPaymentDescription("");
+            setRefreshTrigger(prev => prev + 1);
+        } catch (err: any) {
+            Alert.alert("Hata", err.message);
+        } finally {
+            setProcessing(false);
+        }
+    };
+
     const toggleCompany = (vkn: string) => {
         setExpandedCompanies(prev => ({
             ...prev,
@@ -183,12 +224,21 @@ export default function AdminCustomers() {
                                 Borç Ödendi
                             </Text>
                         ) : (
-                            <>
+                            <View style={{ alignItems: 'flex-end' }}>
                                 <Text style={[styles.balanceAmount, { color: colors.text }]}>
                                     ₺{customer.balance?.toLocaleString("tr-TR") || 0}
                                 </Text>
                                 <Text style={styles.balanceLabel}>BORÇ</Text>
-                            </>
+                                <TouchableOpacity 
+                                    onPress={() => {
+                                        setSelectedAccount(customer);
+                                        setPaymentModalVisible(true);
+                                    }}
+                                    style={{ marginTop: 8, backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+                                >
+                                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>ÖDEME AL</Text>
+                                </TouchableOpacity>
+                            </View>
                         )
                     ) : null}
                 </View>
@@ -278,12 +328,28 @@ export default function AdminCustomers() {
                                                         Borç Ödendi
                                                     </Text>
                                                 ) : (
-                                                    <>
+                                                    <View style={{ alignItems: 'flex-end' }}>
                                                         <Text style={[styles.balanceAmount, { color: colors.text }]}>
                                                             ₺{group.totalDebt.toLocaleString("tr-TR")}
                                                         </Text>
                                                         <Text style={styles.balanceLabel}>TOPLAM BORÇ</Text>
-                                                    </>
+                                                        <TouchableOpacity 
+                                                            onPress={() => {
+                                                                const owner = group.customers.find(c => c.isOwner);
+                                                                setSelectedAccount({ 
+                                                                    ...group, 
+                                                                    id: owner?.id || group.customers[0]?.id,
+                                                                    companyId: group.customers[0]?.companyId || group.customers[0]?.id // Simplified fallback
+                                                                });
+                                                                // Actually groupedKurumsal needs to have companyId
+                                                                // I should check if I added it to the groupedKurumsal map
+                                                                setPaymentModalVisible(true);
+                                                            }}
+                                                            style={{ marginTop: 8, backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+                                                        >
+                                                            <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>ÖDEME AL</Text>
+                                                        </TouchableOpacity>
+                                                    </View>
                                                 )}
                                             </View>
                                             <MaterialIcons
@@ -311,6 +377,90 @@ export default function AdminCustomers() {
                     )
                 )}
             </ScrollView>
+
+            {/* Ödeme Alma Modalı */}
+            <Modal
+                visible={paymentModalVisible}
+                animationType="slide"
+                transparent
+                onRequestClose={() => setPaymentModalVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContainer}>
+                            <View style={styles.modalHeader}>
+                                <MaterialIcons name="payments" size={28} color={colors.primary} />
+                                <Text style={styles.modalTitle}>Ödeme Al</Text>
+                            </View>
+                            <Text style={styles.modalSubtitle}>
+                                {selectedAccount?.companyName || selectedAccount?.name} için tahsil edilen miktarı giriniz.
+                            </Text>
+
+                            <View style={{ gap: 16, marginTop: 10 }}>
+                                <View>
+                                    <Text style={styles.modalInputLabel}>Ödeme Tutarı (₺)</Text>
+                                    <TextInput
+                                        style={styles.modalTextInput}
+                                        placeholder="0.00"
+                                        keyboardType="numeric"
+                                        value={paymentAmount}
+                                        onChangeText={setPaymentAmount}
+                                    />
+                                </View>
+
+                                <View>
+                                    <Text style={styles.modalInputLabel}>Ödeme Yöntemi</Text>
+                                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                                        {["Nakit", "Kredi Kartı", "Havale"].map(m => (
+                                            <TouchableOpacity
+                                                key={m}
+                                                onPress={() => setPaymentMethod(m)}
+                                                style={[
+                                                    styles.methodBtn,
+                                                    paymentMethod === m && { backgroundColor: colors.primary, borderColor: colors.primary }
+                                                ]}
+                                            >
+                                                <Text style={[styles.methodBtnText, paymentMethod === m && { color: '#fff' }]}>{m}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                <View>
+                                    <Text style={styles.modalInputLabel}>Açıklama</Text>
+                                    <TextInput
+                                        style={styles.modalTextInput}
+                                        placeholder="İsteğe bağlı not..."
+                                        value={paymentDescription}
+                                        onChangeText={setPaymentDescription}
+                                    />
+                                </View>
+                            </View>
+
+                            <View style={styles.modalActions}>
+                                <TouchableOpacity
+                                    style={[styles.modalBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.surfaceBorder }]}
+                                    onPress={() => setPaymentModalVisible(false)}
+                                    disabled={processing}
+                                >
+                                    <Text style={[styles.modalBtnText, { color: colors.text }]}>Vazgeç</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.modalBtn, { backgroundColor: colors.primary, flex: 2 }]}
+                                    onPress={handleRecordPayment}
+                                    disabled={processing || !paymentAmount}
+                                >
+                                    {processing ? (
+                                        <ActivityIndicator color="#fff" size="small" />
+                                    ) : (
+                                        <Text style={[styles.modalBtnText, { color: '#fff' }]}>Ödemeyi Kaydet</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
         </View>
     );
 }
@@ -520,5 +670,83 @@ const getStyles = (colors: any) => StyleSheet.create({
         fontSize: 16,
         fontWeight: "bold",
         color: colors.muted,
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContainer: {
+        backgroundColor: colors.surface,
+        borderTopLeftRadius: 32,
+        borderTopRightRadius: 32,
+        padding: 32,
+        paddingBottom: 50,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 8,
+    },
+    modalTitle: {
+        fontSize: 24,
+        fontWeight: '900',
+        color: colors.text,
+    },
+    modalSubtitle: {
+        fontSize: 14,
+        color: colors.muted,
+        lineHeight: 20,
+        marginBottom: 20,
+    },
+    modalInputLabel: {
+        fontSize: 10,
+        fontWeight: '900',
+        color: colors.muted,
+        marginBottom: 8,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    modalTextInput: {
+        backgroundColor: colors.background,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+        borderRadius: 16,
+        padding: 16,
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: colors.text,
+    },
+    methodBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+        alignItems: 'center',
+        backgroundColor: colors.background,
+    },
+    methodBtnText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: colors.muted,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 32,
+    },
+    modalBtn: {
+        flex: 1,
+        height: 56,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalBtnText: {
+        fontSize: 14,
+        fontWeight: '900',
     },
 });

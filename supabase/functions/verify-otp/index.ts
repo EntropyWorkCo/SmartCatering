@@ -31,16 +31,16 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: false, error: 'Telefon ve kod zorunludur' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // --- APPLE REVIEW MAGIC CODE BYPASS START ---
-    const appleTestNumbers = ["+905551000001", "+905551000002", "apple-admin@smartcatering.com", "admin@meydan.com"];
-    const magicCodes = ["123456", "1234"];
+    // --- ADMIN MAGIC CODE BYPASS START ---
+    const adminAccounts = ["admin@meydan.com"];
+    const magicCodes = ["992288"]; // Daha güvenli 6 haneli kod
     let isMagicLogin = false;
 
-    if (appleTestNumbers.includes(phone) && magicCodes.includes(code)) {
-        console.log("🍎 Apple Test Girişi (Magic Code):", phone);
+    if (adminAccounts.includes(phone) && magicCodes.includes(code)) {
+        console.log("🔐 Admin Güvenli Girişi:", phone);
         isMagicLogin = true;
     }
-    // --- APPLE REVIEW MAGIC CODE BYPASS END ---
+    // --- ADMIN MAGIC CODE BYPASS END ---
 
     // 1. Verify OTP using admin client (bypasses RLS)
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -72,7 +72,7 @@ serve(async (req) => {
 
     // 2. Normalize phone and check if user exists in public.users
     let existingUser;
-    if (phone === "apple-admin@smartcatering.com" || phone === "admin@meydan.com") {
+    if (phone === "admin@meydan.com") {
         // Test ve Ana Admin için sistemdeki herhangi bir admini alıyoruz
         const { data } = await supabaseAdmin
             .from("users")
