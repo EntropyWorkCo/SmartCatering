@@ -103,6 +103,51 @@ export const billingService = {
   },
 
   /**
+   * Ödeme kaydı oluşturur ve bakiyeyi günceller.
+   */
+  async recordPayment(userId: string, companyId: string | null, amount: number, method: string, description: string) {
+    // 1. Ödemeyi 'payments' tablosuna kaydet
+    const { error: paymentError } = await (supabase
+      .from('payments' as any)
+      .insert([
+        {
+          user_id: userId,
+          company_id: companyId,
+          amount: amount,
+          payment_method: method,
+          description: description,
+          created_at: new Date().toISOString()
+        }
+      ]));
+
+    if (paymentError) throw paymentError;
+
+    // 2. Bakiyeyi güncelle
+    if (companyId) {
+      // Kurumsal ise bakiye düşür
+      const { data: company } = await supabase
+        .from("companies")
+        .select("balance")
+        .eq("id", companyId)
+        .single();
+      
+      const newBalance = (company?.balance || 0) - amount;
+      await this.updateCompanyBalance(companyId, newBalance);
+    } else {
+      // Bireysel müşteri ise pozitif tutarlı bir 'MANUAL_PAYMENT' adisyonu ekle
+      // Uygulama (home.tsx) bu tipi görünce borçtan çıkaracaktır.
+      await supabase.from("adisyon").insert([{
+        user_id: userId,
+        total_amount: amount, 
+        status: 'PENDING',
+        order_type: 'MANUAL_PAYMENT',
+        note: `Kısmi Ödeme: ${description}`,
+        created_at: new Date().toISOString()
+      }]);
+    }
+  },
+
+  /**
    * Belirli bir kullanıcının (şirketin) güncel bakiyesini çeker.
    */
   async getCompanyBalance(userId: string) {

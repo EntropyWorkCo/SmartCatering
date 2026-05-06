@@ -20,8 +20,8 @@ import {
     ActivityIndicator
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context"; //Telefonun notch / status bar alanına çarpmamak için kullanılır
+import { billingService } from "@/lib/services/billingService";
 
-// TODO: Replace with actual backend integration (e.g. useAdmin hook fetching users from Supabase profiles table)
 interface User {
     id: string;
     name: string;
@@ -31,6 +31,7 @@ interface User {
     balance?: number;
     isOwner?: boolean;
     companyBalance?: number;
+    companyId?: string;
 }
 
 export default function AdminCustomers() {

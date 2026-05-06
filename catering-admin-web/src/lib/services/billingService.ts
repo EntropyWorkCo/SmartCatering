@@ -42,8 +42,8 @@ export const billingService = {
    */
   async recordPayment(userId: string, companyId: string | null, amount: number, method: string, description: string) {
     // 1. Ödemeyi 'payments' tablosuna kaydet
-    const { error: paymentError } = await supabase
-      .from("payments")
+    const { error: paymentError } = await (supabase
+      .from('payments' as any)
       .insert([
         {
           user_id: userId,
@@ -53,7 +53,7 @@ export const billingService = {
           description: description,
           created_at: new Date().toISOString()
         }
-      ]);
+      ]));
 
     if (paymentError) throw paymentError;
 
