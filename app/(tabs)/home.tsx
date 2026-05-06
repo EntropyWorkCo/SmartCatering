@@ -342,7 +342,7 @@ export default function HomeScreen() {
 
             <div class="footer">
               Bu belge bilgilendirme amaçlı otomatik oluşturulmuştur.<br/>
-              © ${new Date().getFullYear()} Meydan Lokanta | Tüm Hakları Saklıdır.
+              © ${new Date().getFullYear()} Meydan Lokanta Ankara | Tüm Hakları Saklıdır.
             </div>
           </body>
         </html>

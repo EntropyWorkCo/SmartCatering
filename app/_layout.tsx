@@ -237,19 +237,28 @@ function RootLayoutNav({ user, role, loading }: any) {
         }
 
         if (isAdmin) {
+          const adminChannelName = 'admin-orders-live-root';
+          const existingAdminChannel = supabase.getChannels().find(c => c.topic === `realtime:${adminChannelName}`);
+          if (existingAdminChannel) supabase.removeChannel(existingAdminChannel);
+
           orderChannel = supabase
-            .channel('admin-orders-live-root')
+            .channel(adminChannelName)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'adisyon' }, (payload: any) => {
               if (payload.new?.order_type !== "Şimdi Ye") {
                 Alert.alert("Yeni Paket Siparişi! 🛎️", "Yeni bir paket siparişi düştü.");
               }
-            })
-            .subscribe();
+            });
+          
+          orderChannel.subscribe();
         }
 
         // Müşteri: Sipariş durum güncellemelerini dinle
+        const customerChannelName = `customer-status-${user.id}`;
+        const existingCustChannel = supabase.getChannels().find(c => c.topic === `realtime:${customerChannelName}`);
+        if (existingCustChannel) supabase.removeChannel(existingCustChannel);
+
         customerOrderChannel = supabase
-          .channel(`customer-status-${user.id}`)
+          .channel(customerChannelName)
           .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'adisyon', filter: `user_id=eq.${user.id}` }, (payload: any) => {
             const status = (payload.new?.status || '').toString().toUpperCase();
             
@@ -270,8 +279,9 @@ function RootLayoutNav({ user, role, loading }: any) {
                 ]
               );
             }
-          })
-          .subscribe();
+          });
+        
+        customerOrderChannel.subscribe();
 
       } catch (err) {
         console.warn("Background tasks skipped/failed:", err);

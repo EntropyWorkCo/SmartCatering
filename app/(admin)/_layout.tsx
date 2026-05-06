@@ -28,8 +28,16 @@ export default function AdminLayout() { //Admin panelindeki tüm sayfaların lay
 
         fetchUnreadCount();
 
+        const channelName = 'admin-messages-unread-all';
+        
+        // Önce varsa eski kanalı temizle
+        const existingChannel = supabase.getChannels().find(c => c.topic === `realtime:${channelName}`);
+        if (existingChannel) {
+            supabase.removeChannel(existingChannel);
+        }
+
         const channel = supabase
-            .channel('admin-messages-unread-all') // Unique channel name
+            .channel(channelName)
             .on('postgres_changes', { 
                 event: '*', 
                 schema: 'public', 
@@ -37,10 +45,11 @@ export default function AdminLayout() { //Admin panelindeki tüm sayfaların lay
             }, (payload) => {
                 console.log("Realtime message change detected for admin:", payload.eventType);
                 fetchUnreadCount();
-            })
-            .subscribe((status) => {
-                console.log("Admin message subscription status:", status);
             });
+
+        channel.subscribe((status) => {
+            console.log("Admin message subscription status:", status);
+        });
 
         return () => {
             supabase.removeChannel(channel);

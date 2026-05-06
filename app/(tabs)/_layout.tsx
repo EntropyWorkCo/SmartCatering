@@ -34,13 +34,20 @@ export default function TabLayout() {
     fetchUnreadCount();
 
     const channelName = `unread-msgs-${user.id}`;
+    
+    // Önce varsa eski kanalı temizle (çakışmayı önlemek için)
+    const existingChannel = supabase.getChannels().find(c => c.topic === `realtime:${channelName}`);
+    if (existingChannel) {
+      supabase.removeChannel(existingChannel);
+    }
+
     const channel = supabase
       .channel(channelName)
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
         table: 'messages',
-        filter: `user_id=eq.${user.id}` // Sadece bu kullanıcının mesajlarını dinle
+        filter: `user_id=eq.${user.id}` 
       }, () => {
         fetchUnreadCount();
       });
