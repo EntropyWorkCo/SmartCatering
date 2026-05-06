@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "1074305568675",
-    "project_id": "smartcatering-cb235",
-    "storage_bucket": "smartcatering-cb235.firebasestorage.app"
+    "project_number": "532779456336",
+    "project_id": "smartcatering-bdb74",
+    "storage_bucket": "smartcatering-bdb74.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1074305568675:android:6aa793efba4b12352a5416",
+        "mobilesdk_app_id": "1:532779456336:android:e9990702eb69961edcbe55",
         "android_client_info": {
           "package_name": "com.entropywork.smartcatering"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBwvbtnUBxAa8SzIQk0wjYVKfeJrX9GZ8g"
+          "current_key": "AIzaSyAstucR_xP9dJMMs_4Udlwn3-GE08N1ZI8"
         }
       ],
       "services": {
