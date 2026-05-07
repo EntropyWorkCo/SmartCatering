@@ -13,7 +13,8 @@ import {
   Wallet,
   PlusCircle,
   CheckCircle2,
-  X
+  X,
+  Search
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { adisyonService } from "../lib/services/adisyonService";
@@ -457,6 +458,421 @@ function PerformanceView({ feedbacks, onBack }: any) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Debts View ---
+function DebtsView({ onBack }: any) {
+  const [loading, setLoading] = useState(true);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [mainTab, setMainTab] = useState<"BIREYSEL" | "KURUMSAL">("KURUMSAL");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [processing, setProcessing] = useState(false);
+
+  // Borç Giriş Modalı
+  const [debtModalVisible, setDebtModalVisible] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<any>(null);
+  const [newAmount, setNewAmount] = useState("");
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Parçalı Ödeme Modalı
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+
+
+  useEffect(() => {
+    fetchDebts();
+  }, []);
+
+  const fetchDebts = async () => {
+    try {
+      setLoading(true);
+      const { data: usersData } = await supabase.from('users').select('*');
+      const { data: ordersData } = await supabase.from('adisyon').select('*');
+      const { data: companiesData } = await supabase.from('companies').select('*');
+
+      if (usersData) {
+        const formatted = usersData.map((profile: any) => {
+          let isOwner = false;
+          let userCompany = companiesData?.find((c: any) => c.user_id === profile.id);
+          if (userCompany) isOwner = true;
+          else userCompany = companiesData?.find((c: any) => c.id === profile.company_id);
+
+          let balance = 0;
+          if (isOwner && userCompany) {
+            balance = userCompany.balance || 0;
+          } else if (!userCompany) {
+            const userOrders = ordersData?.filter((o: any) => {
+              const status = (o.status || "").toUpperCase();
+              return o.user_id === profile.id && !["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ"].includes(status);
+            }) || [];
+            balance = userOrders.reduce((sum: number, order: any) => {
+              if (order.order_type === 'MANUAL_PAYMENT') {
+                return sum - (order.total_amount || 0);
+              }
+              return sum + (order.total_amount || 0);
+            }, 0);
+          }
+
+          return {
+            id: profile.id,
+            name: profile.full_name || 'İsimsiz Müşteri',
+            phone: profile.phone || '',
+            companyName: userCompany?.company_name || 'Bireysel',
+            companyId: userCompany?.id,
+            balance: balance,
+            isOwner: isOwner,
+            isCorporate: !!userCompany
+          };
+        });
+        setCustomers(formatted);
+      }
+    } catch (err) {
+      console.error("Borç verisi çekme hatası:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filtered = customers.filter(c => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    c.companyName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const corporateGroups = (() => {
+    const groups: Record<string, any> = {};
+    filtered.filter(c => c.isCorporate).forEach(c => {
+      if (!groups[c.companyId]) {
+        groups[c.companyId] = {
+          companyId: c.companyId,
+          companyName: c.companyName,
+          totalDebt: c.balance,
+          ownerId: c.isOwner ? c.id : null,
+          users: []
+        };
+      }
+      if (c.isOwner) groups[c.companyId].ownerId = c.id;
+      groups[c.companyId].users.push(c);
+    });
+    return Object.values(groups).sort((a, b) => b.totalDebt - a.totalDebt);
+  })();
+
+  const individualList = filtered.filter(c => !c.isCorporate).sort((a, b) => b.balance - a.balance);
+
+  const handleUpdateDebt = async () => {
+    if (!selectedAccount || !newAmount) return;
+    try {
+      setProcessing(true);
+      const amount = Number(newAmount);
+      const userId = selectedAccount.ownerId || selectedAccount.id;
+
+      await billingService.addManualEntry(userId, amount, startDate, endDate, 'DEBT');
+      
+      if (selectedAccount.companyId) {
+        await billingService.updateCompanyBalance(selectedAccount.companyId, selectedAccount.totalDebt + amount);
+      }
+      
+      alert("Borç başarıyla eklendi.");
+      setDebtModalVisible(false);
+      setNewAmount("");
+      fetchDebts();
+    } catch (err: any) {
+      alert("Hata: " + err.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handlePayment = async () => {
+    if (!selectedAccount || !newAmount) return;
+    try {
+      setProcessing(true);
+      const amount = Number(newAmount);
+      const userId = selectedAccount.ownerId || selectedAccount.id;
+
+      await billingService.recordPayment(
+        userId,
+        selectedAccount.companyId || null,
+        amount,
+        "",
+        "Parçalı Ödeme (Panel)"
+      );
+
+      alert("Ödeme başarıyla kaydedildi.");
+      setPaymentModalVisible(false);
+      setNewAmount("");
+      fetchDebts();
+    } catch (err: any) {
+      alert("Hata: " + err.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleClearAll = async (account: any) => {
+    if (!window.confirm(`${account.companyName || account.name} için tüm borcu sıfırlamak istiyor musunuz?`)) return;
+    try {
+      setProcessing(true);
+      const userId = account.ownerId || account.id;
+      if (account.companyId) {
+        await billingService.clearCompanyBalance(account.companyId);
+      } else {
+        await adisyonService.clearUserDebt(userId);
+      }
+      alert("Borç sıfırlandı.");
+      fetchDebts();
+    } catch (err: any) {
+      alert("Hata: " + err.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleDownloadEkstre = async (account: any) => {
+     try {
+       setProcessing(true);
+       const orders = await adisyonService.getCompanyOrders(account.companyId || account.id);
+       const accountData = {
+         displayName: account.companyName || account.name,
+         isCorporate: !!account.companyId,
+         manualDebt: account.totalDebt || account.balance,
+         total: account.balance || 0
+       };
+       pdfService.generateCompanyExtre(accountData, orders);
+     } catch (err: any) {
+       alert("Hata: " + err.message);
+     } finally {
+       setProcessing(false);
+     }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 space-y-4 animate-in fade-in duration-500">
+        <Loader2 className="w-12 h-12 text-accent animate-spin" />
+        <p className="text-slate-400 font-black text-xs uppercase tracking-widest">Borç Verileri Yükleniyor...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8 animate-in slide-in-from-right duration-500">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <button onClick={onBack} className="flex items-center text-slate-500 hover:text-slate-900 dark:hover:text-white font-bold transition-colors w-fit">
+          <ArrowLeft size={20} className="mr-2" /> Geri Dön
+        </button>
+
+        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+          <button 
+            onClick={() => setMainTab("KURUMSAL")}
+            className={`px-6 py-2 rounded-lg text-xs font-black transition-all ${mainTab === 'KURUMSAL' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}
+          >
+            KURUMSAL
+          </button>
+          <button 
+            onClick={() => setMainTab("BIREYSEL")}
+            className={`px-6 py-2 rounded-lg text-xs font-black transition-all ${mainTab === 'BIREYSEL' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}
+          >
+            BİREYSEL
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div className="p-8 border-b border-slate-50 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+           <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <input 
+                type="text"
+                placeholder="Firma veya müşteri ara..."
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm focus:ring-2 focus:ring-accent"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+           </div>
+           <div className="flex items-center gap-2">
+             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Görünüm:</span>
+             <span className="text-xs font-black text-slate-900 dark:text-white">{mainTab}</span>
+           </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-slate-50/50 dark:bg-slate-800/20 text-slate-400 text-[10px] uppercase tracking-widest font-black border-b border-slate-100 dark:border-slate-800">
+                <th className="px-8 py-5 text-left">Müşteri / Firma</th>
+                <th className="px-8 py-5 text-right">Güncel Borç</th>
+                <th className="px-8 py-5 text-right">İşlemler</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+              {mainTab === "KURUMSAL" ? corporateGroups.map(group => (
+                <tr key={group.companyId} className="hover:bg-slate-50/30 dark:hover:bg-slate-800/30 transition-colors">
+                  <td className="px-8 py-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-accent/10 rounded-2xl flex items-center justify-center text-accent">
+                        <Building2 size={24} />
+                      </div>
+                      <div>
+                        <p className="font-black text-slate-900 dark:text-white uppercase tracking-tight">{group.companyName}</p>
+                        <p className="text-[10px] text-slate-400 font-bold">{group.users.length} Kayıtlı Kişi</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-8 py-6 text-right">
+                    <p className={`text-lg font-black ${group.totalDebt > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                      ₺{group.totalDebt.toLocaleString('tr-TR')}
+                    </p>
+                  </td>
+                  <td className="px-8 py-6 text-right">
+                    <div className="flex justify-end gap-3">
+                      <button 
+                        onClick={() => { setSelectedAccount(group); setDebtModalVisible(true); }}
+                        className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all text-[11px] font-black uppercase tracking-wider flex items-center gap-2 border border-blue-100 shadow-sm"
+                      >
+                        <PlusCircle size={14} />
+                        <span>BORÇ GİR</span>
+                      </button>
+                      <button 
+                        onClick={() => { setSelectedAccount(group); setPaymentModalVisible(true); }}
+                        className="px-4 py-2 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-500 hover:text-white transition-all text-[11px] font-black uppercase tracking-wider flex items-center gap-2 border border-orange-100 shadow-sm"
+                      >
+                        <Wallet size={14} />
+                        <span>ÖDEME AL</span>
+                      </button>
+                      <button 
+                        onClick={() => handleDownloadEkstre(group)}
+                        className="px-4 py-2 bg-slate-50 text-slate-600 rounded-xl hover:bg-slate-900 hover:text-white transition-all text-[11px] font-black uppercase tracking-wider flex items-center gap-2 border border-slate-200 shadow-sm"
+                      >
+                        <Download size={14} />
+                        <span>DÖKÜM</span>
+                      </button>
+                      <button 
+                        onClick={() => handleClearAll(group)}
+                        className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all text-[11px] font-black uppercase tracking-wider flex items-center gap-2 border border-emerald-100 shadow-sm"
+                      >
+                        <CheckCircle2 size={14} />
+                        <span>SIFIRLA</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )) : individualList.map(c => (
+                <tr key={c.id} className="hover:bg-slate-50/30 dark:hover:bg-slate-800/30 transition-colors">
+                  <td className="px-8 py-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-400">
+                        <User size={24} />
+                      </div>
+                      <div>
+                        <p className="font-black text-slate-900 dark:text-white uppercase tracking-tight">{c.name}</p>
+                        <p className="text-[10px] text-slate-400 font-bold">{c.phone}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-8 py-6 text-right">
+                    <p className={`text-lg font-black ${c.balance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                      ₺{c.balance.toLocaleString('tr-TR')}
+                    </p>
+                  </td>
+                  <td className="px-8 py-6 text-right">
+                    <div className="flex justify-end gap-3">
+                       <button 
+                        onClick={() => { setSelectedAccount(c); setPaymentModalVisible(true); }}
+                        className="px-4 py-2 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-500 hover:text-white transition-all text-[11px] font-black uppercase tracking-wider flex items-center gap-2 border border-orange-100 shadow-sm"
+                      >
+                        <Wallet size={14} />
+                        <span>ÖDEME AL</span>
+                      </button>
+                      <button 
+                        onClick={() => handleClearAll(c)}
+                        className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all text-[11px] font-black uppercase tracking-wider flex items-center gap-2 border border-emerald-100 shadow-sm"
+                      >
+                        <CheckCircle2 size={14} />
+                        <span>SIFIRLA</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Borç Ekle Modalı */}
+      {debtModalVisible && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+           <div className="bg-white dark:bg-slate-900 rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden">
+              <div className="p-8 border-b border-slate-50 dark:border-slate-800 flex items-center justify-between">
+                 <h2 className="text-xl font-black text-slate-900 dark:text-white">Borç Girişi</h2>
+                 <button onClick={() => setDebtModalVisible(false)}><X size={24} className="text-slate-400" /></button>
+              </div>
+              <div className="p-8 space-y-6">
+                 <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Tutar (₺)</label>
+                    <input 
+                      type="number"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-6 py-4 text-2xl font-black focus:ring-2 focus:ring-accent"
+                      value={newAmount}
+                      onChange={(e) => setNewAmount(e.target.value)}
+                      placeholder="0.00"
+                    />
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Başlangıç</label>
+                      <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl p-3 text-xs font-bold" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Bitiş</label>
+                      <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl p-3 text-xs font-bold" />
+                    </div>
+                 </div>
+                 <button 
+                  onClick={handleUpdateDebt}
+                  disabled={processing}
+                  className="w-full bg-accent text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-accent/20 hover:scale-[1.02] transition-all disabled:opacity-50"
+                 >
+                   {processing ? <Loader2 className="animate-spin mx-auto" /> : "BORCU KAYDET"}
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Ödeme Al Modalı (Kısmi Ödeme) */}
+      {paymentModalVisible && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+           <div className="bg-white dark:bg-slate-900 rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden">
+              <div className="p-8 border-b border-slate-50 dark:border-slate-800 flex items-center justify-between">
+                 <h2 className="text-xl font-black text-slate-900 dark:text-white">Ödeme Al</h2>
+                 <button onClick={() => setPaymentModalVisible(false)}><X size={24} className="text-slate-400" /></button>
+              </div>
+              <div className="p-8 space-y-6">
+                 <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Ödeme Tutarı (₺)</label>
+                    <input 
+                      type="number"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-6 py-4 text-2xl font-black focus:ring-2 focus:ring-accent"
+                      value={newAmount}
+                      onChange={(e) => setNewAmount(e.target.value)}
+                      placeholder="0.00"
+                    />
+                 </div>
+
+                 <button 
+                  onClick={handlePayment}
+                  disabled={processing}
+                  className="w-full bg-emerald-500 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-200 hover:scale-[1.02] transition-all disabled:opacity-50"
+                 >
+                   {processing ? <Loader2 className="animate-spin mx-auto" /> : "ÖDEMEYİ KAYDET"}
+                 </button>
+              </div>
+           </div>
         </div>
       )}
     </div>

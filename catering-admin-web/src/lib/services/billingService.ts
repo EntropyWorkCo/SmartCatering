@@ -5,16 +5,16 @@ export const billingService = {
    * Şirket için manuel borç veya ödeme kaydı oluşturur.
    * "adisyon" tablosunu kullanarak kayıt atar.
    */
-  async addManualEntry(userId: string, amount: number, startDate: string, endDate: string, type: 'DEBT' | 'PAYMENT') {
+  async addManualEntry(userId: string, amount: number, startDate: string, endDate: string, type: 'DEBT' | 'PAYMENT', customNote?: string) {
     const { error } = await supabase
       .from("adisyon")
       .insert([
         { 
           user_id: userId, 
           total_amount: amount, 
-          status: type === 'DEBT' ? 'PENDING' : 'PAID', 
+          status: 'PENDING', 
           order_type: type === 'DEBT' ? 'MANUAL_DEBT' : 'MANUAL_PAYMENT', 
-          note: `${startDate} - ${endDate}`,
+          note: customNote || `${startDate} - ${endDate}`,
           created_at: new Date().toISOString()
         },
       ]);
@@ -41,21 +41,15 @@ export const billingService = {
    * Parçalı ödeme kaydı oluşturur ve bakiyeyi günceller.
    */
   async recordPayment(userId: string, companyId: string | null, amount: number, method: string, description: string) {
-    // 1. Ödemeyi 'payments' tablosuna kaydet
-    const { error: paymentError } = await (supabase
-      .from('payments' as any)
-      .insert([
-        {
-          user_id: userId,
-          company_id: companyId,
-          amount: amount,
-          payment_method: method,
-          description: description,
-          created_at: new Date().toISOString()
-        }
-      ]));
-
-    if (paymentError) throw paymentError;
+    // 1. Ödemeyi 'adisyon' tablosuna kaydet (Geçmiş döküm için)
+    await this.addManualEntry(
+      userId, 
+      amount, 
+      new Date().toLocaleDateString('tr-TR'), 
+      new Date().toLocaleDateString('tr-TR'), 
+      'PAYMENT',
+      `Kısmi Ödeme: ${description}${method ? ` (${method})` : ''}`
+    );
 
     // 2. Eğer kurumsal bir müşteri ise şirket bakiyesini güncelle
     if (companyId) {
@@ -69,19 +63,8 @@ export const billingService = {
       const newBalance = Math.max(0, currentBalance - amount);
 
       await this.updateCompanyBalance(companyId, newBalance);
-    } else {
-      // Bireysel müşteri ise mevcut sisteme uyum sağlamak için 
-      // pozitif tutarlı bir 'MANUAL_PAYMENT' adisyonu ekle
-      // Uygulama (home.tsx) bu tipi görünce borçtan çıkaracaktır.
-      await supabase.from("adisyon").insert([{
-        user_id: userId,
-        total_amount: amount, 
-        status: 'PENDING',
-        order_type: 'MANUAL_PAYMENT',
-        note: `Kısmi Ödeme: ${description}`,
-        created_at: new Date().toISOString()
-      }]);
     }
+    // Bireysel müşteri için addManualEntry zaten yeterli (adisyon üzerinden bakiye hesaplanıyor)
   },
 
   /**

@@ -65,6 +65,7 @@ export default function AdminCustomers() {
     useFocusEffect( //sayfa açıldığında veya tekrar odaklandığıında çalışır.    üç farklı tablodan veri çeker:users,adisyon,companies
         React.useCallback(() => {
             const fetchCustomers = async () => {
+                setCustomers([]); // Eski verinin kısa süre görünmesini önle
                 try {
                     // Fetch users
                     const { data: usersData, error: usersError } = await supabase.from('users').select('*');
@@ -113,7 +114,9 @@ export default function AdminCustomers() {
                                         const status = (o.status || "").toUpperCase();
                                         return o.user_id === profile.id && !["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ"].includes(status);
                                     });
-                                    balance = userOrders.reduce((sum: number, order: any) => sum + (order.total_amount || 0), 0);
+                                    balance = Math.max(0, userOrders.reduce((sum: number, order: any) => {
+                                        return order.order_type === 'MANUAL_PAYMENT' ? sum - (order.total_amount || 0) : sum + (order.total_amount || 0);
+                                    }, 0));
                                 }
                             }
 
@@ -161,33 +164,7 @@ export default function AdminCustomers() {
         return Object.values(groups).sort((a, b) => b.totalDebt - a.totalDebt);
     }, [kurumsalCustomers]);
 
-    const handleRecordPayment = async () => {
-        if (!selectedAccount || !paymentAmount) return;
-        try {
-            setProcessing(true);
-            const amount = Number(paymentAmount);
-            
-            // Note: Admin mobile might not have billingService imported correctly or same way
-            // I will use the one from @/lib/services/billingService
-            await billingService.recordPayment(
-                selectedAccount.id || selectedAccount.userId,
-                selectedAccount.companyId || null,
-                amount,
-                paymentMethod,
-                paymentDescription || "Mobil Admin Ödeme"
-            );
 
-            Alert.alert("Başarılı", "Ödeme kaydı oluşturuldu.");
-            setPaymentModalVisible(false);
-            setPaymentAmount("");
-            setPaymentDescription("");
-            setRefreshTrigger(prev => prev + 1);
-        } catch (err: any) {
-            Alert.alert("Hata", err.message);
-        } finally {
-            setProcessing(false);
-        }
-    };
 
     const toggleCompany = (vkn: string) => {
         setExpandedCompanies(prev => ({
@@ -230,15 +207,6 @@ export default function AdminCustomers() {
                                     ₺{customer.balance?.toLocaleString("tr-TR") || 0}
                                 </Text>
                                 <Text style={styles.balanceLabel}>BORÇ</Text>
-                                <TouchableOpacity 
-                                    onPress={() => {
-                                        setSelectedAccount(customer);
-                                        setPaymentModalVisible(true);
-                                    }}
-                                    style={{ marginTop: 8, backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
-                                >
-                                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>ÖDEME AL</Text>
-                                </TouchableOpacity>
                             </View>
                         )
                     ) : null}
@@ -334,22 +302,6 @@ export default function AdminCustomers() {
                                                             ₺{group.totalDebt.toLocaleString("tr-TR")}
                                                         </Text>
                                                         <Text style={styles.balanceLabel}>TOPLAM BORÇ</Text>
-                                                        <TouchableOpacity 
-                                                            onPress={() => {
-                                                                const owner = group.customers.find(c => c.isOwner);
-                                                                setSelectedAccount({ 
-                                                                    ...group, 
-                                                                    id: owner?.id || group.customers[0]?.id,
-                                                                    companyId: group.customers[0]?.companyId || group.customers[0]?.id // Simplified fallback
-                                                                });
-                                                                // Actually groupedKurumsal needs to have companyId
-                                                                // I should check if I added it to the groupedKurumsal map
-                                                                setPaymentModalVisible(true);
-                                                            }}
-                                                            style={{ marginTop: 8, backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
-                                                        >
-                                                            <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>ÖDEME AL</Text>
-                                                        </TouchableOpacity>
                                                     </View>
                                                 )}
                                             </View>
@@ -379,89 +331,7 @@ export default function AdminCustomers() {
                 )}
             </ScrollView>
 
-            {/* Ödeme Alma Modalı */}
-            <Modal
-                visible={paymentModalVisible}
-                animationType="slide"
-                transparent
-                onRequestClose={() => setPaymentModalVisible(false)}
-            >
-                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.modalContainer}>
-                            <View style={styles.modalHeader}>
-                                <MaterialIcons name="payments" size={28} color={colors.primary} />
-                                <Text style={styles.modalTitle}>Ödeme Al</Text>
-                            </View>
-                            <Text style={styles.modalSubtitle}>
-                                {selectedAccount?.companyName || selectedAccount?.name} için tahsil edilen miktarı giriniz.
-                            </Text>
 
-                            <View style={{ gap: 16, marginTop: 10 }}>
-                                <View>
-                                    <Text style={styles.modalInputLabel}>Ödeme Tutarı (₺)</Text>
-                                    <TextInput
-                                        style={styles.modalTextInput}
-                                        placeholder="0.00"
-                                        keyboardType="numeric"
-                                        value={paymentAmount}
-                                        onChangeText={setPaymentAmount}
-                                    />
-                                </View>
-
-                                <View>
-                                    <Text style={styles.modalInputLabel}>Ödeme Yöntemi</Text>
-                                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                                        {["Nakit", "Kredi Kartı", "Havale"].map(m => (
-                                            <TouchableOpacity
-                                                key={m}
-                                                onPress={() => setPaymentMethod(m)}
-                                                style={[
-                                                    styles.methodBtn,
-                                                    paymentMethod === m && { backgroundColor: colors.primary, borderColor: colors.primary }
-                                                ]}
-                                            >
-                                                <Text style={[styles.methodBtnText, paymentMethod === m && { color: '#fff' }]}>{m}</Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                </View>
-
-                                <View>
-                                    <Text style={styles.modalInputLabel}>Açıklama</Text>
-                                    <TextInput
-                                        style={styles.modalTextInput}
-                                        placeholder="İsteğe bağlı not..."
-                                        value={paymentDescription}
-                                        onChangeText={setPaymentDescription}
-                                    />
-                                </View>
-                            </View>
-
-                            <View style={styles.modalActions}>
-                                <TouchableOpacity
-                                    style={[styles.modalBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.surfaceBorder }]}
-                                    onPress={() => setPaymentModalVisible(false)}
-                                    disabled={processing}
-                                >
-                                    <Text style={[styles.modalBtnText, { color: colors.text }]}>Vazgeç</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.modalBtn, { backgroundColor: colors.primary, flex: 2 }]}
-                                    onPress={handleRecordPayment}
-                                    disabled={processing || !paymentAmount}
-                                >
-                                    {processing ? (
-                                        <ActivityIndicator color="#fff" size="small" />
-                                    ) : (
-                                        <Text style={[styles.modalBtnText, { color: '#fff' }]}>Ödemeyi Kaydet</Text>
-                                    )}
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    </View>
-                </TouchableWithoutFeedback>
-            </Modal>
         </View>
     );
 }

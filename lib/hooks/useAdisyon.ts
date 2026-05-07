@@ -8,6 +8,7 @@ export const useAdisyon = (userId?: string, onNewOrder?: (payload: any) => void)
 
   const fetchOrders = async () => {
     setLoading(true);
+    setOrders([]); // Eski verinin kısa süre görünmesini önle
     try {
       let data;
       if (userId) {

@@ -49,6 +49,12 @@ export default function SummaryScreen() {
   const [updatingDebt, setUpdatingDebt] = useState(false);
   const [companies, setCompanies] = useState<any[]>([]);
 
+  // Parçalı Ödeme Modalı State
+  const [partialModalVisible, setPartialModalVisible] = useState(false);
+  const [selectedAccountForPayment, setSelectedAccountForPayment] = useState<any>(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
+
   const [refreshing, setRefreshing] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -172,7 +178,11 @@ export default function SummaryScreen() {
         // Bireysel ise sipariş toplamlarını ekle, kurumsal ise adminin girdiği balance'ı göstereceğiz
         const statusUpper = (order.status || "").toUpperCase();
         if (!["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ"].includes(statusUpper)) {
-           map[key].total += order.total_amount || 0;
+           if (order.order_type === 'MANUAL_PAYMENT') {
+             map[key].total -= (order.total_amount || 0);
+           } else {
+             map[key].total += order.total_amount || 0;
+           }
         }
         
         map[key].count += 1;
@@ -223,6 +233,39 @@ export default function SummaryScreen() {
       setNewDebtAmount("");
     } catch (err: any) {
       Alert.alert("Hata", "İşlem yapılırken hata oluştu: " + err.message);
+    } finally {
+      setUpdatingDebt(false);
+    }
+  };
+
+  const handlePartialPayment = async () => {
+    if (!selectedAccountForPayment || !paymentAmount) return;
+    setUpdatingDebt(true);
+    try {
+      const amount = Number(paymentAmount);
+      await billingService.recordPayment(
+        selectedAccountForPayment.userId,
+        selectedAccountForPayment.companyId || null,
+        amount,
+        paymentMethod,
+        "Parçalı Ödeme"
+      );
+
+      Alert.alert("Başarılı", "Ödeme başarıyla kaydedildi.");
+      
+      // Update local state for immediate UI feedback
+      if (selectedAccountForPayment.isCorporate && selectedAccountForPayment.companyId) {
+        setCompanies(prev => prev.map(c => 
+          c.id === selectedAccountForPayment.companyId ? { ...c, balance: Math.max(0, (c.balance || 0) - amount) } : c
+        ));
+      } else {
+        await fetchOrders();
+      }
+
+      setPartialModalVisible(false);
+      setPaymentAmount("");
+    } catch (err: any) {
+      Alert.alert("Hata", "Ödeme kaydedilirken hata oluştu: " + err.message);
     } finally {
       setUpdatingDebt(false);
     }
@@ -518,7 +561,12 @@ export default function SummaryScreen() {
 
         <Text style={{ fontSize: 10, fontWeight: '900', color: colors.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginTop: 24, marginBottom: 12 }}>FİRMA & BORÇ LİSTESİ</Text>
 
-        {groupedAccounts.map((account) => (
+        {loading ? (
+          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={{ color: colors.muted, marginTop: 12, fontSize: 12, fontWeight: '700' }}>Veriler Yükleniyor...</Text>
+          </View>
+        ) : groupedAccounts.map((account) => (
           <View key={account.userId} style={styles.accountCard}>
             <View style={styles.accountTop}>
               <View style={styles.accountTextCont}>
@@ -556,6 +604,18 @@ export default function SummaryScreen() {
                   >
                     <Text style={styles.primaryBtnText}>Borç Gir</Text>
                   </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                     style={[styles.primaryBtn, { backgroundColor: "#FF9800", marginLeft: 8 }]} 
+                     onPress={() => {
+                       setSelectedAccountForPayment(account);
+                       setPaymentAmount("");
+                       setPartialModalVisible(true);
+                     }}
+                  >
+                    <Text style={styles.primaryBtnText}>Kısmi Ödeme</Text>
+                  </TouchableOpacity>
+
                   {(account.manualDebt > 0) && (
                     <TouchableOpacity 
                        style={[styles.primaryBtn, { backgroundColor: "#4CAF50", marginLeft: 8 }]} 
@@ -567,12 +627,24 @@ export default function SummaryScreen() {
                 </>
               ) : (
                   account.total > 0 ? (
-                    <TouchableOpacity 
-                       style={[styles.primaryBtn, { backgroundColor: "#4CAF50", marginLeft: 8 }]} 
-                       onPress={() => handleClearDebt(account)}
-                    >
-                      <Text style={styles.primaryBtnText}>Borç Ödendi</Text>
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', flex: 2 }}>
+                      <TouchableOpacity 
+                        style={[styles.primaryBtn, { backgroundColor: "#FF9800", marginLeft: 8 }]} 
+                        onPress={() => {
+                          setSelectedAccountForPayment(account);
+                          setPaymentAmount("");
+                          setPartialModalVisible(true);
+                        }}
+                      >
+                        <Text style={styles.primaryBtnText}>Kısmi Ödeme</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                         style={[styles.primaryBtn, { backgroundColor: "#4CAF50", marginLeft: 8 }]} 
+                         onPress={() => handleClearDebt(account)}
+                      >
+                        <Text style={styles.primaryBtnText}>Borç Ödendi</Text>
+                      </TouchableOpacity>
+                    </View>
                   ) : null
               )}
             </View>
@@ -704,6 +776,38 @@ export default function SummaryScreen() {
           </View>
         </Modal>
       )}
+
+      {/* Parçalı Ödeme Modalı */}
+      <Modal visible={partialModalVisible} transparent animationType="fade">
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Parçalı Ödeme Al</Text>
+              <Text style={{ fontSize: 12, color: colors.muted, marginBottom: 8, fontWeight: 'bold' }}>ÖDEME TUTARI (₺)</Text>
+              <TextInput
+                style={[styles.debtInput, { color: colors.text, borderColor: colors.surfaceBorder, marginBottom: 16 }]}
+                keyboardType="numeric"
+                value={paymentAmount}
+                onChangeText={setPaymentAmount}
+                placeholder="0.00"
+                placeholderTextColor={colors.muted}
+                autoFocus
+              />
+              
+
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalCancel} onPress={() => setPartialModalVisible(false)}>
+                  <Text style={{ color: colors.muted }}>İptal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalConfirm} onPress={handlePartialPayment} disabled={updatingDebt}>
+                  {updatingDebt ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold' }}>Ödemeyi Kaydet</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }

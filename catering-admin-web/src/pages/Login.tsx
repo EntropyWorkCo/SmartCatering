@@ -4,7 +4,6 @@ import {
   Lock, 
   Mail, 
   Loader2, 
-  UtensilsCrossed, 
   ArrowRight,
   ShieldCheck,
   AlertCircle

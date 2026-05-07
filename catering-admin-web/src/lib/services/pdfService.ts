@@ -165,19 +165,39 @@ export const pdfService = {
 
     const filteredOrders = orders.filter((o: any) => {
       const note = (o.note || '').toUpperCase();
-      const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
-      return !note.includes('BORCA AKTARILDI') && !isManual;
+      return !note.includes('BORCA AKTARILDI');
     });
 
+    // Tarihe göre sırala (Yeni en üstte)
+    filteredOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
     const rows = filteredOrders.map((o: any, idx: number) => {
-      const items = o.adisyon_items?.map((i: any) => `${i.quantity}× ${i.menu_items?.name || 'Ürün'}`).join(', ') || 'Hizmet';
+      const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
+      const isPayment = o.order_type === 'MANUAL_PAYMENT';
+      const isDebt = o.order_type === 'MANUAL_DEBT';
+
+      let items = o.adisyon_items?.map((i: any) => `${i.quantity}× ${i.menu_items?.name || 'Ürün'}`).join(', ') || 'Hizmet';
+      if (isManual) items = o.note || (isPayment ? 'Ödeme' : 'Ek Borç');
+
       const isPaid = ['PAID', 'COMPLETED', 'ÖDENDİ', 'TAMAMLANDI'].includes((o.status || '').toUpperCase());
+      
+      let statusLabel = isPaid ? 'TAMAMLANDI' : 'BEKLİYOR';
+      let statusColor = isPaid ? '#10b981' : '#f97316';
+
+      if (isPayment) {
+        statusLabel = 'ÖDEME';
+        statusColor = '#10b981';
+      } else if (isDebt) {
+        statusLabel = 'BORÇ';
+        statusColor = '#ef4444';
+      }
+
       return `
         <tr style="background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'}">
           <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;color:#64748b;">${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;font-weight:700;">${o.userName || 'Personel'}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;color:#64748b;">${items}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;font-weight:900;color:${isPaid ? '#10b981' : '#f97316'};">${isPaid ? 'TAMAMLANDI' : 'BEKLİYOR'}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;font-weight:900;color:${statusColor};">${statusLabel}</td>
         </tr>`;
     }).join('');
 

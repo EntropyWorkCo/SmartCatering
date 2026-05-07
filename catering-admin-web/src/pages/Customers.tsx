@@ -8,14 +8,12 @@ import {
   Loader2,
   MoreVertical,
   Briefcase,
-  PlusCircle,
-  CheckCircle2,
   Calendar,
   X,
   Download
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import { billingService } from "../lib/services/billingService";
+
 import { adisyonService } from "../lib/services/adisyonService";
 import { pdfService } from "../lib/services/pdfService";
 
@@ -38,12 +36,6 @@ export default function Customers() {
   const [mainTab, setMainTab] = useState<"BIREYSEL" | "KURUMSAL">("KURUMSAL");
   const [expandedCompanies, setExpandedCompanies] = useState<Record<string, boolean>>({});
 
-  // Borç Yönetimi Modalı State
-  const [debtModalVisible, setDebtModalVisible] = useState(false);
-  const [selectedAccount, setSelectedAccount] = useState<any>(null);
-  const [newDebtAmount, setNewDebtAmount] = useState("");
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [processing, setProcessing] = useState(false);
 
   // Ekstre İndirme Modalı State
@@ -158,81 +150,7 @@ export default function Customers() {
     }));
   };
 
-  const handleUpdateDebt = async () => {
-    if (!selectedAccount || !newDebtAmount) return;
-    try {
-      setProcessing(true);
-      const amount = Number(newDebtAmount);
-      
-      const isCorporate = selectedAccount.isCorporate || !!selectedAccount.companyId;
 
-      // 1. Manuel Adisyon Kaydı
-      await billingService.addManualEntry(
-        selectedAccount.userId || selectedAccount.id,
-        amount,
-        startDate,
-        endDate,
-        'DEBT'
-      );
-
-      // 2. Şirket Bakiyesini Güncelle (Sadece kurumsalsa şirketi güncelle)
-      if (isCorporate && selectedAccount.companyId) {
-        const currentDebt = selectedAccount.totalDebt !== undefined ? selectedAccount.totalDebt : (selectedAccount.companyBalance || 0);
-        const newBalance = currentDebt + amount;
-        await billingService.updateCompanyBalance(selectedAccount.companyId, newBalance);
-        
-        // UI'ı anında güncelle
-        setCustomers(prev => prev.map(c => 
-          c.companyId === selectedAccount.companyId ? { ...c, companyBalance: newBalance } : c
-        ));
-      } else {
-        // Bireysel müşteri için anında UI güncellemesi (Bakiye adisyonlardan hesaplanıyor ama manuel de eklenmiş oldu)
-        const currentDebt = selectedAccount.balance || 0;
-        const newBalance = currentDebt + amount;
-        setCustomers(prev => prev.map(c => 
-          c.id === (selectedAccount.id || selectedAccount.userId) ? { ...c, balance: newBalance } : c
-        ));
-      }
-
-      alert("Borç kaydı başarıyla eklendi.");
-      setDebtModalVisible(false);
-      setNewDebtAmount("");
-      // Arka planda tam veriyi tekrar çek
-      fetchCustomers();
-    } catch (err: any) {
-      alert("Hata: " + err.message);
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleClearDebt = async (account: any) => {
-    if (!window.confirm(`${account.companyName || account.name} için borcu sıfırlamak istiyor musunuz?`)) return;
-    
-    try {
-      setProcessing(true);
-      if (account.isCorporate && account.companyId) {
-        await billingService.clearCompanyBalance(account.companyId);
-        // Instant UI Update (Mobile Parity) - Corrected Property for Corporate
-        setCustomers(prev => prev.map(c => 
-          c.companyId === account.companyId ? { ...c, companyBalance: 0 } : c
-        ));
-      } else if (account.id) {
-        await adisyonService.clearUserDebt(account.id);
-        // Instant UI Update (Mobile Parity) - Corrected Property for Individual
-        setCustomers(prev => prev.map(c => 
-          c.id === account.id ? { ...c, balance: 0 } : c
-        ));
-      }
-      alert("Borç başarıyla sıfırlandı.");
-      // Background re-fetch to ensure synchronization
-      fetchCustomers();
-    } catch (err: any) {
-      alert("Hata: " + err.message);
-    } finally {
-      setProcessing(false);
-    }
-  };
 
   const openEkstreModal = (group: any) => {
     const today = new Date();
@@ -344,7 +262,7 @@ export default function Customers() {
                          <th className="px-6 py-5">Müşteri</th>
                          <th className="px-6 py-5">İletişim</th>
                          <th className="px-6 py-5">Bakiye / Borç</th>
-                         <th className="px-6 py-5 text-right">Aksiyonlar</th>
+
                       </tr>
                    </thead>
                    <tbody className="divide-y divide-slate-100">
@@ -371,25 +289,7 @@ export default function Customers() {
                                 <span className="text-xs font-bold text-emerald-500 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 shadow-sm">TEMİZ</span>
                               )}
                            </td>
-                           <td className="px-6 py-5 text-right">
-                               <div className="flex justify-end space-x-2">
-                                  {(c.balance ?? 0) > 0 && (
-                                     <>
-                                       <button 
-                                        onClick={() => handleClearDebt(c)}
-                                        className="flex items-center space-x-2 px-4 py-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all shadow-md shadow-emerald-100 active:scale-95 group" 
-                                        title="Tüm Borç Ödendi"
-                                       >
-                                          <CheckCircle2 size={16} className="group-hover:scale-110 transition-transform" />
-                                          <span className="text-xs font-bold whitespace-nowrap">TÜMÜNÜ ÖDE</span>
-                                       </button>
-                                     </>
-                                  )}
-                                  <button className="p-2 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
-                                    <MoreVertical size={18} />
-                                  </button>
-                               </div>
-                            </td>
+
                         </tr>
                       ))}
                    </tbody>
@@ -420,44 +320,9 @@ export default function Customers() {
                            </div>
 
                            <div className="flex items-center space-x-8">
-                             {group.totalDebt > 0 ? (
-                                <div className="flex items-center space-x-2">
-                                   <button 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleClearDebt(group);
-                                      }}
-                                      className="flex items-center space-x-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 active:scale-95 group"
-                                      title="Tüm Borç Ödendi"
-                                    >
-                                       <CheckCircle2 size={20} className="group-hover:scale-110 transition-transform" />
-                                       <span className="text-sm font-black tracking-tight">TÜMÜNÜ ÖDE</span>
-                                    </button>
-                                   <div className="flex flex-col text-right">
-                                      <span className="text-xl font-black text-slate-900 italic">₺{group.totalDebt.toLocaleString("tr-TR")}</span>
-                                      <span className="text-[10px] font-black text-red-500 uppercase tracking-widest mt-0.5">TOPLAM ŞİRKET BORCU</span>
-                                   </div>
-                                </div>
-                             ) : (
-                                <span className="text-xs font-black text-accent bg-accent/10 px-4 py-2 rounded-full border border-accent/20 uppercase">Ödemeler Tamam ✅</span>
-                             )}
                              <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const owner = group.customers.find((c: User) => c.isOwner);
-                                setSelectedAccount({ 
-                                  ...group, 
-                                  userId: owner?.id || group.customers[0]?.id 
-                                });
-                                setDebtModalVisible(true);
-                              }}
-                              className="p-2 bg-slate-900 text-white rounded-xl hover:scale-105 transition-all shadow-lg shadow-slate-200"
-                              title="Borç Gir"
-                             >
-                                <PlusCircle size={20} />
-                             </button>
-                             <button 
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   openEkstreModal(group);
                                 }}
                                 className="p-2 bg-red-600 text-white rounded-xl hover:scale-105 transition-all shadow-lg shadow-red-100 flex items-center"
@@ -502,81 +367,6 @@ export default function Customers() {
         </div>
       )}
 
-      {/* Borç Giriş Modalı */}
-      {debtModalVisible && selectedAccount && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-           <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-300">
-              <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-                 <div>
-                    <h2 className="text-2xl font-black text-slate-900 leading-tight">Borç Girişi</h2>
-                    <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">{selectedAccount.companyName}</p>
-                 </div>
-                 <button onClick={() => setDebtModalVisible(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                    <X size={24} className="text-slate-400" />
-                 </button>
-              </div>
-
-              <div className="p-8 space-y-6">
-                 <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Borç Tutarı (₺)</label>
-                    <div className="relative">
-                       <input 
-                         type="number"
-                         value={newDebtAmount}
-                         onChange={(e) => setNewDebtAmount(e.target.value)}
-                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-xl font-black focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent transition-all"
-                         placeholder="0.00"
-                       />
-                       <div className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 font-black">TL</div>
-                    </div>
-                 </div>
-
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Başlangıç</label>
-                       <div className="relative">
-                          <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                          <input 
-                            type="date"
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-xs font-bold focus:outline-none focus:border-accent"
-                          />
-                       </div>
-                    </div>
-                    <div>
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Bitiş</label>
-                       <div className="relative">
-                          <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                          <input 
-                            type="date"
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-xs font-bold focus:outline-none focus:border-accent"
-                          />
-                       </div>
-                    </div>
-                 </div>
-
-                 <div className="pt-4 flex items-center space-x-3">
-                    <button 
-                      onClick={() => setDebtModalVisible(false)}
-                      className="flex-1 py-4 text-slate-500 font-black text-sm hover:bg-slate-50 rounded-2xl transition-colors"
-                    >
-                       İPTAL
-                    </button>
-                    <button 
-                      onClick={handleUpdateDebt}
-                      disabled={processing || !newDebtAmount}
-                      className="flex-[2] bg-accent py-4 rounded-2xl text-white font-black text-sm shadow-lg shadow-accent/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center space-x-2"
-                    >
-                       {processing ? <Loader2 className="animate-spin" size={18} /> : <span>KAYDET VE GÜNCELLE</span>}
-                    </button>
-                 </div>
-              </div>
-           </div>
-        </div>
-      )}
       {/* Ekstre İndirme Modalı */}
       {ekstreModalVisible && ekstreTargetGroup && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
@@ -639,22 +429,7 @@ export default function Customers() {
                      </div>
                   </div>
 
-                  <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Ödeme Durumu</label>
-                    <div className="flex bg-slate-100 p-1 rounded-xl">
-                      {(["BEKLIYOR", "ODENDI"] as const).map((s) => (
-                        <button
-                          key={s}
-                          onClick={() => setEkstrePaymentStatus(s)}
-                          className={`flex-1 py-2 rounded-lg text-[10px] font-black transition-all ${
-                            ekstrePaymentStatus === s ? "bg-white text-slate-900 shadow-sm" : "text-slate-400"
-                          }`}
-                        >
-                          {s === "BEKLIYOR" ? "⏳ BEKLENİYOR" : "✅ ÖDENDİ"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+
 
                  <div className="pt-4 flex items-center space-x-3">
                     <button 

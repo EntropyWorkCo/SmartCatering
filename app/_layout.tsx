@@ -244,7 +244,8 @@ function RootLayoutNav({ user, role, loading }: any) {
           orderChannel = supabase
             .channel(adminChannelName)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'adisyon' }, (payload: any) => {
-              if (payload.new?.order_type !== "Şimdi Ye") {
+              const type = payload.new?.order_type;
+              if (type !== "Şimdi Ye" && type !== "MANUAL_DEBT" && type !== "MANUAL_PAYMENT") {
                 Alert.alert("Yeni Paket Siparişi! 🛎️", "Yeni bir paket siparişi düştü.");
               }
             });
