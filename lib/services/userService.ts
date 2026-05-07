@@ -155,6 +155,15 @@ export const userService = {
   },
 
   async updatePushToken(userId: string, token: string) {
+    // 1. GHOST TOKEN FIX: Bu token'ı (bu telefonu) daha önce kullanmış olan başka hesaplar varsa onlardan siliyoruz!
+    // Böylece eski hesaplara giden bildirimler bu cihaza düşmeyecek.
+    await supabase
+      .from("users")
+      .update({ push_token: null })
+      .eq("push_token", token)
+      .neq("id", userId);
+
+    // 2. Token'ı sadece şu anki kullanıcıya ata
     const { error } = await supabase
       .from("users")
       .update({ push_token: token })

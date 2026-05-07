@@ -104,21 +104,54 @@ export const adisyonService = {
     if (error) throw error;
 
     const userId = data.user_id;
-    const isDelivery = data.order_type === 'Sipariş Ver' || data.order_type === 'PAKET';
+    const currentStatus = status.toUpperCase();
+    const orderType = data.order_type || "";
+    // Türkçe İ/I sorunu yaşamamak için doğrudan bilinen varyasyonları kontrol ediyoruz
+    const isDelivery = orderType === 'Sipariş Ver' || orderType === 'PAKET' || orderType === 'paket' || orderType === 'SİPARİŞ VER';
 
-    if (['PREPARING', 'HAZIRLANIYOR', 'READY', 'COMPLETED', 'TAMAMLANDI'].includes(status)) {
+    console.log("🔍 DEBUG: Bildirim Kontrolü (Düzeltildi)", { 
+      currentStatus, 
+      orderType, 
+      isDelivery,
+      userId: data.user_id 
+    });
+
+    if (['PREPARING', 'HAZIRLANIYOR', 'READY', 'HAZIR', 'COMPLETED', 'TAMAMLANDI'].includes(currentStatus)) {
       try {
-        const tokens = await notificationService.getPushTokens(userId || undefined);
-        if (tokens.length > 0) {
-          let title = "Siparişiniz Alındı 👨‍🍳";
-          let body = "Yemeğiniz hazırlanmaya başladı.";
-          if (status === 'READY' && isDelivery) { title = "Siparişiniz Yola Çıktı! 🛵"; body = "Yemeğiniz kapınızda!"; }
-          else if (status === 'COMPLETED' || status === 'TAMAMLANDI') { title = "Siparişiniz Teslim Edildi ✅"; body = "Afiyet olsun!"; }
-          await notificationService.sendPushNotification(tokens, title, body);
+        let title = "Siparişiniz Alındı 👨‍🍳";
+        let body = "Yemeğiniz hazırlanmaya başladı. Afiyet olsun!";
+        
+        if ((currentStatus === 'READY' || currentStatus === 'HAZIR') && isDelivery) { 
+          title = "Siparişiniz Yola Çıktı! 🛵"; 
+          body = "Yemeğiniz hazırlandı ve yola çıktı. Afiyet olsun!"; 
+        } else if (currentStatus === 'COMPLETED' || currentStatus === 'TAMAMLANDI') { 
+          title = "Siparişiniz Teslim Edildi ✅"; 
+          body = "Afiyet olsun! Siparişiniz başarıyla teslim edildi."; 
         }
+
+        console.log("🔔 Bildirim gönderimi tetikleniyor...", { title, body });
+
+        const { data: invokeData, error: invokeError } = await supabase.functions.invoke('send-notification', {
+          body: {
+            type: "ORDER_STATUS",
+            title,
+            body,
+            userId,
+            data: { url: "/past-orders", screen: "past-orders" }
+          }
+        });
+
+        if (invokeError) {
+          console.error("❌ Edge Function Hatası:", invokeError);
+        } else {
+          console.log("✅ Bildirim başarıyla sıraya alındı:", invokeData);
+        }
+
       } catch (err) {
-        console.error("Bildirim hatası:", err);
+        console.error("❌ Beklenmedik Bildirim Hatası:", err);
       }
+    } else {
+      console.log("ℹ️ Bu durum değişikliği için bildirim gönderilmiyor (Gerekli değil).");
     }
     return data;
   },

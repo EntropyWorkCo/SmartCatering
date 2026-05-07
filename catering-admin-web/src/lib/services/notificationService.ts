@@ -48,13 +48,13 @@ export const notificationService = {
         try {
             let query = (supabase
                 .from("users") as any)
-                .select("push_token, admin")
+                .select("push_token, role")
                 .not("push_token", "is", null);
 
             if (userId) {
                 query = query.eq("id", userId);
             } else if (excludeAdmins) {
-                query = query.neq("admin", "true");
+                query = query.neq("role", "admin");
             }
 
             const { data, error } = await query;

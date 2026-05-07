@@ -182,6 +182,10 @@ function RootLayoutNav({ user, role, loading }: any) {
   const router = useRouter();
   const isAdmin = role === 'admin';
 
+  console.log("DEBUG - Current User ID:", user?.id);
+  console.log("DEBUG - Current User Role:", role);
+  console.log("DEBUG - Is Admin Mode Active:", isAdmin);
+
   // 3. Arka Plan Dinleyicileri (GECİKTİRİLMİŞ BAŞLATMA - DONMAYI ÖNLER)
   useEffect(() => {
     if (loading || !user?.id) return;
@@ -263,6 +267,10 @@ function RootLayoutNav({ user, role, loading }: any) {
           .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'adisyon', filter: `user_id=eq.${user.id}` }, (payload: any) => {
             const status = (payload.new?.status || '').toString().toUpperCase();
             
+            if (['PREPARING', 'HAZIRLANIYOR'].includes(status)) {
+              Alert.alert("Siparişiniz Alındı 👨‍🍳", "Yemeğiniz hazırlanmaya başladı. Afiyet olsun!");
+            }
+
             if (['READY', 'HAZIR'].includes(status)) {
               Alert.alert("Siparişiniz Yola Çıktı! 🛵", "Yemeğiniz yola çıktı, afiyet olsun!");
             }

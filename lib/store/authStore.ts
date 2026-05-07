@@ -96,6 +96,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     try {
+      const currentSession = get().session;
+      // Çıkış yaparken bildirim anahtarını artık silmiyoruz (Hızlı geçişler için)
       await supabase.auth.signOut();
     } catch (e) {
       console.warn("SignOut error:", e);
@@ -113,9 +115,9 @@ async function resolveRoleData(session: any): Promise<{ role: UserRole, firmaId:
     
     const timeoutPromise = new Promise<{ role: UserRole, firmaId: string | null }>((resolve) => {
         setTimeout(() => {
-            console.warn("⚠️ Rol çözümleme zaman aşımı.");
+            console.warn("⚠️ Rol çözümleme zaman aşımı. İnternet bağlantınızı kontrol edin.");
             resolve({ role: 'bireysel', firmaId: null });
-        }, 3500);
+        }, 10000); // 10 saniye - yavaş bağlantılar için tolerans artırıldı
     });
 
     const logicPromise = (async (): Promise<{ role: UserRole, firmaId: string | null }> => {

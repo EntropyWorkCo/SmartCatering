@@ -36,6 +36,7 @@ export default function Orders() {
   };
 
   const handleStatusUpdate = async (orderId: string, newStatus: string) => {
+    console.log(`🚀 DEBUG: handleStatusUpdate tetiklendi! ID: ${orderId}, Yeni Durum: ${newStatus}`);
     try {
       await adisyonService.updateOrderStatus(orderId, newStatus);
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
