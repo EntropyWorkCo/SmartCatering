@@ -46,13 +46,18 @@ export const pdfService = {
     const now = new Date();
     const dateStr = now.toLocaleDateString('tr-TR');
 
-    const validOrders = orders.filter(o =>
-      !['CANCELLED', 'İPTAL', 'İptal'].includes((o.status || '').toUpperCase())
-    );
+    const validOrders = orders.filter(o => {
+      if (['CANCELLED', 'İPTAL', 'İptal'].includes((o.status || '').toUpperCase())) return false;
+      if (o.order_type === 'MANUAL_PAYMENT') return false;
+      return true;
+    });
 
     const revenue = validOrders.reduce((acc, o) => acc + (o.total_amount || 0), 0);
-    const mealCount = validOrders.reduce((acc, o) =>
-      acc + (o.adisyon_items?.reduce((s: number, i: any) => s + (i.quantity || 0), 0) || 0), 0);
+
+    const mealCount = validOrders
+      .filter(o => o.order_type !== 'MANUAL_DEBT' && o.order_type !== 'MANUAL_PAYMENT')
+      .reduce((acc, o) =>
+        acc + (o.adisyon_items?.reduce((s: number, i: any) => s + (i.quantity || 0), 0) || 0), 0);
 
     // --- Şirket bazlı gruplama ---
     const groupMap: Record<string, { name: string; orders: any[]; total: number }> = {};

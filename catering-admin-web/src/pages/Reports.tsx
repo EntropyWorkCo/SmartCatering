@@ -14,7 +14,8 @@ import {
   PlusCircle,
   CheckCircle2,
   X,
-  Search
+  Search,
+  Clock
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { adisyonService } from "../lib/services/adisyonService";
@@ -97,7 +98,7 @@ export default function Reports() {
   if (view === "SALES") return <SalesView onBack={() => setView("MAIN")} orders={orders} />;
   if (view === "FEEDBACK") return <FeedbackView onBack={() => setView("MAIN")} feedbacks={feedbacks} />;
   if (view === "PERFORMANCE") return <PerformanceView onBack={() => setView("MAIN")} feedbacks={feedbacks} />;
-  if (view === "DEBTS") return <DebtsView onBack={() => setView("MAIN")} />;
+  if (view === "DEBTS") return <DebtsView onBack={() => setView("MAIN")} setOrders={setOrders} />;
 
   const avgRating = feedbacks.filter(f => f.rating > 0).length > 0
     ? (feedbacks.filter(f => f.rating > 0).reduce((acc, f) => acc + f.rating, 0) / feedbacks.filter(f => f.rating > 0).length).toFixed(1)
@@ -179,8 +180,17 @@ function SalesView({ onBack, orders }: any) {
   const stats = useMemo(() => {
     const now = new Date();
     const validOrders = orders.filter((o: any) => {
-      if ((o.status || '').toUpperCase() === 'CANCELLED') return false;
+      const status = String(o.status || '').toUpperCase();
+      const type = String(o.order_type || '').toUpperCase();
+      const note = String(o.note || '').toUpperCase();
+
+      if (['CANCELLED', 'İPTAL', 'İPTAL EDİLDİ'].includes(status)) return false;
+      
+      // Ödeme veya Payment geçen hiçbir şeyi ciroya dahil etme
+      if (type.includes('PAYMENT') || type.includes('ÖDEME') || note.includes('ÖDEME')) return false;
+
       const orderDate = new Date(o.created_at);
+      const now = new Date();
       
       if (period === "DAILY") return orderDate.toDateString() === now.toDateString();
       if (period === "WEEKLY") {
@@ -190,12 +200,16 @@ function SalesView({ onBack, orders }: any) {
       if (period === "MONTHLY") {
         return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
       }
+      
       return true;
     });
 
     const revenue = validOrders.reduce((acc: number, o: any) => acc + (o.total_amount || 0), 0);
-    const count = validOrders.reduce((acc: number, o: any) =>
-      acc + (o.adisyon_items?.reduce((s: number, i: any) => s + (i.quantity || 0), 0) || 0), 0);
+    
+    const count = validOrders
+      .filter((o: any) => o.order_type !== 'MANUAL_DEBT' && o.order_type !== 'MANUAL_PAYMENT')
+      .reduce((acc: number, o: any) =>
+        acc + (o.adisyon_items?.reduce((s: number, i: any) => s + (i.quantity || 0), 0) || 0), 0);
     return { revenue, count, filteredOrders: validOrders };
   }, [orders, period]);
 
@@ -273,6 +287,7 @@ function SalesView({ onBack, orders }: any) {
               <tr className="border-b border-slate-50 dark:border-slate-800">
                 <th className="pb-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Tarih</th>
                 <th className="pb-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Müşteri</th>
+                <th className="pb-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Tür</th>
                 <th className="pb-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Tutar</th>
                 <th className="pb-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Durum</th>
               </tr>
@@ -282,6 +297,11 @@ function SalesView({ onBack, orders }: any) {
                 <tr key={o.id}>
                   <td className="py-3 text-xs font-bold text-slate-600 dark:text-slate-400">{new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
                   <td className="py-3 text-xs font-black text-slate-900 dark:text-white uppercase">{o.userName}</td>
+                  <td className="py-3 text-xs font-bold">
+                    {o.order_type === 'MANUAL_DEBT' ? <span className="text-orange-500">BORÇ GİRİŞİ</span> : 
+                     o.order_type === 'MANUAL_PAYMENT' ? <span className="text-emerald-500">ÖDEME</span> : 
+                     <span className="text-blue-500">SİPARİŞ</span>}
+                  </td>
                   <td className="py-3 text-right text-xs font-black text-slate-900 dark:text-white">₺{o.total_amount?.toLocaleString('tr-TR')}</td>
                   <td className="py-3 text-right text-[10px] font-black text-accent uppercase tracking-wider">{getStatusLabel(o.status)}</td>
                 </tr>
@@ -465,7 +485,7 @@ function PerformanceView({ feedbacks, onBack }: any) {
 }
 
 // --- Debts View ---
-function DebtsView({ onBack }: any) {
+function DebtsView({ onBack, setOrders }: any) {
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<any[]>([]);
   const [mainTab, setMainTab] = useState<"BIREYSEL" | "KURUMSAL">("KURUMSAL");
@@ -481,6 +501,10 @@ function DebtsView({ onBack }: any) {
   
   // Parçalı Ödeme Modalı
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  
+  // Geçmiş Modalı
+  const [historyModalVisible, setHistoryModalVisible] = useState(false);
+  const [accountHistory, setAccountHistory] = useState<any[]>([]);
 
 
   useEffect(() => {
@@ -491,8 +515,10 @@ function DebtsView({ onBack }: any) {
     try {
       setLoading(true);
       const { data: usersData } = await supabase.from('users').select('*');
-      const { data: ordersData } = await supabase.from('adisyon').select('*');
       const { data: companiesData } = await supabase.from('companies').select('*');
+      const ordersData = await adisyonService.getAllOrders();
+      
+      setOrders(ordersData);
 
       if (usersData) {
         const formatted = usersData.map((profile: any) => {
@@ -504,17 +530,21 @@ function DebtsView({ onBack }: any) {
           let balance = 0;
           if (isOwner && userCompany) {
             balance = userCompany.balance || 0;
-          } else if (!userCompany) {
+          } else {
+            // Hem bireysel hem de kurumsal çalışanlar için adisyondan bakiye hesapla
             const userOrders = ordersData?.filter((o: any) => {
-              const status = (o.status || "").toUpperCase();
+              const status = String(o.status || "").toUpperCase();
+              // İptal edilmemiş ve henüz tam ödenmemiş (PAID olmayan) siparişleri/borçları topla
               return o.user_id === profile.id && !["CANCELLED", "İPTAL", "PAID", "ÖDENDI", "ÖDENDİ"].includes(status);
             }) || [];
+            
             balance = userOrders.reduce((sum: number, order: any) => {
               if (order.order_type === 'MANUAL_PAYMENT') {
                 return sum - (order.total_amount || 0);
               }
               return sum + (order.total_amount || 0);
             }, 0);
+            balance = Math.max(0, balance);
           }
 
           return {
@@ -525,7 +555,8 @@ function DebtsView({ onBack }: any) {
             companyId: userCompany?.id,
             balance: balance,
             isOwner: isOwner,
-            isCorporate: !!userCompany
+            isCorporate: !!userCompany,
+            companyBalance: userCompany?.balance || 0
           };
         });
         setCustomers(formatted);
@@ -549,12 +580,14 @@ function DebtsView({ onBack }: any) {
         groups[c.companyId] = {
           companyId: c.companyId,
           companyName: c.companyName,
-          totalDebt: c.balance,
+          totalDebt: Math.max(0, c.companyBalance),
           ownerId: c.isOwner ? c.id : null,
           users: []
         };
       }
-      if (c.isOwner) groups[c.companyId].ownerId = c.id;
+      if (c.isOwner) {
+        groups[c.companyId].ownerId = c.id;
+      }
       groups[c.companyId].users.push(c);
     });
     return Object.values(groups).sort((a, b) => b.totalDebt - a.totalDebt);
@@ -583,6 +616,25 @@ function DebtsView({ onBack }: any) {
       alert("Hata: " + err.message);
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const handleShowHistory = async (account: any) => {
+    try {
+      setSelectedAccount(account);
+      const userId = account.ownerId || account.id;
+      // İlgili kullanıcının tüm adisyonlarını (borç/ödeme/sipariş) çek
+      const { data, error } = await supabase
+        .from('adisyon')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setAccountHistory(data || []);
+      setHistoryModalVisible(true);
+    } catch (err: any) {
+      alert("Geçmiş çekilemedi: " + err.message);
     }
   };
 
@@ -730,6 +782,13 @@ function DebtsView({ onBack }: any) {
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end gap-3">
                       <button 
+                        onClick={() => handleShowHistory(group)}
+                        className="px-4 py-2 bg-slate-50 text-slate-600 rounded-xl hover:bg-slate-200 transition-all text-[11px] font-black uppercase tracking-wider flex items-center gap-2 border border-slate-100 shadow-sm"
+                      >
+                        <Clock size={14} />
+                        <span>GEÇMİŞ</span>
+                      </button>
+                      <button 
                         onClick={() => { setSelectedAccount(group); setDebtModalVisible(true); }}
                         className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all text-[11px] font-black uppercase tracking-wider flex items-center gap-2 border border-blue-100 shadow-sm"
                       >
@@ -780,7 +839,14 @@ function DebtsView({ onBack }: any) {
                   </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end gap-3">
-                       <button 
+                      <button 
+                        onClick={() => handleShowHistory(c)}
+                        className="p-2 bg-slate-50 text-slate-600 rounded-lg hover:bg-slate-200 transition-all"
+                        title="İşlem Geçmişi"
+                      >
+                        <Clock size={16} />
+                      </button>
+                      <button 
                         onClick={() => { setSelectedAccount(c); setPaymentModalVisible(true); }}
                         className="px-4 py-2 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-500 hover:text-white transition-all text-[11px] font-black uppercase tracking-wider flex items-center gap-2 border border-orange-100 shadow-sm"
                       >
@@ -873,6 +939,64 @@ function DebtsView({ onBack }: any) {
                  </button>
               </div>
            </div>
+        </div>
+      )}
+
+      {/* Geçmiş Modalı */}
+      {historyModalVisible && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-800">
+            <div className="p-8 border-b border-slate-50 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase">{selectedAccount?.companyName || selectedAccount?.name}</h2>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">İŞLEM GEÇMİŞİ (EKSTRE)</p>
+              </div>
+              <button onClick={() => setHistoryModalVisible(false)} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors">
+                <X size={24} className="text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="max-h-[60vh] overflow-y-auto p-8">
+              {accountHistory.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">Henüz işlem kaydı bulunamadı.</div>
+              ) : (
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
+                      <th className="text-left pb-4">Tarih</th>
+                      <th className="text-left pb-4">İşlem</th>
+                      <th className="text-right pb-4">Tutar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+                    {accountHistory.map((h: any) => (
+                      <tr key={h.id}>
+                        <td className="py-4 text-xs font-bold text-slate-500">
+                          {new Date(h.created_at).toLocaleDateString('tr-TR')}
+                        </td>
+                        <td className="py-4">
+                          <div className="text-xs font-black text-slate-900 dark:text-white uppercase">
+                            {h.order_type === 'MANUAL_DEBT' ? 'BORÇ GİRİŞİ' : 
+                             h.order_type === 'MANUAL_PAYMENT' ? 'ÖDEME YAPILDI' : 
+                             'YEMEK SİPARİŞİ'}
+                          </div>
+                          {h.note && <div className="text-[9px] text-slate-400 font-bold">{h.note}</div>}
+                        </td>
+                        <td className={`py-4 text-right text-xs font-black ${h.order_type === 'MANUAL_PAYMENT' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                          {h.order_type === 'MANUAL_PAYMENT' ? '-' : ''}₺{h.total_amount?.toLocaleString('tr-TR')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            
+            <div className="p-8 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+               <span className="text-xs font-black text-slate-400 uppercase tracking-widest">GÜNCEL BAKİYE:</span>
+               <span className="text-2xl font-black text-accent">₺{selectedAccount?.balance?.toLocaleString('tr-TR')}</span>
+            </div>
+          </div>
         </div>
       )}
     </div>

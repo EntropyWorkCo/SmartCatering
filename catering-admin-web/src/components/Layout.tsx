@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { adisyonService } from "../lib/services/adisyonService";
+import { userService } from "../lib/services/userService";
 import { supabase } from "../lib/supabase";
 
 export default function Layout() {
@@ -34,6 +35,7 @@ export default function Layout() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [hasNewNotification, setHasNewNotification] = useState(false);
+  const [adminName, setAdminName] = useState("Admin Kullanıcı");
   const notificationRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,6 +50,7 @@ export default function Layout() {
 
   useEffect(() => {
     fetchTodayOrders();
+    fetchAdminName();
     const cleanup = setupRealtimeSubscription();
 
     // Close notifications on click outside
@@ -63,6 +66,20 @@ export default function Layout() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  const fetchAdminName = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const profile = await userService.getProfile(user.id);
+        if (profile?.full_name) {
+          setAdminName(profile.full_name);
+        }
+      }
+    } catch (e) {
+      console.error("Profile fetch error:", e);
+    }
+  };
 
   const fetchTodayOrders = async () => {
     try {
@@ -223,7 +240,7 @@ export default function Layout() {
         <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 z-30 sticky top-0">
           <div>
             <h2 className="text-slate-500 dark:text-slate-400 text-sm font-medium">Hoş Geldiniz,</h2>
-            <p className="text-primary dark:text-white font-black">Admin Kullanıcı</p>
+            <p className="text-primary dark:text-white font-black">{adminName}</p>
           </div>
           
           <div className="flex items-center space-x-4">

@@ -133,7 +133,7 @@ export default function Dashboard() {
       const todayOrders = allOrders.filter(o => new Date(o.created_at) >= today);
       
       // 2. Calculate Stats
-      const totalOrdersToday = todayOrders.length;
+      const totalOrdersToday = todayOrders.filter(o => !['MANUAL_PAYMENT', 'MANUAL_DEBT'].includes(o.order_type)).length;
       
       const pendingOrders = allOrders.filter(o => 
         ["PAKET", "Sipariş Ver"].includes(o.order_type) && 
@@ -142,6 +142,7 @@ export default function Dashboard() {
 
       const dailyRevenue = todayOrders
         .filter(o => !["CANCELLED", "İptal"].includes(o.status))
+        .filter(o => o.order_type !== 'MANUAL_PAYMENT')
         .reduce((sum, o) => sum + (o.total_amount || 0), 0);
       
       // 3. Fetch Company Count

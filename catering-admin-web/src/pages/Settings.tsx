@@ -4,11 +4,8 @@ import {
   User, 
   Shield, 
   Bell, 
-  CreditCard,
   Save,
   LogOut,
-  Mail,
-  Globe,
   Loader2
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
@@ -134,7 +131,23 @@ export default function Settings() {
                   </div>
                </div>
                <button 
-                  onClick={() => alert("Şifre sıfırlama e-postası gönderildi.")}
+                  onClick={async () => {
+                    const newPassword = window.prompt("Yeni şifrenizi girin (En az 6 karakter):");
+                    if (newPassword) {
+                      if (newPassword.length < 6) {
+                        alert("Şifre en az 6 karakter olmalıdır.");
+                        return;
+                      }
+                      try {
+                        const { error } = await supabase.auth.updateUser({ password: newPassword });
+                        if (error) throw error;
+                        alert("Şifreniz başarıyla güncellendi.");
+                      } catch (err: any) {
+                        console.error(err);
+                        alert("Şifre güncellenirken hata oluştu: " + err.message);
+                      }
+                    }
+                  }}
                   className="text-accent text-xs font-black underline hover:text-accent/80 transition-colors"
                 >
                   Şifre Değiştir
@@ -149,24 +162,6 @@ export default function Settings() {
                <h3 className="font-black text-slate-800 uppercase tracking-widest text-xs">Uygulama Yapılandırması</h3>
             </div>
             <div className="p-8 space-y-6">
-               <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div className="flex items-center space-x-4">
-                     <div className="bg-emerald-100 text-emerald-600 p-2 rounded-xl">
-                        <CreditCard size={18} />
-                     </div>
-                     <div>
-                        <p className="text-sm font-bold text-slate-800">Borç Takibi Modu</p>
-                        <p className="text-[10px] text-slate-500">Müşterilerin veresiye almasına izin ver</p>
-                     </div>
-                   </div>
-                   <div 
-                     onClick={() => setConfig({ ...config, debtMode: !config.debtMode })}
-                     className={`w-12 h-6 rounded-full relative cursor-pointer transition-all duration-300 ${config.debtMode ? 'bg-accent' : 'bg-slate-300'}`}
-                   >
-                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-md transition-all duration-300 ${config.debtMode ? 'right-1' : 'left-1'}`}></div>
-                   </div>
-                </div>
-
                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                    <div className="flex items-center space-x-4">
                       <div className="bg-blue-100 text-blue-600 p-2 rounded-xl">
@@ -199,26 +194,6 @@ export default function Settings() {
         </div>
 
         <div className="space-y-6">
-           {/* Info Card */}
-           <div className="bg-[#0F172A] rounded-3xl p-8 shadow-xl relative overflow-hidden border border-white/5">
-              <div className="absolute -top-10 -right-10 w-40 h-40 bg-accent/20 rounded-full blur-3xl"></div>
-              <SettingsIcon className="text-accent mb-6" size={32} />
-              <h4 className="text-white font-black text-xl italic mb-4">Destek Hattı</h4>
-              <p className="text-slate-400 text-sm leading-relaxed mb-8">
-                 Panel ile ilgili bir sorun yaşıyorsanız veya yeni bir özellik eklenmesini istiyorsanız teknik ekiple iletişime geçin.
-              </p>
-              <div className="space-y-3">
-                 <div className="flex items-center space-x-3 text-slate-300">
-                    <Mail size={16} className="text-accent" />
-                    <span className="text-xs font-bold">destek@meydanlokanta.com</span>
-                 </div>
-                 <div className="flex items-center space-x-3 text-slate-300">
-                    <Globe size={16} className="text-accent" />
-                    <span className="text-xs font-bold">meydanlokanta.com/admin-help</span>
-                 </div>
-              </div>
-           </div>
-
             <button 
               onClick={handleLogout}
               className="w-full bg-red-50 text-red-600 p-5 rounded-3xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center space-x-2 border border-red-100 hover:bg-red-600 hover:text-white transition-all shadow-lg shadow-red-100"
