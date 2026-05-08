@@ -719,7 +719,7 @@ export default function CorporateInfoScreen() {
                                                                 
                                                                 {order.order_type?.startsWith('MANUAL') ? (
                                                                     <View style={{ backgroundColor: colors.background, padding: 8, borderRadius: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                                        <Text style={{ fontSize: 12, color: colors.text }}>
+                                                                        <Text style={{ fontSize: 12, color: colors.text, flex: 1, marginRight: 8 }}>
                                                                             <Text style={{ fontWeight: 'bold', color: colors.muted }}>{order.order_type === 'MANUAL_DEBT' ? 'Dönem:' : 'Tarih:'}</Text> {order.note}
                                                                         </Text>
                                                                         <Text style={{ fontSize: 14, fontWeight: 'bold', color: order.order_type === 'MANUAL_PAYMENT' ? '#4CAF50' : colors.primary }}>

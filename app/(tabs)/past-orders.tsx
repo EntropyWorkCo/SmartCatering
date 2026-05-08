@@ -19,7 +19,7 @@ export default function PastOrdersScreen() {
     const styles = getStyles(colors);
 
     const { user, loading: authLoading } = useAuth();
-    const { profile } = useProfile(user?.id);
+    const { profile, loading: profileLoading } = useProfile(user?.id);
     const isCompany = profile?.is_company || false;
 
     // EĞER KULLANICI HENÜZ YÜKLENMEDİYSE null GÖNDER Kİ ADMİN MODU TETİKLENMESİN
@@ -164,7 +164,7 @@ export default function PastOrdersScreen() {
                                     {order.adisyon_items && order.adisyon_items.length > 0 ? (
                                         order.adisyon_items.map((item: any) => (
                                             <Text key={item.id} style={styles.orderItemText}>
-                                                {item.quantity}x {item.menu_items?.name || 'Yemek'} {!isCompany && `- ₺${item.line_total}`}
+                                                {item.quantity}x {item.menu_items?.name || 'Yemek'} {!profileLoading && !isCompany && `- ₺${item.line_total}`}
                                             </Text>
                                         ))
                                     ) : (
@@ -178,7 +178,7 @@ export default function PastOrdersScreen() {
                                 <View style={styles.orderFooter}>
                                     <View style={styles.totalBox}>
                                         <Text style={styles.orderTotalLabel}>Toplam Tutar</Text>
-                                        <Text style={styles.orderTotalValue}>{isCompany ? "-" : `₺${order.total_amount || 0}`}</Text>
+                                        <Text style={styles.orderTotalValue}>{profileLoading || isCompany ? "-" : `₺${order.total_amount || 0}`}</Text>
                                     </View>
                                     {isCompleted && !ratedOrders.includes(order.id) && (
                                         <TouchableOpacity 

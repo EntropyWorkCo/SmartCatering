@@ -95,15 +95,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    // 1. ÖNCE state'i ve cache'i temizle (Yarış koşulunu engellemek için)
+    set({ session: null, user: null, role: null, firmaId: null, isAdmin: false, loading: false });
+    await AsyncStorage.multiRemove(["isAdmin", "softUser", "userRole", "firmaId"]);
+    
     try {
-      const currentSession = get().session;
-      // Çıkış yaparken bildirim anahtarını artık silmiyoruz (Hızlı geçişler için)
+      // 2. SONRA Supabase oturumunu kapat
       await supabase.auth.signOut();
     } catch (e) {
       console.warn("SignOut error:", e);
     }
-    await AsyncStorage.multiRemove(["isAdmin", "softUser", "userRole"]);
-    set({ session: null, user: null, role: null, firmaId: null, isAdmin: false, loading: false });
   }
 }));
 
@@ -115,81 +116,62 @@ async function resolveRoleData(session: any): Promise<{ role: UserRole, firmaId:
     
     const timeoutPromise = new Promise<{ role: UserRole, firmaId: string | null }>((resolve) => {
         setTimeout(() => {
-            console.warn("⚠️ Rol çözümleme zaman aşımı. İnternet bağlantınızı kontrol edin.");
-            resolve({ role: 'bireysel', firmaId: null });
-        }, 10000); // 10 saniye - yavaş bağlantılar için tolerans artırıldı
+            console.warn("⚠️ Rol çözümleme zaman aşımı.");
+            resolve({ role: null, firmaId: null }); 
+        }, 10000); 
     });
 
     const logicPromise = (async (): Promise<{ role: UserRole, firmaId: string | null }> => {
         const userId = session.user.id;
         const isSoftUser = !!session.isSoftUser;
 
-    // 1. ADIM: Admin Kontrolü (Önce Cache, sonra Raporlama)
-    const isAdminStorage = await AsyncStorage.getItem("isAdmin");
-    if (isAdminStorage === "true") {
-        return { role: 'admin', firmaId: null };
-    }
+        // 1. ADIM: Metadata Kontrolü (HIZLI YOL)
+        const metadata = session.user.app_metadata || session.user.user_metadata || {};
+        const roleFromMetadata = metadata.role;
+        const firmaIdFromMetadata = metadata.firma_id;
 
-    // RPC check for admin - Sadece gerçek kullanıcılar için ve hata yakalamalı
-    if (!isSoftUser) {
-        try {
-            const { data: isAdminRPC } = await supabase.rpc("is_admin");
-            if (isAdminRPC) {
-                await AsyncStorage.setItem("isAdmin", "true");
-                return { role: 'admin', firmaId: null };
-            }
-        } catch (e) {
-            console.warn("Admin RPC check bypassed or failed");
-        }
-    }
-
-    // 2. ADIM: Metadata Kontrolü (Hızlı Yol)
-    let roleFromMetadata = session.user.app_metadata?.role || session.user.user_metadata?.role;
-    let firmaIdFromMetadata = session.user.app_metadata?.firma_id || session.user.user_metadata?.firma_id;
-
-    // Database'deki 'owner' veya 'corporate' rollerini bizim sistemdeki 'firma_sahibi'ne map ediyoruz
-    const mapRole = (r: string): UserRole => {
-        if (r === "admin") return "admin";
-        if (r === "owner" || r === "corporate" || r === "firma_sahibi") return "firma_sahibi";
-        if (r === "employee" || r === "staff" || r === "firma_calisan") return "firma_calisan";
-        return "bireysel";
-    };
-
-    if (roleFromMetadata) {
-        return { 
-            role: mapRole(roleFromMetadata), 
-            firmaId: firmaIdFromMetadata || null 
+        const mapRole = (r: string): UserRole => {
+            if (r === "admin") return "admin";
+            if (r === "owner" || r === "corporate" || r === "firma_sahibi") return "firma_sahibi";
+            if (r === "employee" || r === "staff" || r === "firma_calisan") return "firma_calisan";
+            return "bireysel";
         };
-    }
 
-    // 3. ADIM: Cache'lenmiş Rol Kontrolü
-    const cachedRole = await AsyncStorage.getItem("userRole");
-    if (cachedRole) {
-        return { role: mapRole(cachedRole), firmaId: null };
-    }
-
-    // 4. ADIM: Veritabanı (Public.Users) Kontrolü (En son çare)
-    if (!isSoftUser) {
-        const { data: profile } = await supabase
-            .from("users")
-            .select("role, company_id, is_company")
-            .eq("id", userId)
-            .maybeSingle();
-
-        if (profile) {
-            let role: UserRole = "bireysel";
-            if (profile.role === 'admin') role = 'admin';
-            else if (profile.role === 'owner' || profile.role === 'corporate' || profile.is_company) role = 'firma_sahibi';
-            else if (profile.company_id) role = 'firma_calisan';
-            
+        if (roleFromMetadata) {
             return { 
-                role, 
-                firmaId: profile.company_id || null 
+                role: mapRole(roleFromMetadata), 
+                firmaId: firmaIdFromMetadata || null 
             };
         }
-    }
 
-    return { role: 'bireysel', firmaId: null };
+        // 2. ADIM: Veritabanı (Public.Users) Kontrolü (Cache Kullanmıyoruz)
+        if (!isSoftUser) {
+            try {
+                // Admin RPC kontrolü
+                const { data: isAdminRPC } = await supabase.rpc("is_admin");
+                if (isAdminRPC) {
+                    return { role: 'admin', firmaId: null };
+                }
+
+                // Normal profil kontrolü
+                const { data: profile } = await supabase
+                    .from("users")
+                    .select("role, company_id, is_company")
+                    .eq("id", userId)
+                    .maybeSingle();
+
+                if (profile) {
+                    return { 
+                        role: mapRole(profile.role || (profile.is_company ? 'corporate' : 'bireysel')), 
+                        firmaId: profile.company_id || null 
+                    };
+                }
+            } catch (e) {
+                console.warn("Database role check failed:", e);
+            }
+        }
+
+        return { role: 'bireysel', firmaId: null };
     })();
 
     return Promise.race([logicPromise, timeoutPromise]);

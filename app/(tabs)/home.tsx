@@ -24,7 +24,7 @@ export default function HomeScreen() {
   const styles = getStyles(colors);
 
   const { user, loading: authLoading } = useAuth();
-  const { profile, refresh } = useProfile(user?.id);
+  const { profile, loading: profileLoading, refresh } = useProfile(user?.id);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -447,9 +447,9 @@ export default function HomeScreen() {
 
                             {/* Alt Kısım: Fiyat Solda, Butonlar Sağda */}
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                                {!isCompany && (
-                                    <Text style={{ fontSize: 20, fontWeight: '900', color: colors.primary }}>{`₺${pkg.price}`}</Text>
-                                )}
+                                 {!profileLoading && !isCompany && (
+                                     <Text style={{ fontSize: 20, fontWeight: '900', color: colors.primary }}>{`₺${pkg.price}`}</Text>
+                                 )}
                                 {isCompany && <View />}
 
                                 {/* Sepet Kontrolü */}

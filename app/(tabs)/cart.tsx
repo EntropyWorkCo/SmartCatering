@@ -28,8 +28,8 @@ export default function CartScreen() {
     const { items, removeItem, clearCart, getTotal, addItem, decrementItem } = useCartStore();
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
-    const { user, isAdmin } = useAuth();
-    const { profile } = useProfile(user?.id);
+    const { user, loading: authLoading } = useAuth();
+    const { profile, loading: profileLoading } = useProfile(user?.id);
     const isCompany = profile?.is_company || false;
 
     const theme = useResolvedTheme();
@@ -99,7 +99,7 @@ export default function CartScreen() {
 
         Alert.alert(
             "Siparişi Onayla",
-            `${isCompany ? '' : `${getTotal()}₺ tutarındaki `}siparişinizi onaylıyor musunuz?\nSipariş Türü: ${orderType}`,
+            `${profileLoading || isCompany ? '' : `${getTotal()}₺ tutarındaki `}siparişinizi onaylıyor musunuz?\nSipariş Türü: ${orderType}`,
             [
                 { text: "İptal", style: "cancel" },
                 {
@@ -194,7 +194,7 @@ export default function CartScreen() {
                                     </View>
                                 )}
                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-                                    {!isCompany && <Text style={[styles.itemPrice, { marginRight: 16 }]}>{item.price} ₺</Text>}
+                                    {!profileLoading && !isCompany && <Text style={[styles.itemPrice, { marginRight: 16 }]}>{item.price} ₺</Text>}
                                     <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: 8, padding: 4, gap: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
                                         <TouchableOpacity 
                                             onPress={() => decrementItem(item.menu_item_id)} 
@@ -211,7 +211,7 @@ export default function CartScreen() {
                                 </View>
                             </View>
                             <View style={styles.itemActions}>
-                                {isCompany ? null : <Text style={styles.itemTotal}>{item.price * item.quantity} ₺</Text>}
+                                {!profileLoading && !isCompany && <Text style={styles.itemTotal}>{item.price * item.quantity} ₺</Text>}
                                 <TouchableOpacity onPress={() => removeItem(item.id)} style={styles.removeBtn}>
                                     <MaterialIcons name="close" size={20} color={colors.danger} />
                                 </TouchableOpacity>
@@ -276,7 +276,7 @@ export default function CartScreen() {
 
                     <View style={styles.totalContainer}>
                         <Text style={styles.totalText}>Toplam</Text>
-                        <Text style={styles.totalAmount}>{isCompany ? "-" : `${getTotal()} ₺`}</Text>
+                        <Text style={styles.totalAmount}>{profileLoading || isCompany ? "-" : `${getTotal()} ₺`}</Text>
                     </View>
 
                     <TouchableOpacity

@@ -33,7 +33,7 @@ export default function MenuScreen() {
   const orderMode = useCartStore(state => state.orderMode);
 
   const { user } = useAuth();
-  const { profile, refresh } = useProfile(user?.id);
+  const { profile, loading: profileLoading, refresh } = useProfile(user?.id);
 
   const theme = useResolvedTheme();
   const colors = Colors[theme];
@@ -343,7 +343,7 @@ export default function MenuScreen() {
                             <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
                           </View>
                           <View style={styles.foodBottomColumn}>
-                            {!isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
+                            {!profileLoading && !isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
                             {item.status === 'sold_out' ? (
                               <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
                                 <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
@@ -411,7 +411,7 @@ export default function MenuScreen() {
                       <Text style={styles.foodCategory}>{item.category === 'İÇECEK' || item.category === 'EKSTRA' ? 'Tabela Ürünü' : item.category}</Text>
                     </View>
                     <View style={styles.foodBottomColumn}>
-                      {!isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
+                      {!profileLoading && !isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
                       {item.status === 'sold_out' ? (
                         <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
                           <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
@@ -462,7 +462,7 @@ export default function MenuScreen() {
 
                 {/* Alt Kısım (Fiyat ve Butonlar) */}
                 <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 12 }}>
-                  {!isCompany && <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary, marginRight: 12 }}>₺{pkg.price}</Text>}
+                  {!profileLoading && !isCompany && <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary, marginRight: 12 }}>₺{pkg.price}</Text>}
 
                   {getCartQuantity(pkg.id) > 0 ? (
                     <View style={[styles.activeQuantityContainer, { marginTop: 0 }]}>
@@ -567,7 +567,7 @@ export default function MenuScreen() {
             <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 24, backgroundColor: colors.background, borderTopWidth: 1, borderColor: colors.surfaceBorder }}>
               <TouchableOpacity style={[styles.confirmPackageBtn, { margin: 0 }]} onPress={handleConfirmPackage}>
                 <Text style={styles.confirmPackageBtnText}>Paketi Onayla ({packageSelections.length}/{selectedPackage?.maxItems})</Text>
-                {isCompany ? null : <Text style={styles.confirmPackagePriceInfo}>₺{selectedPackage?.price}</Text>}
+                {profileLoading || isCompany ? null : <Text style={styles.confirmPackagePriceInfo}>₺{selectedPackage?.price}</Text>}
               </TouchableOpacity>
             </View>
           </View>
