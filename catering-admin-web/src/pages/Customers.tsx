@@ -44,7 +44,7 @@ export default function Customers() {
   const [ekstreStartDate, setEkstreStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [ekstreEndDate, setEkstreEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [ekstreUnitPrice, setEkstreUnitPrice] = useState("0");
-  const [ekstrePaymentStatus, setEkstrePaymentStatus] = useState<'ODENDI' | 'BEKLIYOR'>('BEKLIYOR');
+
   
 
 

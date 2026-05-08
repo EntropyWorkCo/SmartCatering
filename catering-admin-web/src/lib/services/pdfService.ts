@@ -52,12 +52,20 @@ export const pdfService = {
       return true;
     });
 
-    const revenue = validOrders.reduce((acc, o) => acc + (o.total_amount || 0), 0);
+    const revenue = validOrders.reduce((acc, o) => {
+      const isCorporate = o.companyName && o.companyName !== 'Bireysel';
+      if (isCorporate) {
+        // Kurumsal için sadece manuel borç ciroyu oluşturur
+        return acc + (o.order_type === 'MANUAL_DEBT' ? (o.total_amount || 0) : 0);
+      }
+      // Bireysel için her şey cirodur
+      return acc + (o.total_amount || 0);
+    }, 0);
 
     const mealCount = validOrders
       .filter(o => o.order_type !== 'MANUAL_DEBT' && o.order_type !== 'MANUAL_PAYMENT')
       .reduce((acc, o) =>
-        acc + (o.adisyon_items?.reduce((s: number, i: any) => s + (i.quantity || 0), 0) || 0), 0);
+        acc + (o.adisyon_items?.reduce((s: number, i: any) => s + (i.quantity || 0), 0) || 1), 0);
 
     // --- Şirket bazlı gruplama ---
     const groupMap: Record<string, { name: string; orders: any[]; total: number }> = {};
@@ -65,7 +73,13 @@ export const pdfService = {
       const key = o.companyName || '__bireysel__';
       if (!groupMap[key]) groupMap[key] = { name: o.companyName || 'Bireysel Müşteriler', orders: [], total: 0 };
       groupMap[key].orders.push(o);
-      groupMap[key].total += o.total_amount || 0;
+      
+      const isCorporate = o.companyName && o.companyName !== 'Bireysel';
+      if (isCorporate) {
+        if (o.order_type === 'MANUAL_DEBT') groupMap[key].total += o.total_amount || 0;
+      } else {
+        groupMap[key].total += o.total_amount || 0;
+      }
     });
 
     // Kurumsal önce, bireysel sona
@@ -75,19 +89,15 @@ export const pdfService = {
       return b.total - a.total;
     });
 
-    const statusMap: any = { PAID: 'ÖDENDİ', COMPLETED: 'TAMAMLANDI', PENDING: 'BEKLİYOR', PREPARING: 'HAZIRLANIYOR', READY: 'YOLDA', CANCELLED: 'İPTAL' };
 
     const groupSections = sortedGroups.map(group => {
       const rows = group.orders.map((o, idx) => {
         const items = o.adisyon_items?.map((i: any) => `${i.quantity}× ${i.menu_items?.name || 'Ürün'}`).join(', ') || 'Hizmet';
-        const status = statusMap[(o.status || '').toUpperCase()] || o.status;
-        const isPaid = ['PAID', 'COMPLETED', 'ÖDENDİ', 'TAMAMLANDI'].includes((o.status || '').toUpperCase());
         return `
           <tr style="background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'}">
             <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;color:#64748b;">${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
             <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;font-weight:700;">${o.userName || 'Müşteri'}</td>
             <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;color:#475569;">${items}</td>
-            <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;font-weight:900;color:${isPaid ? '#10b981' : '#f97316'};">${status}</td>
           </tr>`;
       }).join('');
 
@@ -110,10 +120,9 @@ export const pdfService = {
                 <th style="padding:10px 12px;text-align:left;font-size:9px;font-weight:900;text-transform:uppercase;color:#475569;letter-spacing:0.5px;">Tarih</th>
                 <th style="padding:10px 12px;text-align:left;font-size:9px;font-weight:900;text-transform:uppercase;color:#475569;letter-spacing:0.5px;">Müşteri</th>
                 <th style="padding:10px 12px;text-align:left;font-size:9px;font-weight:900;text-transform:uppercase;color:#475569;letter-spacing:0.5px;">Ürünler</th>
-                <th style="padding:10px 12px;text-align:left;font-size:9px;font-weight:900;text-transform:uppercase;color:#475569;letter-spacing:0.5px;">Durum</th>
               </tr>
             </thead>
-            <tbody>${rows || '<tr><td colspan="4" style="padding:20px;text-align:center;color:#94a3b8;font-style:italic;font-size:11px;">Kayıt yok</td></tr>'}</tbody>
+            <tbody>${rows || '<tr><td colspan="3" style="padding:20px;text-align:center;color:#94a3b8;font-style:italic;font-size:11px;">Kayıt yok</td></tr>'}</tbody>
           </table>
         </div>`;
     }).join('');
@@ -179,30 +188,15 @@ export const pdfService = {
     const rows = filteredOrders.map((o: any, idx: number) => {
       const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
       const isPayment = o.order_type === 'MANUAL_PAYMENT';
-      const isDebt = o.order_type === 'MANUAL_DEBT';
 
       let items = o.adisyon_items?.map((i: any) => `${i.quantity}× ${i.menu_items?.name || 'Ürün'}`).join(', ') || 'Hizmet';
       if (isManual) items = o.note || (isPayment ? 'Ödeme' : 'Ek Borç');
-
-      const isPaid = ['PAID', 'COMPLETED', 'ÖDENDİ', 'TAMAMLANDI'].includes((o.status || '').toUpperCase());
-      
-      let statusLabel = isPaid ? 'TAMAMLANDI' : 'BEKLİYOR';
-      let statusColor = isPaid ? '#10b981' : '#f97316';
-
-      if (isPayment) {
-        statusLabel = 'ÖDEME';
-        statusColor = '#10b981';
-      } else if (isDebt) {
-        statusLabel = 'BORÇ';
-        statusColor = '#ef4444';
-      }
 
       return `
         <tr style="background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'}">
           <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;color:#64748b;">${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;font-weight:700;">${o.userName || 'Personel'}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;color:#64748b;">${items}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;font-weight:900;color:${statusColor};">${statusLabel}</td>
         </tr>`;
     }).join('');
 
@@ -230,10 +224,9 @@ export const pdfService = {
               <th style="padding:12px;text-align:left;font-size:10px;font-weight:900;text-transform:uppercase;">Tarih</th>
               <th style="padding:12px;text-align:left;font-size:10px;font-weight:900;text-transform:uppercase;">Müşteri</th>
               <th style="padding:12px;text-align:left;font-size:10px;font-weight:900;text-transform:uppercase;">Hizmet</th>
-              <th style="padding:12px;text-align:left;font-size:10px;font-weight:900;text-transform:uppercase;">Durum</th>
             </tr>
           </thead>
-          <tbody>${rows || '<tr><td colspan="4" style="padding:40px;text-align:center;color:#94a3b8;font-style:italic;">Kayıt bulunmamaktadır.</td></tr>'}</tbody>
+          <tbody>${rows || '<tr><td colspan="3" style="padding:40px;text-align:center;color:#94a3b8;font-style:italic;">Kayıt bulunmamaktadır.</td></tr>'}</tbody>
         </table>
 
         <div style="display:flex;justify-content:flex-end;">

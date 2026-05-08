@@ -15,13 +15,13 @@ import {
   CheckCircle2,
   X,
   Search,
-  Clock
+  Clock,
+  Info
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { adisyonService } from "../lib/services/adisyonService";
 import { pdfService } from "../lib/services/pdfService";
 import { billingService } from "../lib/services/billingService";
-import * as XLSX from "xlsx";
 
 type ReportView = "MAIN" | "SALES" | "FEEDBACK" | "PERFORMANCE" | "DEBTS";
 
@@ -156,42 +156,15 @@ function ReportCard({ icon, title, description, onClick }: any) {
   );
 }
 
-const getStatusLabel = (status: string) => {
-  const s = (status || "").toUpperCase();
-  switch (s) {
-    case 'PENDING': return 'BEKLİYOR';
-    case 'PREPARING':
-    case 'HAZIRLANIYOR': return 'HAZIRLANIYOR';
-    case 'READY': return 'YOLDA';
-    case 'COMPLETED':
-    case 'TAMAMLANDI': return 'TAMAMLANDI';
-    case 'PAID':
-    case 'ÖDENDİ': return 'ÖDENDİ';
-    case 'CANCELLED':
-    case 'İPTAL': return 'İPTAL EDİLDİ';
-    default: return s;
-  }
-};
-
 // --- Sales View ---
 function SalesView({ onBack, orders }: any) {
   const [period, setPeriod] = useState<"DAILY" | "WEEKLY" | "MONTHLY">("MONTHLY");
+  const [activeTab, setActiveTab] = useState<'KURUMSAL' | 'BIREYSEL'>('BIREYSEL');
   
   const stats = useMemo(() => {
-    const now = new Date();
-    const validOrders = orders.filter((o: any) => {
-      const status = String(o.status || '').toUpperCase();
-      const type = String(o.order_type || '').toUpperCase();
-      const note = String(o.note || '').toUpperCase();
-
-      if (['CANCELLED', 'İPTAL', 'İPTAL EDİLDİ'].includes(status)) return false;
-      
-      // Ödeme veya Payment geçen hiçbir şeyi ciroya dahil etme
-      if (type.includes('PAYMENT') || type.includes('ÖDEME') || note.includes('ÖDEME')) return false;
-
+    const periodOrders = orders.filter((o: any) => {
       const orderDate = new Date(o.created_at);
       const now = new Date();
-      
       if (period === "DAILY") return orderDate.toDateString() === now.toDateString();
       if (period === "WEEKLY") {
         const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -200,19 +173,46 @@ function SalesView({ onBack, orders }: any) {
       if (period === "MONTHLY") {
         return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
       }
-      
       return true;
     });
 
-    const revenue = validOrders.reduce((acc: number, o: any) => acc + (o.total_amount || 0), 0);
-    
-    const count = validOrders
-      .filter((o: any) => o.order_type !== 'MANUAL_DEBT' && o.order_type !== 'MANUAL_PAYMENT')
-      .reduce((acc: number, o: any) =>
-        acc + (o.adisyon_items?.reduce((s: number, i: any) => s + (i.quantity || 0), 0) || 0), 0);
-    return { revenue, count, filteredOrders: validOrders };
+    const corporateOrders = periodOrders.filter((o: any) => o.companyName && o.companyName !== "Bireysel");
+    const individualOrders = periodOrders.filter((o: any) => !o.companyName || o.companyName === "Bireysel");
+
+    const calculateStats = (orderList: any[], isCorporate: boolean) => {
+      const filteredOrders = orderList.filter((o: any) => {
+        const status = String(o.status || '').toUpperCase();
+        const type = String(o.order_type || '').toUpperCase();
+        const note = String(o.note || '').toUpperCase();
+
+        if (['CANCELLED', 'İPTAL', 'İPTAL EDİLDİ'].includes(status)) return false;
+        if (type.includes('PAYMENT') || type.includes('ÖDEME') || note.includes('ÖDEME')) return false;
+
+        if (isCorporate) return type === 'MANUAL_DEBT';
+        return true;
+      });
+
+      const revenue = filteredOrders.reduce((acc: number, o: any) => acc + (o.total_amount || 0), 0);
+      
+      const count = orderList
+        .filter((o: any) => !['CANCELLED', 'İPTAL'].includes(String(o.status || '').toUpperCase()))
+        .filter((o: any) => o.order_type !== 'MANUAL_DEBT' && o.order_type !== 'MANUAL_PAYMENT')
+        .reduce((acc: number, o: any) => {
+          const itemsCount = o.adisyon_items?.reduce((s: number, i: any) => s + (i.quantity || 0), 0) || 1;
+          return acc + itemsCount;
+        }, 0);
+
+      return { revenue, count, filteredOrders };
+    };
+
+    return {
+      kurumsal: calculateStats(corporateOrders, true),
+      bireysel: calculateStats(individualOrders, false),
+      allPeriodOrders: periodOrders
+    };
   }, [orders, period]);
 
+  const currentStats = activeTab === 'KURUMSAL' ? stats.kurumsal : stats.bireysel;
   const periodLabel = period === "DAILY" ? "GÜNLÜK" : period === "WEEKLY" ? "HAFTALIK" : "AYLIK";
 
   return (
@@ -221,6 +221,26 @@ function SalesView({ onBack, orders }: any) {
         <button onClick={onBack} className="flex items-center text-slate-500 hover:text-slate-900 dark:hover:text-white font-bold transition-colors w-fit">
           <ArrowLeft size={20} className="mr-2" /> Geri Dön
         </button>
+
+        {/* Tab Selector */}
+        <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex">
+          <button
+            onClick={() => setActiveTab('KURUMSAL')}
+            className={`px-6 py-2 rounded-lg text-xs font-black transition-all ${
+              activeTab === 'KURUMSAL' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            KURUMSAL
+          </button>
+          <button
+            onClick={() => setActiveTab('BIREYSEL')}
+            className={`px-6 py-2 rounded-lg text-xs font-black transition-all ${
+              activeTab === 'BIREYSEL' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            BİREYSEL
+          </button>
+        </div>
         
         <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
           {(["DAILY", "WEEKLY", "MONTHLY"] as const).map((p) => (
@@ -238,49 +258,33 @@ function SalesView({ onBack, orders }: any) {
 
         <div className="flex gap-3">
           <button 
-            onClick={() => pdfService.generateSalesReport(stats.filteredOrders, periodLabel)}
+            onClick={() => pdfService.generateSalesReport(stats.allPeriodOrders, periodLabel)}
             className="flex items-center px-5 py-3 bg-red-600 text-white rounded-2xl text-sm font-black shadow-lg shadow-red-200 hover:scale-105 transition-all"
           >
             <Download size={16} className="mr-2" /> PDF İNDİR
-          </button>
-
-          <button 
-            onClick={() => {
-              const ws_data = [
-                ["Tarih", "Müşteri", "Kurum", "Tutar", "Durum"],
-                ...stats.filteredOrders.map((o: any) => [
-                  new Date(o.created_at).toLocaleDateString('tr-TR'),
-                  o.userName,
-                  o.companyName || "Bireysel",
-                  o.total_amount,
-                  getStatusLabel(o.status),
-                ])
-              ];
-              const ws = XLSX.utils.aoa_to_sheet(ws_data);
-              const wb = XLSX.utils.book_new();
-              XLSX.utils.book_append_sheet(wb, ws, "Satış Raporu");
-              XLSX.writeFile(wb, `satis_raporu_${new Date().toISOString().split('T')[0]}.xlsx`);
-            }}
-            className="flex items-center px-5 py-3 bg-emerald-600 text-white rounded-2xl text-sm font-black shadow-lg shadow-emerald-200 hover:scale-105 transition-all"
-          >
-            <Download size={16} className="mr-2" /> EXCEL
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">DÖNEM CİROSU ({periodLabel})</p>
-          <p className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">₺{stats.revenue.toLocaleString('tr-TR')}</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">DÖNEM CİROSU ({activeTab})</p>
+          <p className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">₺{currentStats.revenue.toLocaleString('tr-TR')}</p>
+          {activeTab === 'KURUMSAL' && (
+            <p className="text-[9px] font-bold text-slate-400 mt-2 flex items-center gap-1">
+              <Info size={10} className="text-orange-500" />
+              Kurumsal ciro, girilen manuel borç kayıtları üzerinden hesaplanır.
+            </p>
+          )}
         </div>
         <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">ÖĞÜN SAYISI</p>
-          <p className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">{stats.count} <span className="text-lg text-slate-400">Adet</span></p>
+          <p className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">{currentStats.count} <span className="text-lg text-slate-400">Adet</span></p>
         </div>
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden p-8">
-        <h3 className="text-lg font-black text-slate-900 dark:text-white mb-6">İşlem Özeti</h3>
+        <h3 className="text-lg font-black text-slate-900 dark:text-white mb-6">İşlem Özeti ({activeTab})</h3>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -289,25 +293,23 @@ function SalesView({ onBack, orders }: any) {
                 <th className="pb-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Müşteri</th>
                 <th className="pb-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Tür</th>
                 <th className="pb-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Tutar</th>
-                <th className="pb-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Durum</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-              {stats.filteredOrders.slice(0, 20).map((o: any) => (
+              {currentStats.filteredOrders.slice(0, 50).map((o: any) => (
                 <tr key={o.id}>
                   <td className="py-3 text-xs font-bold text-slate-600 dark:text-slate-400">{new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
-                  <td className="py-3 text-xs font-black text-slate-900 dark:text-white uppercase">{o.userName}</td>
+                  <td className="py-3 text-xs font-black text-slate-900 dark:text-white uppercase">{o.userName || o.user_full_name}</td>
                   <td className="py-3 text-xs font-bold">
                     {o.order_type === 'MANUAL_DEBT' ? <span className="text-orange-500">BORÇ GİRİŞİ</span> : 
                      o.order_type === 'MANUAL_PAYMENT' ? <span className="text-emerald-500">ÖDEME</span> : 
                      <span className="text-blue-500">SİPARİŞ</span>}
                   </td>
                   <td className="py-3 text-right text-xs font-black text-slate-900 dark:text-white">₺{o.total_amount?.toLocaleString('tr-TR')}</td>
-                  <td className="py-3 text-right text-[10px] font-black text-accent uppercase tracking-wider">{getStatusLabel(o.status)}</td>
                 </tr>
               ))}
-              {stats.filteredOrders.length === 0 && (
-                <tr><td colSpan={4} className="py-12 text-center text-slate-400 text-sm font-bold">Bu dönemde satış bulunmuyor.</td></tr>
+              {currentStats.filteredOrders.length === 0 && (
+                <tr><td colSpan={4} className="py-12 text-center text-slate-400 text-sm font-bold">Bu dönemde {activeTab.toLowerCase()} satış bulunmuyor.</td></tr>
               )}
             </tbody>
           </table>
