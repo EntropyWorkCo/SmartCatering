@@ -186,30 +186,23 @@ function RootLayoutNav({ user, role, loading }: any) {
   console.log("DEBUG - Current User Role:", role);
   console.log("DEBUG - Is Admin Mode Active:", isAdmin);
 
-  // 3. Arka Plan Dinleyicileri (GECİKTİRİLMİŞ BAŞLATMA - DONMAYI ÖNLER)
+  // 3. Arka Plan Dinleyicileri (Realtime Listeners)
   useEffect(() => {
     if (loading || !user?.id) return;
 
-    const deferredTimer = setTimeout(() => {
-      const isAndroidExpoGo = Platform.OS === 'android' && (Constants.appOwnership as any) === 'expo';
-      if (isAndroidExpoGo) {
-        console.log("⚠️ Android Expo Go: Bildirim sistemi devre dışı bırakıldı (SDK 53+ Kısıtlaması).");
-      }
+    let orderChannel: any;
+    let customerOrderChannel: any;
+    let responseListener: any;
 
-      let orderChannel: any;
-      let customerOrderChannel: any;
-      let responseListener: any;
-      let foregroundListener: any;
-
+    const setupListeners = async () => {
       try {
+        const isAndroidExpoGo = Platform.OS === 'android' && (Constants.appOwnership as any) === 'expo';
+        
         if (!isAndroidExpoGo) {
           const Notifications = require("expo-notifications");
-
-          // Uygulama AÇIKKEN bildirime tıklanınca yönlendirme
           responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
             const data = response.notification.request.content.data;
             if (data?.url) {
-              console.log('📲 Bildirim tıklandı (app açık), yönlendiriliyor:', data.url);
               if (data.screen === "order-rating" && data.orderId) {
                 router.push(`/order-rating?orderId=${data.orderId}` as any);
               } else {
@@ -217,65 +210,39 @@ function RootLayoutNav({ user, role, loading }: any) {
               }
             }
           });
-
-          // ─── KILLED STATE DEEP LINK ─────────────────────────────────────────
-          // Uygulama tamamen kapalıyken bildirime tıklandığında:
-          // Expo Notifications, uygulamayı açar ve getLastNotificationResponseAsync()
-          // ile o anki bildirimi verir.
-          Notifications.getLastNotificationResponseAsync().then((response: any) => {
-            if (response) {
-              const data = response.notification?.request?.content?.data;
-              if (data?.url) {
-                console.log('📲 Killed state bildirim tıklaması, yönlendiriliyor:', data.url);
-                // Kısa gecikme: router henüz hazır olmayabilir
-                setTimeout(() => {
-                  if (data.screen === "order-rating" && data.orderId) {
-                    router.push(`/order-rating?orderId=${data.orderId}` as any);
-                  } else {
-                    router.push(data.url as any);
-                  }
-                }, 500);
-              }
-            }
-          }).catch(() => {});
         }
 
+        // --- ADMIN: Yeni Sipariş Bildirimleri ---
         if (isAdmin) {
-          const adminChannelName = 'admin-orders-live-root';
-          const existingAdminChannel = supabase.getChannels().find(c => c.topic === `realtime:${adminChannelName}`);
-          if (existingAdminChannel) supabase.removeChannel(existingAdminChannel);
-
+          const adminChannelId = `admin-orders-${Math.random().toString(36).substring(7)}`;
           orderChannel = supabase
-            .channel(adminChannelName)
+            .channel(adminChannelId)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'adisyon' }, (payload: any) => {
               const type = payload.new?.order_type;
               if (type !== "Şimdi Ye" && type !== "MANUAL_DEBT" && type !== "MANUAL_PAYMENT") {
                 Alert.alert("Yeni Paket Siparişi! 🛎️", "Yeni bir paket siparişi düştü.");
               }
-            });
-          
-          orderChannel.subscribe();
+            })
+            .subscribe();
         }
 
-        // Müşteri: Sipariş durum güncellemelerini dinle
-        const customerChannelName = `customer-status-${user.id}`;
-        const existingCustChannel = supabase.getChannels().find(c => c.topic === `realtime:${customerChannelName}`);
-        if (existingCustChannel) supabase.removeChannel(existingCustChannel);
-
+        // --- MÜŞTERİ: Sipariş Durum Güncellemeleri ---
+        const customerChannelId = `customer-status-${user.id}-${Math.random().toString(36).substring(7)}`;
         customerOrderChannel = supabase
-          .channel(customerChannelName)
-          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'adisyon', filter: `user_id=eq.${user.id}` }, (payload: any) => {
+          .channel(customerChannelId)
+          .on('postgres_changes', { 
+            event: 'UPDATE', 
+            schema: 'public', 
+            table: 'adisyon', 
+            filter: `user_id=eq.${user.id}` 
+          }, (payload: any) => {
             const status = (payload.new?.status || '').toString().toUpperCase();
             
             if (['PREPARING', 'HAZIRLANIYOR'].includes(status)) {
               Alert.alert("Siparişiniz Alındı 👨‍🍳", "Yemeğiniz hazırlanmaya başladı. Afiyet olsun!");
-            }
-
-            if (['READY', 'HAZIR'].includes(status)) {
+            } else if (['READY', 'HAZIR'].includes(status)) {
               Alert.alert("Siparişiniz Yola Çıktı! 🛵", "Yemeğiniz yola çıktı, afiyet olsun!");
-            }
-
-            if (['COMPLETED', 'TAMAMLANDI'].includes(status)) {
+            } else if (['COMPLETED', 'TAMAMLANDI'].includes(status)) {
               Alert.alert(
                 "Siparişiniz Teslim Edildi ✅", 
                 "Afiyet olsun! Değerlendirmenizi bekliyoruz.",
@@ -288,23 +255,21 @@ function RootLayoutNav({ user, role, loading }: any) {
                 ]
               );
             }
-          });
-        
-        customerOrderChannel.subscribe();
+          })
+          .subscribe();
 
       } catch (err) {
-        console.warn("Background tasks skipped/failed:", err);
+        console.warn("Realtime setup failed:", err);
       }
+    };
 
-      return () => {
-        if (responseListener) responseListener.remove();
-        if (foregroundListener) foregroundListener.remove();
-        if (orderChannel) supabase.removeChannel(orderChannel);
-        if (customerOrderChannel) supabase.removeChannel(customerOrderChannel);
-      };
-    }, 3000);
+    setupListeners();
 
-    return () => clearTimeout(deferredTimer);
+    return () => {
+      if (responseListener) responseListener.remove();
+      if (orderChannel) supabase.removeChannel(orderChannel);
+      if (customerOrderChannel) supabase.removeChannel(customerOrderChannel);
+    };
   }, [user?.id, isAdmin, loading]);
 
   return (

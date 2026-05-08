@@ -33,16 +33,11 @@ export default function TabLayout() {
 
     fetchUnreadCount();
 
-    const channelName = `unread-msgs-${user.id}`;
+    // Çakışmaları önlemek için her seferinde benzersiz bir kanal ismi kullanalım
+    const channelId = `unread-msgs-${user.id}-${Math.random().toString(36).substring(7)}`;
     
-    // Önce varsa eski kanalı temizle (çakışmayı önlemek için)
-    const existingChannel = supabase.getChannels().find(c => c.topic === `realtime:${channelName}`);
-    if (existingChannel) {
-      supabase.removeChannel(existingChannel);
-    }
-
     const channel = supabase
-      .channel(channelName)
+      .channel(channelId)
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -50,9 +45,8 @@ export default function TabLayout() {
         filter: `user_id=eq.${user.id}` 
       }, () => {
         fetchUnreadCount();
-      });
-      
-    channel.subscribe();
+      })
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);

@@ -93,15 +93,20 @@ export default function CorporateInfoScreen() {
     useEffect(() => {
         if (!actualCompanyId) return;
 
+        // Her seferinde benzersiz bir kanal ismi oluşturarak çakışmayı önleyelim
+        const channelId = `company-updates-${actualCompanyId}-${Math.random().toString(36).substring(7)}`;
         const channel = supabase
-            .channel(`company-updates-${actualCompanyId}`)
+            .channel(channelId)
             .on(
                 "postgres_changes",
-                { event: "*", schema: "public", table: "companies" },
-                (payload: any) => {
-                    if (payload.new && payload.new.id === actualCompanyId) {
-                        loadOrders();
-                    }
+                { 
+                    event: "*", 
+                    schema: "public", 
+                    table: "companies",
+                    filter: `id=eq.${actualCompanyId}` 
+                },
+                () => {
+                    loadOrders();
                 }
             )
             .subscribe();
