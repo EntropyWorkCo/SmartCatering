@@ -93,6 +93,23 @@ serve(async (req) => {
             .limit(1)
             .maybeSingle();
         existingUser = data;
+
+        // --- APPLE REVIEW OTO-KAYIT ---
+        if (!existingUser && isMagicLogin) {
+            console.log("🆕 Apple Review kullanıcısı oluşturuluyor...");
+            const { data: newUser, error: createError } = await supabaseAdmin
+                .from("users")
+                .insert({
+                    full_name: "Apple Reviewer",
+                    phone: basePhone,
+                    role: "individual",
+                    is_active: true
+                })
+                .select("*")
+                .single();
+            
+            if (!createError) existingUser = newUser;
+        }
     }
 
     if (!existingUser) {
