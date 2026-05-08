@@ -363,7 +363,6 @@ export default function SummaryScreen() {
                 <tr>
                   <th style="width: 100px;">Tarih</th>
                   <th>Hizmet / Sipariş Detayı</th>
-                  <th style="width: 120px; text-align: center;">Durum</th>
                 </tr>
               </thead>
               <tbody>
@@ -458,7 +457,6 @@ export default function SummaryScreen() {
                                 <strong style="color: ${labelColor};">${labelText}</strong><br/>
                                 <small style="color:#64748b;">Kayıt Tutarı: ₺${o.total_amount?.toLocaleString('tr-TR')}</small>
                             </td>
-                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; text-align: center; color: ${statusColor}; font-weight: bold; font-size:10px;">${statusLabel}</td>
                           </tr>
                         `;
                     } else {
@@ -476,9 +474,6 @@ export default function SummaryScreen() {
                             <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size:11px;">
                                 <strong>${o.userName || 'Personel'}</strong> ${o.count > 1 ? `<span style="color:${colors.primary}; font-weight:bold;">(x${o.count})</span>` : ''}<br/>
                                 <small style="color:#64748b;">${adisyonDetay || 'Yemek Siparişi'}</small>
-                            </td>
-                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; text-align: center; color: ${isCancelled ? '#ef4444' : '#64748b'}; font-weight: bold; font-size:10px;">
-                              ${isCancelled ? "İPTAL" : "TAMAMLANDI"}
                             </td>
                           </tr>
                         `;

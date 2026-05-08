@@ -203,7 +203,17 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
             return acc + itemQty;
         }, 0);
 
-        const revenue = filtered.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
+        const revenue = filtered.reduce((acc: number, curr: any) => {
+            // Kurumsal ise sadece MANUEL_DEBT ciroyu oluşturur
+            if (mainTab === "KURUMSAL") {
+                if (curr.order_type === 'MANUAL_DEBT') {
+                    return acc + (curr.total_amount || 0);
+                }
+                return acc;
+            }
+            // Bireysel ise her şey cirodur
+            return acc + (curr.total_amount || 0);
+        }, 0);
 
         return { revenue, count: mealsCount, orders: filtered };
     }, [orders, mainTab, filterPeriod]);
@@ -298,8 +308,6 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
             });
 
             const rows = Object.values(groupedMap).map((o: any) => {
-                const statusLabel = getLocalizedStatus(o.status);
-                // Gruplanmış item isimleri
                 const itemDetails = o.items?.map((i: any) => i.menu_items?.name).join(', ') || 'Hizmet';
                 
                 return `
@@ -310,9 +318,6 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                         <span style="color: #64748b; font-size: 9px;">${itemDetails}</span>
                     </td>
                     <td style="padding: 6px 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px;">${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #f1f5f9; font-size: 10px; color: ${statusLabel === 'ÖDENDİ' ? "#10b981" : "#f97316"}; font-weight: bold;">
-                        ${statusLabel}
-                    </td>
                 </tr>
             `}).join('');
 
@@ -340,7 +345,6 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                                 <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">ID</th>
                                 <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">KİŞİ & SİPARİŞ DETAYI</th>
                                 <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">TARİH</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">DURUM</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -458,7 +462,11 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                     <View style={[styles.statBox, { backgroundColor: colors.infoBg, borderColor: colors.info }]}>
                         <Text style={[styles.statBoxLabel, { color: colors.info }]}>DÖNEM CİROSU</Text>
                         <Text style={styles.statBoxValue}>₺{stats.revenue.toLocaleString("tr-TR")}</Text>
-                        {mainTab === "KURUMSAL" && <Text style={{ fontSize: 9, color: colors.muted }}>Seçili tarihlerdeki tüm tüketim</Text>}
+                        {mainTab === "KURUMSAL" && (
+                            <Text style={{ fontSize: 9, color: colors.muted, marginTop: 4 }}>
+                                Kurumsal ciro, girilen manuel borçlar üzerinden hesaplanır.
+                            </Text>
+                        )}
                     </View>
                     <View style={[styles.statBox, { backgroundColor: colors.cardHighlight, borderColor: colors.primary }]}>
                         <Text style={[styles.statBoxLabel, { color: colors.primary }]}>ÖĞÜN SAYISI</Text>

@@ -254,7 +254,7 @@ export default function ProfileScreen() {
                         )}
                     </TouchableOpacity>
 
-                    {(balance !== null && balance > 0) && (
+                    {(balance !== null && balance > 0 && !profile?.is_company) && (
                         <View style={[styles.debtCard, { backgroundColor: colors.primary + '15' }]}>
                             <View>
                                 <Text style={[styles.debtLabel, { color: colors.muted }]}>GÜNCEL TOPLAM BORÇ</Text>
