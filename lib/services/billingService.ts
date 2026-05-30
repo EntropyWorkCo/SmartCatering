@@ -185,5 +185,68 @@ export const billingService = {
 
     if (error && error.code !== 'PGRST116') throw error;
     return data;
-  }
+  },
+
+  /**
+   * Admin Ay Kapanışı — Seçilen ay için tüm firmaların bekleyen
+   * siparişlerini PAID olarak işaretler.
+   * MANUAL_PAYMENT ve MANUAL_DEBT kayıtlarına dokunmaz.
+   * @returns { affectedOrders, totalAmount, affectedFirms }
+   */
+  async closeMonthAdmin(
+    year: number,
+    month: number
+  ): Promise<{ affectedOrders: number; totalAmount: number; affectedFirms: number }> {
+    // Ayın başı ve sonu (UTC)
+    const startDate = new Date(year, month - 1, 1).toISOString();
+    const endDate   = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
+
+    const CLOSED_STATUSES = '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal","COMPLETED","Tamamlandı")';
+    const EXCLUDED_TYPES  = '("MANUAL_PAYMENT","MANUAL_DEBT")';
+
+    // 1. Özet — kaç sipariş, ne kadar tutar
+    const { data: summary, error: summaryErr } = await supabase
+      .from("adisyon")
+      .select("id, total_amount, user_id")
+      .gte("created_at", startDate)
+      .lte("created_at", endDate)
+      .not("status", "in", CLOSED_STATUSES)
+      .not("order_type", "in", EXCLUDED_TYPES);
+
+    if (summaryErr) throw summaryErr;
+
+    const affectedOrders = summary?.length ?? 0;
+    const totalAmount    = summary?.reduce((s, o) => s + (o.total_amount || 0), 0) ?? 0;
+
+    // Kaç farklı firma etkileniyor (user_id bazında companies sorgusu)
+    const uniqueUserIds = [...new Set((summary || []).map((o) => o.user_id))];
+    const { data: companyData } = await supabase
+      .from("companies")
+      .select("id")
+      .in("user_id", uniqueUserIds.length > 0 ? uniqueUserIds : ["__none__"]);
+    const affectedFirms = companyData?.length ?? 0;
+
+    if (affectedOrders === 0) return { affectedOrders: 0, totalAmount: 0, affectedFirms: 0 };
+
+    // 2. Güncelle — PAID yap
+    const { error: updateErr } = await supabase
+      .from("adisyon")
+      .update({ status: "PAID", paid_at: new Date().toISOString() })
+      .gte("created_at", startDate)
+      .lte("created_at", endDate)
+      .not("status", "in", CLOSED_STATUSES)
+      .not("order_type", "in", EXCLUDED_TYPES);
+
+    if (updateErr) throw updateErr;
+
+    // 3. Tüm etkilenen firmaların bakiyesini sıfırla
+    if (companyData && companyData.length > 0) {
+      await supabase
+        .from("companies")
+        .update({ balance: 0, last_debt_update: new Date().toISOString() })
+        .in("id", companyData.map((c) => c.id));
+    }
+
+    return { affectedOrders, totalAmount, affectedFirms };
+  },
 };
