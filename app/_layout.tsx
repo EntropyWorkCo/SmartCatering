@@ -21,12 +21,16 @@ import { NotificationRegister } from "@/components/NotificationRegister";
 import { useAuthStore } from "@/lib/store/authStore";
 import { supabase } from "@/lib/supabase";
 
-import * as Notifications from "expo-notifications";
+
 
 // ─── GLOBAL BİLDİRİM HANDLER ───
 // Uygulama AÇIKKEN gelen bildirimlerin banner olarak düşmesini sağlar.
-if (Platform.OS !== 'android' || Constants.appOwnership !== 'expo') {
+// Expo Go SDK 53+ artık expo-notifications'ı desteklemiyor.
+// Statik import yerine guard içinde lazy require kullanıyoruz.
+const isExpoGo = Constants.appOwnership === 'expo';
+if (!isExpoGo) {
   try {
+    const Notifications = require('expo-notifications');
     Notifications.setNotificationHandler({
       handleNotification: async () => {
         const base: any = {
@@ -34,7 +38,6 @@ if (Platform.OS !== 'android' || Constants.appOwnership !== 'expo') {
           shouldPlaySound: true,
           shouldSetBadge: true,
         };
-        // iOS 15+ ek alanlar — eski SDK versiyonlarında yok sayılır
         if (Platform.OS === 'ios') {
           base.shouldShowBanner = true;
           base.shouldShowList = true;
@@ -43,7 +46,7 @@ if (Platform.OS !== 'android' || Constants.appOwnership !== 'expo') {
       },
     });
   } catch (err) {
-    console.warn("Notification handler could not be initialized:", err);
+    console.warn('Notification handler could not be initialized:', err);
   }
 }
 
