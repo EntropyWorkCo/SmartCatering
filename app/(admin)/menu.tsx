@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useMenu } from "@/lib/hooks/useMenu";
 import { menuService } from "@/lib/services/menuService";
@@ -267,7 +266,6 @@ export default function AdminMenuAdd() {
                     <Text style={styles.title}>Menü Yönetimi</Text>
                     <Text style={styles.subtitle}>GÜNLÜK MENÜ & FİYAT TABELASI</Text>
                 </View>
-                <ThemeSwitcher />
             </View>
 
             <View style={{ marginBottom: 20 }}>

@@ -120,9 +120,55 @@ export default function ProfileScreen() {
 
         if (!result.canceled) {
             const uri = result.assets[0].uri;
+            // Anlık önizleme için hemen göster
             setPhotoUrl(uri);
-            if (user?.id) {
-                await AsyncStorage.setItem(`profile_photo_${user.id}`, uri);
+
+            if (!user?.id) return;
+
+            // 1. AsyncStorage'a kaydet (hızlı yerel erişim)
+            await AsyncStorage.setItem(`profile_photo_${user.id}`, uri);
+
+            // 2. Supabase Storage'a yükle → kalıcı URL al → DB'ye kaydet
+            try {
+                const response = await fetch(uri);
+                const blob = await response.blob();
+                const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
+                const filePath = `${user.id}/avatar.${ext}`;
+
+                const { error: uploadError } = await supabase.storage
+                    .from('avatars')
+                    .upload(filePath, blob, {
+                        upsert: true,
+                        contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+                    });
+
+                if (uploadError) {
+                    console.warn('Fotoğraf yükleme hatası (yerel kayıt geçerli):', uploadError.message);
+                    return;
+                }
+
+                const { data: urlData } = supabase.storage
+                    .from('avatars')
+                    .getPublicUrl(filePath);
+
+                const publicUrl = urlData?.publicUrl;
+                if (!publicUrl) return;
+
+                // Cache-buster ekle (CDN'den taze çeksin)
+                const finalUrl = `${publicUrl}?t=${Date.now()}`;
+
+                // DB'ye yaz
+                await supabase
+                    .from('users')
+                    .update({ avatar_url: finalUrl } as any)
+                    .eq('id', user.id);
+
+                // AsyncStorage'ı kalıcı URL ile güncelle
+                await AsyncStorage.setItem(`profile_photo_${user.id}`, finalUrl);
+                setPhotoUrl(finalUrl);
+            } catch (storageErr) {
+                // Storage çalışmazsa yerel fotoğraf gösterilmeye devam eder
+                console.warn('Storage hatası (kritik değil):', storageErr);
             }
         }
     };

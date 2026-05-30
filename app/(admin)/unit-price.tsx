@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
@@ -147,7 +146,6 @@ export default function UnitPriceFormScreen() {
                     <Text style={styles.title}>Birim Fiyatlar</Text>
                     <Text style={styles.subtitle}>KATEGORİ TABANLI FİYATGÜNCELLEME</Text>
                 </View>
-                <ThemeSwitcher />
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

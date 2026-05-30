@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher"; //tema değiştirme butonu
 import Colors from "@/constants/Colors"; // tema renklerini tutan dosya
 import { useResolvedTheme } from "@/lib/store/themeStore"; // aktif temayı döndürür. (light-dark)
 import { supabase } from "@/lib/supabase"; // supabase client. auth,database,storage işlemleri yapılır
@@ -87,7 +86,6 @@ export default function AdminChangeCode() {
                 <View style={{ flex: 1 }}>
                     <Text style={styles.title}>Kodu Değiştir</Text>
                 </View>
-                <ThemeSwitcher />
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

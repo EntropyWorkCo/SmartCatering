@@ -10,7 +10,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.entropywork.smartcatering",
-      "buildNumber": "5"
+      "buildNumber": "5",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "googleServicesFile": "./google-services.json",
@@ -35,7 +36,16 @@
           "cameraPermission": "Menüye yemek fotoğrafı çekmek için kameranıza erişim izni gereklidir."
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#f59e0b",
+          "defaultChannel": "default",
+          "sounds": [],
+          "mode": "production"
+        }
+      ],
       "@react-native-community/datetimepicker",
       "expo-secure-store"
     ],

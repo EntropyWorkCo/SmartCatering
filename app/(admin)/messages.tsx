@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -178,7 +177,6 @@ export default function AdminMessages() {
                     <Text style={styles.title}>Gelen Mesajlar</Text>
                     <Text style={styles.subtitle}>Sipariş notları ve müşteri talepleri</Text>
                 </View>
-                <ThemeSwitcher />
             </View>
 
             <View style={styles.tabContainer}>

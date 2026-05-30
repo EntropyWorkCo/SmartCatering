@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher"; // tema değiştirme butonu
 import Colors from "@/constants/Colors"; // renkler
 import { useResolvedTheme } from "@/lib/store/themeStore"; // aktif temayı döndürür. (light-dark)
 import { supabase } from "@/lib/supabase"; // supabase client. auth,database,storage işlemleri yapılır
@@ -225,7 +224,6 @@ export default function AdminCustomers() {
                     <Text style={styles.title}>Müşteri Listesi</Text>
                     <Text style={styles.subtitle}>Kayıtlı Tüm Kullanıcılar</Text>
                 </View>
-                <ThemeSwitcher />
             </View>
 
             <View style={styles.tabContainer}>

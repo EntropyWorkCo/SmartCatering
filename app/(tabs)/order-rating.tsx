@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -187,7 +186,6 @@ export default function OrderRatingScreen() {
                     <View style={{ flex: 1 }}>
                         <Text style={styles.title}>Değerlendir</Text>
                     </View>
-                    <ThemeSwitcher />
                 </View>
 
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

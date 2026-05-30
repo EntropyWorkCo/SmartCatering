@@ -187,14 +187,28 @@ export const userService = {
 
     if (userError) throw userError;
 
-    // 2. Şirket bilgisini sil (veya tutmak istersen silme, ama genellikle temizlenir)
-    const { error: companyError } = await supabase
+    // 2. Şirket kaydını SOFT DELETE: Gerçek silme YOK.
+    // company_name başına [ARŞİV] eklenerek işaretlenir.
+    // Böylece geçmiş adisyon/borç kayıtları company_id referansını korur, veri kaybolmaz.
+    const { data: existingCompany } = await supabase
       .from("companies")
-      .delete()
-      .eq("user_id", userId);
+      .select("id, company_name")
+      .eq("user_id", userId)
+      .maybeSingle();
 
-    if (companyError) {
-      console.error("Şirket silinirken hata (downgrade):", companyError);
+    if (existingCompany) {
+      const archivedName = existingCompany.company_name?.startsWith('[ARŞİV]')
+        ? existingCompany.company_name
+        : `[ARŞİV] ${existingCompany.company_name}`;
+
+      const { error: archiveError } = await supabase
+        .from("companies")
+        .update({ company_name: archivedName })
+        .eq("id", existingCompany.id);
+
+      if (archiveError) {
+        console.error("Şirket arşivlenirken hata (downgrade):", archiveError);
+      }
     }
   },
 

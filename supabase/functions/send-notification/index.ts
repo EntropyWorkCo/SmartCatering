@@ -5,12 +5,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
 interface NotificationPayload {
-  type: "NEW_ORDER" | "ORDER_STATUS" | "RATING_REQUEST" | "DAILY_MENU";
+  type: "NEW_ORDER" | "ORDER_STATUS" | "RATING_REQUEST" | "DAILY_MENU" | "MEAL_REMINDER";
   title: string;
   body: string;
   data?: Record<string, any>;
   // For targeted notifications
   userId?: string;
+  // For multiple targeted users
+  userIds?: string[];
   // For admin-only notifications
   adminOnly?: boolean;
   // For broadcast (all users)
@@ -86,11 +88,28 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const payload: NotificationPayload & { excludeUserId?: string } = await req.json();
-    const { type, title, body, data = {}, userId, adminOnly, broadcast, excludeUserId } = payload;
+    const { type, title, body, data = {}, userId, userIds, adminOnly, broadcast, excludeUserId } = payload;
 
     let tokens: string[] = [];
 
-    if (adminOnly) {
+    if (userIds && userIds.length > 0) {
+      // Birden fazla belirli kullanıcıya gönder
+      let query = supabase
+        .from("users")
+        .select("push_token")
+        .in("id", userIds)
+        .not("push_token", "is", null);
+
+      if (excludeUserId) {
+        query = query.neq("id", excludeUserId);
+      }
+
+      const { data: users, error } = await query;
+      if (error) throw error;
+      tokens = (users || [])
+        .map((u: any) => u.push_token)
+        .filter((t: any): t is string => Boolean(t && t.trim()));
+    } else if (adminOnly) {
       // Fetch admin tokens only
       let query = supabase
         .from("users")

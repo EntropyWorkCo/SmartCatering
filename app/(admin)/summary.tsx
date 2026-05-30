@@ -1,8 +1,8 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { adisyonService } from "@/lib/services/adisyonService";
 import { billingService } from "@/lib/services/billingService";
+import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -200,6 +200,44 @@ export default function SummaryScreen() {
     () => groupedAccounts.reduce((acc, curr) => acc + (curr.isCorporate ? curr.manualDebt : curr.total), 0),
     [groupedAccounts]
   );
+
+  // ── Ay Kapanışı (Admin) ─────────────────────────────────────
+  const [closingMonth, setClosingMonth] = useState(false);
+
+  const handleCloseMonthAdmin = async (account: any) => {
+    if (!account.companyId) {
+      Alert.alert('Hata', 'Bu hesap için firma ID bulunamadı.');
+      return;
+    }
+    const now = new Date();
+    const monthName = now.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
+
+    Alert.alert(
+      'Ay Kapanışını Onayla',
+      `${account.displayName} — ${monthName}\n\nBu işlem:\n• Tüm ödenmemiş siparişleri "Ödendi" işaretler\n• Şirket bakiyesini sıfırlar\n• Geri alınamaz`,
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Onayla',
+          style: 'destructive',
+          onPress: async () => {
+            setClosingMonth(true);
+            try {
+              const empList = await userService.getCompanyEmployees(account.companyId);
+              const empIds = empList.map((e: any) => e.id).filter(Boolean);
+              await billingService.closeMonth(account.companyId, account.userId, empIds);
+              if (fetchOrders) await fetchOrders();
+              Alert.alert('✅ Tamamlandı', `${account.displayName} — ${monthName} ay kapanışı tamamlandı.`);
+            } catch (err: any) {
+              Alert.alert('Hata', 'Ay kapanışı yapılamadı: ' + (err.message || 'Bilinmeyen hata'));
+            } finally {
+              setClosingMonth(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const handleUpdateDebt = async () => {
     if (!selectedCompanyId || !newDebtAmount) return;
@@ -526,7 +564,6 @@ export default function SummaryScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Özet & Borçlar</Text>
         </View>
-        <ThemeSwitcher />
       </View>
 
       <View style={styles.tabContainer}>
@@ -600,8 +637,8 @@ export default function SummaryScreen() {
                     <Text style={styles.primaryBtnText}>Borç Gir</Text>
                   </TouchableOpacity>
                   
-                  <TouchableOpacity 
-                     style={[styles.primaryBtn, { backgroundColor: "#FF9800", marginLeft: 8 }]} 
+                  <TouchableOpacity
+                     style={[styles.primaryBtn, { backgroundColor: "#FF9800", marginLeft: 8 }]}
                      onPress={() => {
                        setSelectedAccountForPayment(account);
                        setPaymentAmount("");
@@ -610,6 +647,21 @@ export default function SummaryScreen() {
                   >
                     <Text style={styles.primaryBtnText}>Kısmi Ödeme</Text>
                   </TouchableOpacity>
+
+                  {/* Ay Kapanışı butonu — sadece kurumsal hesaplarda */}
+                  {account.isCorporate && (
+                    <TouchableOpacity
+                      style={[styles.primaryBtn, { backgroundColor: '#6366f1', marginLeft: 8 }]}
+                      onPress={() => handleCloseMonthAdmin(account)}
+                      disabled={closingMonth}
+                    >
+                      {closingMonth ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={styles.primaryBtnText}>Ay Kapat</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
 
                   {(account.manualDebt > 0) && (
                     <TouchableOpacity 

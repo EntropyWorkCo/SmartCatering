@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
@@ -41,7 +40,6 @@ export default function AdminSettings() {
                 <View style={{ flex: 1 }}>
                     <Text style={styles.title}>Ayarlar</Text>
                 </View>
-                <ThemeSwitcher />
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

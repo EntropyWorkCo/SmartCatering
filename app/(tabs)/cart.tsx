@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useCartStore } from "@/lib/store/cartStore";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -161,7 +160,6 @@ export default function CartScreen() {
                     <Text style={styles.title}>Sepetim</Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <ThemeSwitcher />
                     {items.length > 0 && (
                         <TouchableOpacity onPress={handleClearCart} style={styles.clearBtn}>
                             <MaterialIcons name="delete-sweep" size={24} color={colors.danger} />

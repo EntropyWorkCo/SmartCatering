@@ -20,7 +20,6 @@ import { useAuthStore } from "../../lib/store/authStore";
 import { userService } from "../../lib/services/userService";
 import { supabase } from "../../lib/supabase";
 
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 
@@ -118,7 +117,6 @@ export default function AdminLoginScreen() {
             <MaterialIcons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
 
-          <ThemeSwitcher />
         </View>
 
         <View style={styles.content}>

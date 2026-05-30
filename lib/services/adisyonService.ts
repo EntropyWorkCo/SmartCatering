@@ -52,26 +52,112 @@ export const adisyonService = {
     // 3. Bildirim Tetikleyicileri
     try {
         const { notificationService } = require("./notificationService");
-        
-        // - Admin'e Yeni Paket Servisi Bildirimi (Sadece "Sipariş Ver" / paket modunda)
-        // NOT: "Şimdi Ye" siparişleri restoran içi olduğundan admin'e bildirim gitmez
-        if (orderType !== "Şimdi Ye") {
+
+        // Sipariş veren kullanıcının bilgilerini ve şirket bağlantısını çek
+        const { data: userData } = await supabase
+            .from("users")
+            .select("full_name, company_id")
+            .eq("id", userId)
+            .maybeSingle();
+
+        const personName = userData?.full_name?.split(' ')[0] || 'Bir çalışan';
+        const itemSummary = items.map(i => `${i.quantity}x ${i.name}`).join(', ');
+
+        // Şirket sahibini bul (çalışanın company_id'si varsa)
+        let companyOwnerId: string | null = null;
+        if (userData?.company_id) {
+            const { data: company } = await supabase
+                .from("companies")
+                .select("user_id")
+                .eq("id", userData.company_id)
+                .maybeSingle();
+            companyOwnerId = company?.user_id || null;
+        } else {
+            // Kullanıcı bizzat firma sahibi olabilir, kendi şirketini kontrol et
+            const { data: ownCompany } = await supabase
+                .from("companies")
+                .select("user_id")
+                .eq("user_id", userId)
+                .maybeSingle();
+            // Firma sahibiyse kendine bildirim gitmesin, null bırak
+            if (!ownCompany) companyOwnerId = null;
+        }
+
+        // ── Firma sahibine bildirim (her iki order_type için) ──
+        // Kendi siparişini veren firma sahibine gitmesin
+        if (companyOwnerId && companyOwnerId !== userId) {
             (async () => {
                 try {
-                    const { data: userData } = await supabase
-                        .from("users")
-                        .select("full_name")
-                        .eq("id", userId)
-                        .single();
+                    await notificationService.sendViaEdgeFunction({
+                        type: "NEW_ORDER",
+                        title: `🍽️ ${personName} yemek bildirimi yaptı`,
+                        body: itemSummary || "Yemek siparişi verildi",
+                        data: { screen: "corporate-info", tab: "KONTROL" },
+                        userId: companyOwnerId,
+                    });
+                } catch (err) {
+                    console.error("Firma sahibi bildirimi hatası:", err);
+                }
+            })();
+        }
 
-                    // Edge Function üzerinden gönder — admin uygulaması kapalı olsa da gelir
+        if (orderType === "Şimdi Ye") {
+            // ── BACKEND KUYRUK: 15 dakika sonra değerlendirme bildirimi ──────
+            // Yerel timer (scheduleNotificationAsync) kullanılmıyor; uygulama
+            // kapalı olsa da bildirim iletilsin diye Supabase tarafında
+            // pending_rating_notifications tablosuna kayıt ekliyoruz.
+            // pg_cron her dakika bu tabloyu tarar ve zamanı gelen bildirimleri
+            // process-rating-queue Edge Function aracılığıyla gönderir.
+            //
+            // ADMIN FİLTRESİ: role === 'admin' olan kullanıcılar bu kuyruğa
+            // hiçbir zaman eklenmez — değerlendirme bildirimi almaz.
+            (async () => {
+                try {
+                    // Kullanıcının rolünü kontrol et
+                    const { data: userRoleData } = await supabase
+                        .from("users")
+                        .select("role")
+                        .eq("id", userId)
+                        .maybeSingle();
+
+                    // ── KESİN İSTİSNA: Admin kullanıcısına bildirim GİTMEZ ──
+                    if (userRoleData?.role === "admin") {
+                        console.log("[adisyonService] Admin kullanıcısı — değerlendirme kuyruğuna eklenmedi.");
+                        return;
+                    }
+
+                    // 15 dakika sonrasını hesapla
+                    const scheduledFor = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+                    const { error: queueError } = await supabase
+                        .from("pending_rating_notifications")
+                        .insert({
+                            user_id:       userId,
+                            order_id:      adisyon.id,
+                            scheduled_for: scheduledFor,
+                            status:        "pending",
+                        });
+
+                    if (queueError) {
+                        console.warn("[adisyonService] Bildirim kuyruğuna eklenemedi:", queueError.message);
+                    } else {
+                        console.log(`[adisyonService] Değerlendirme bildirimi kuyruğa eklendi. Gönderilecek: ${scheduledFor}`);
+                    }
+                } catch (err) {
+                    console.warn("[adisyonService] Şimdi Ye kuyruk hatası (kritik değil):", err);
+                }
+            })();
+        } else {
+            // "Sipariş Ver" → admin'e de bildirim gönder
+            (async () => {
+                try {
                     await notificationService.sendViaEdgeFunction({
                         type: "NEW_ORDER",
                         title: "Yeni Paket Siparişi! 🛎️",
                         body: `${userData?.full_name || "Bir müşteri"} yeni bir paket siparişi verdi.`,
                         data: { url: "/(admin)/dashboard", screen: "dashboard" },
                         adminOnly: true,
-                        excludeUserId: userId, // Siparişi veren kişiye bildirim gitmesin (admin hesabı olsa bile)
+                        excludeUserId: userId,
                     });
                 } catch (err) {
                     console.error("Admin bildirimi hatası:", err);

@@ -132,6 +132,48 @@ export const billingService = {
   },
 
   /**
+   * Ay kapanışı: Tüm çalışanların o aya ait siparişlerini PAID yapar,
+   * companies.balance = 0 sıfırlar ve kapanış notu düşer.
+   */
+  async closeMonth(companyId: string, companyUserId: string, employeeIds: string[]) {
+    const now = new Date();
+    const monthName = now.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
+    const allUserIds = [...employeeIds, companyUserId].filter(Boolean);
+
+    if (allUserIds.length === 0) return;
+
+    // 1. O ay ve öncesine ait tüm bekleyen siparişleri PAID yap
+    // Manuel borç/ödeme kayıtlarına (MANUAL_DEBT/MANUAL_PAYMENT) dokunma
+    const { error: updateError } = await supabase
+      .from("adisyon")
+      .update({ status: "PAID", paid_at: now.toISOString() })
+      .in("user_id", allUserIds)
+      .not("status", "in", '("CANCELLED","İptal","PAID","Ödendi","ÖDENDİ")')
+      .not("order_type", "in", '("MANUAL_PAYMENT","MANUAL_DEBT")');
+
+    if (updateError) throw updateError;
+
+    // 2. Şirket bakiyesini sıfırla
+    await supabase
+      .from("companies")
+      .update({ balance: 0, last_debt_update: now.toISOString() })
+      .eq("id", companyId);
+
+    // 3. Kapanış kaydı düş (geçmişte görünsün diye MANUAL_DEBT ile)
+    await supabase
+      .from("adisyon")
+      .insert({
+        user_id: companyUserId,
+        total_amount: 0,
+        status: "PAID",
+        order_type: "MANUAL_DEBT",
+        note: `✅ Ay Kapanışı Onaylandı: ${monthName}`,
+        created_at: now.toISOString(),
+        paid_at: now.toISOString(),
+      });
+  },
+
+  /**
    * Belirli bir kullanıcının (şirketin) güncel bakiyesini çeker.
    */
   async getCompanyBalance(userId: string) {

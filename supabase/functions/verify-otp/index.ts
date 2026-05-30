@@ -32,7 +32,14 @@ serve(async (req) => {
     }
 
     // --- APPLE REVIEW MAGIC CODE BYPASS START ---
-    const appleTestNumbers = ["+905551000001", "+905551000002", "apple-admin@smartcatering.com", "admin@meydan.com"];
+    const appleTestUsers: Record<string, string> = {
+      "+905551000001": "individual",   // Bireysel
+      "+905551000002": "owner",        // Firma Sahibi
+      "+905551000003": "employee",     // Firma Çalışanı
+      "apple-admin@smartcatering.com": "admin",
+      "admin@meydan.com": "admin"
+    };
+    const appleTestNumbers = Object.keys(appleTestUsers);
     const magicCodes = ["123456", "1234", "992288"];
     let isMagicLogin = false;
 
@@ -72,7 +79,9 @@ serve(async (req) => {
 
     // 2. Normalize phone and check if user exists in public.users
     let existingUser;
-    if (phone === "apple-admin@smartcatering.com" || phone === "admin@meydan.com") {
+    const testRole = appleTestUsers[phone];
+    
+    if (testRole === "admin") {
         // Test ve Ana Admin için sistemdeki herhangi bir admini alıyoruz
         const { data } = await supabaseAdmin
             .from("users")
@@ -96,13 +105,13 @@ serve(async (req) => {
 
         // --- APPLE REVIEW OTO-KAYIT ---
         if (!existingUser && isMagicLogin) {
-            console.log("🆕 Apple Review kullanıcısı oluşturuluyor...");
+            console.log(`🆕 Apple Review kullanıcısı oluşturuluyor (Rol: ${testRole || 'individual'})...`);
             const { data: newUser, error: createError } = await supabaseAdmin
                 .from("users")
                 .insert({
-                    full_name: "Apple Reviewer",
+                    full_name: `Apple Reviewer (${testRole || 'individual'})`,
                     phone: basePhone,
-                    role: "individual",
+                    role: testRole || "individual",
                     is_active: true
                 })
                 .select("*")

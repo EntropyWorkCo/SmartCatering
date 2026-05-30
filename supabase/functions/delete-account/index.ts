@@ -82,9 +82,22 @@ serve(async (req) => {
        }
 
        if (company) {
-          // Arşivle
-          await supabaseAdmin.from('adisyon').update({ company_id: null, note: '[ARŞİV] Şirket Silindi' }).eq('company_id', company.id);
-          await supabaseAdmin.from('companies').delete().eq('id', company.id);
+          // Şirketi gerçekten silme — company_name'e [ARŞİV] ekleyerek soft delete yap.
+          // Böylece geçmiş adisyon kayıtları company_id referansını korur.
+          const { data: companyRow } = await supabaseAdmin
+            .from('companies')
+            .select('company_name')
+            .eq('id', company.id)
+            .maybeSingle();
+
+          const archivedName = companyRow?.company_name?.startsWith('[ARŞİV]')
+            ? companyRow.company_name
+            : `[ARŞİV] ${companyRow?.company_name || 'Silinmiş Firma'}`;
+
+          await supabaseAdmin
+            .from('companies')
+            .update({ company_name: archivedName })
+            .eq('id', company.id);
        }
     }
 

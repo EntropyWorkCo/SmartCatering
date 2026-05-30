@@ -1,5 +1,4 @@
 // Cache buster: forcing file re-evaluation
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useCartStore } from "@/lib/store/cartStore";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -230,7 +229,6 @@ export default function MenuScreen() {
           </View>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <ThemeSwitcher />
           <TouchableOpacity style={styles.cartButton} onPress={() => {
             if (totalCartCount > 0) router.push("/(tabs)/cart");
             else Alert.alert("Sepet Boş", "Sepetinizde henüz ürün bulunmuyor.");

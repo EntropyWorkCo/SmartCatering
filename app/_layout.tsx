@@ -26,15 +26,25 @@ import * as Notifications from "expo-notifications";
 // ─── GLOBAL BİLDİRİM HANDLER ───
 // Uygulama AÇIKKEN gelen bildirimlerin banner olarak düşmesini sağlar.
 if (Platform.OS !== 'android' || Constants.appOwnership !== 'expo') {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowList: true,
-      shouldShowBanner: true,
-    }),
-  });
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => {
+        const base: any = {
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+        };
+        // iOS 15+ ek alanlar — eski SDK versiyonlarında yok sayılır
+        if (Platform.OS === 'ios') {
+          base.shouldShowBanner = true;
+          base.shouldShowList = true;
+        }
+        return base;
+      },
+    });
+  } catch (err) {
+    console.warn("Notification handler could not be initialized:", err);
+  }
 }
 
 export { ErrorBoundary } from "expo-router";
@@ -48,7 +58,11 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (error) throw error;
+    if (error) {
+      console.error("Critical: Font loading failed:", error);
+      // Uygulamanın tamamen çökmesini engellemek için sadece hata basıyoruz, 
+      // sistem fontları ile devam etmesine izin veriyoruz.
+    }
   }, [error]);
 
   return <RootLayoutNavWrapper loaded={loaded} />;
@@ -271,6 +285,97 @@ function RootLayoutNav({ user, role, loading }: any) {
       if (customerOrderChannel) supabase.removeChannel(customerOrderChannel);
     };
   }, [user?.id, isAdmin, loading]);
+
+  // Firma sahibi için arka planda günlük yemek bildirimi kontrolü
+  useEffect(() => {
+    if (loading || !user?.id || role !== 'owner') return;
+
+    const runDailyMealCheck = async () => {
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const { notificationService } = require('@/lib/services/notificationService');
+        const { userService } = require('@/lib/services/userService');
+
+        const today = new Date().toISOString().split('T')[0];
+        const hour = new Date().getHours();
+
+        // 13:00-15:00 (çalışan hatırlatma) veya 16:00-20:00 (firma sahibi özet) değilse çalıştırma
+        if (!((hour >= 13 && hour < 15) || (hour >= 16 && hour < 20))) return;
+
+        const reminderKey = `meal_reminder_sent_${today}`;
+        const summaryKey  = `meal_summary_sent_${today}`;
+        const reminderSent = await AsyncStorage.getItem(reminderKey);
+        const summarySent  = await AsyncStorage.getItem(summaryKey);
+
+        // İkisi de gönderildiyse çalışma
+        if (reminderSent && summarySent) return;
+
+        // Çalışanları ve bugünkü siparişleri çek
+        const { data: companyRow } = await supabase
+          .from('companies').select('id').eq('user_id', user.id).maybeSingle();
+        if (!companyRow) return;
+
+        const allEmps = await userService.getCompanyEmployees(companyRow.id);
+        const everyone = [
+          { id: user.id },
+          ...allEmps
+        ].filter((e: any) => e.id);
+
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        const { data: todayOrders } = await supabase
+          .from('adisyon')
+          .select('user_id')
+          .in('user_id', everyone.map((e: any) => e.id))
+          .not('order_type', 'in', '("MANUAL_DEBT","MANUAL_PAYMENT")')
+          .not('status', 'in', '("CANCELLED","İptal")')
+          .gte('created_at', todayStart.toISOString());
+
+        const doneIds = new Set((todayOrders || []).map((o: any) => o.user_id));
+        const notDoneIds = everyone
+          .filter((e: any) => !doneIds.has(e.id) && e.id !== user.id)
+          .map((e: any) => e.id);
+        const doneEmps = allEmps.filter((e: any) => doneIds.has(e.id));
+
+        // Sabah: yapmayanlara push
+        // 13:00–15:00: yapmayanlara hatırlatma push
+        if (!reminderSent && hour >= 13 && hour < 15 && notDoneIds.length > 0) {
+          await notificationService.sendViaEdgeFunction({
+            type: 'MEAL_REMINDER',
+            title: '🍽️ Bugün yemek yediniz mi?',
+            body: 'Bugün henüz yemek kaydı yapılmadı. Sipariş vermek için uygulamayı açın.',
+            data: { screen: 'home' },
+            userIds: notDoneIds,
+          });
+          await AsyncStorage.setItem(reminderKey, 'true');
+          console.log(`[Arka plan] Sabah hatırlatması → ${notDoneIds.length} kişi`);
+        }
+
+        // Akşam: firma sahibine özet push
+        if (!summarySent && hour >= 16 && hour < 20) {
+          const names = doneEmps.map((e: any) => e.full_name?.split(' ')[0]).filter(Boolean);
+          const body = names.length > 0
+            ? `${names.join(', ')} bugün yemek yedi. (${doneEmps.length}/${allEmps.length} çalışan)`
+            : 'Bugün hiçbir çalışan yemek bildirimi yapmadı.';
+
+          await notificationService.sendViaEdgeFunction({
+            type: 'MEAL_REMINDER',
+            title: '📊 Günlük Yemek Özeti',
+            body,
+            data: { screen: 'corporate-info' },
+            userId: user.id,
+          });
+          await AsyncStorage.setItem(summaryKey, 'true');
+          console.log(`[Arka plan] Akşam özeti → firma sahibine`);
+        }
+      } catch (e) {
+        console.warn('[Arka plan] Günlük yemek kontrolü hatası:', e);
+      }
+    };
+
+    runDailyMealCheck();
+  }, [user?.id, role, loading]);
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>

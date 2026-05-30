@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -62,11 +61,7 @@ export default function TabLayout() {
           headerStyle: { backgroundColor: colors.background, shadowColor: 'transparent', elevation: 0 },
           headerTintColor: colors.text,
           headerTitleStyle: { fontWeight: 'bold' },
-          headerRight: () => (
-            <View style={{ marginRight: 16 }}>
-              <ThemeSwitcher />
-            </View>
-          )
+          headerRight: () => null
         }}
       >
         {/* Index (Yönlendirici) - Tab Bar'da görünmesin diye href: null yapıyoruz */}

@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -78,7 +77,6 @@ export default function AdminDashboard() {
           <Text style={styles.title}>Canlı Siparişler</Text>
           <Text style={styles.subtitle}>SADECE AKTİF PAKET SİPARİŞLERİ</Text>
         </View>
-        <ThemeSwitcher />
       </View>
 
       <View style={styles.quickActions}>

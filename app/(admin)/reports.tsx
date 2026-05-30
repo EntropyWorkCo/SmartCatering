@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -98,7 +97,6 @@ export default function AdminReports() {
                 <View style={{ flex: 1 }}>
                     <Text style={styles.title}>Raporlar & Analiz</Text>
                 </View>
-                <ThemeSwitcher />
             </View>
 
             <Text style={styles.sectionHeader}>SİSTEM ÖZETLERİ</Text>

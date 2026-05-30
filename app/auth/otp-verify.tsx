@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -139,16 +138,20 @@ export default function OtpVerifyScreen() {
                 }
 
                 // --- ÖNEMLİ: ROL TESPİTİ VE ÖNCEDEN KAYIT ---
-                const isActuallyOwner = existingUser?.role === 'owner' || existingUser?.role === 'corporate';
-                const isActuallyEmployee = existingUser?.company_id && (existingUser?.role === 'customer' || existingUser?.role === 'employee');
+                const roleFromDB = (existingUser?.role || '').toLowerCase();
+                const isActuallyOwner = ['owner', 'corporate', 'firma_sahibi'].includes(roleFromDB);
+                const isActuallyEmployee = (existingUser?.company_id || roleFromDB === 'employee' || roleFromDB === 'staff' || roleFromDB === 'firma_calisan');
+
+                // Apple Review Bypass: Test numaraları için rol uyuşmazlığı hatasını engelleme.
+                const isAppleTestNumber = ["+905551000001", "+905551000002", "+905551000003"].includes(phone);
 
                 // Yetki kontrolleri
-                if (role === 'owner' && !isActuallyOwner) {
+                if (role === 'owner' && !isActuallyOwner && !isAppleTestNumber) {
                     Alert.alert("Hata", "Bu numara bir firma sahibi hesabına ait değildir.");
                     setLoading(false); return;
                 }
                 
-                if (role === 'individual' && (isActuallyOwner || isActuallyEmployee)) {
+                if (role === 'individual' && (isActuallyOwner || isActuallyEmployee) && !isAppleTestNumber) {
                     Alert.alert("Hata", "Bu numara kurumsal hesaba aittir. Lütfen ilgili sekmeden giriş yapın.");
                     setLoading(false); return;
                 }
@@ -215,7 +218,6 @@ export default function OtpVerifyScreen() {
                         >
                             <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                         </TouchableOpacity>
-                        <ThemeSwitcher />
                     </View>
 
                     <View style={{ marginBottom: 40, alignItems: 'center' }}>

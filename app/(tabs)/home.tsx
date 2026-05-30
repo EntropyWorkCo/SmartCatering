@@ -7,7 +7,6 @@ import React, { useEffect, useMemo, useRef } from "react";
 import { Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -222,13 +221,25 @@ export default function HomeScreen() {
 
   const [localPhoto, setLocalPhoto] = React.useState<string | null>(null);
 
-  useEffect(() => {
-    if (user?.id) {
-      AsyncStorage.getItem(`profile_photo_${user.id}`).then(photo => {
-        if (photo) setLocalPhoto(photo);
-      });
-    }
-  }, [user?.id]);
+  // Profile'den dönünce veya ilk yüklemede fotoğrafı tazele
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!user?.id) return;
+      (async () => {
+        // Önce AsyncStorage'daki cache'e bak
+        const cached = await AsyncStorage.getItem(`profile_photo_${user.id}`);
+        if (cached) {
+          setLocalPhoto(cached);
+          return;
+        }
+        // Cache yoksa DB'deki avatar_url'e bak ve cache'e al
+        if (profile?.avatar_url) {
+          await AsyncStorage.setItem(`profile_photo_${user.id}`, profile.avatar_url);
+          setLocalPhoto(profile.avatar_url);
+        }
+      })();
+    }, [user?.id, profile?.avatar_url])
+  );
 
   const firstName = profile?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || "Misafir";
   const profileImage = localPhoto || profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/png?seed=${firstName}`;
@@ -377,7 +388,6 @@ export default function HomeScreen() {
             <Text style={styles.subtitleText}>BUGÜN NE YEMEK İSTERSİN?</Text>
           </View>
           <View style={styles.headerActions}>
-            <ThemeSwitcher />
             <TouchableOpacity
               style={styles.cartBtn}
               onPress={() => router.push("/(tabs)/cart")}
@@ -390,9 +400,9 @@ export default function HomeScreen() {
                 </View>
               )}
             </TouchableOpacity>
-            <View style={styles.avatarContainer}>
+            <TouchableOpacity style={styles.avatarContainer} onPress={() => router.push("/(tabs)/profile")} activeOpacity={0.8}>
               <Image source={{ uri: profileImage }} style={styles.avatar} />
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
 
