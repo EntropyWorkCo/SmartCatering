@@ -3,7 +3,6 @@ import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import * as Notifications from 'expo-notifications';
 import React, { useMemo, useState, useCallback, useEffect } from "react";
 import {
   ActivityIndicator,
