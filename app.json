@@ -7,11 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "mobileapp",
     "userInterfaceStyle": "automatic",
-    "notification": {
-      "icon": "./assets/images/icon.png",
-      "color": "#f59e0b",
-      "iosDisplayInForeground": true
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.entropywork.smartcatering",
