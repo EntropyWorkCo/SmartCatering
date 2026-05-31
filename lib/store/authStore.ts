@@ -88,21 +88,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       let { role, firmaId } = await resolveRoleData(finalSession);
-      // Son guard: initialize da stale sonuç yazabilir, tekrar kontrol et.
+      // Son guard: cachedIsAdmin varsa override et
       try {
         const cachedIsAdmin = await AsyncStorage.getItem("isAdmin");
         if (cachedIsAdmin === "true") role = 'admin';
       } catch (_) {}
 
-      set({
-        session: finalSession,
-        user: finalSession?.user || null,
-        role,
-        firmaId,
-        isAdmin: role === 'admin',
-        loading: false,
-        initialized: true
-      });
+      // Eğer resolveRoleData null döndürdü (DB yavaş / timeout), mevcut role'u koruyarak
+      // sadece user/session/loading/initialized güncelle.
+      // onAuthStateChange'in SIGNED_IN eventi doğru rolü yazacak.
+      if (role === null) {
+        console.log("⏳ initialize: rol null, onAuthStateChange bekleniyor...");
+        set({
+          session: finalSession,
+          user: finalSession?.user || null,
+          loading: false,
+          initialized: true,
+          // role ve firmaId'ye dokunma — onAuthStateChange yazar
+        });
+      } else {
+        set({
+          session: finalSession,
+          user: finalSession?.user || null,
+          role,
+          firmaId,
+          isAdmin: role === 'admin',
+          loading: false,
+          initialized: true,
+        });
+      }
     } catch (error) {
       set({ loading: false, initialized: true });
     }

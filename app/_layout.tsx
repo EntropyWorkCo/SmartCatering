@@ -127,21 +127,21 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
     // Kullanıcı giriş yapmamışsa
     if (!user) {
       isRedirectingRef.current = false;
-      if (inAuthGroup || isModalOrRating) {
-        // Giriş sayfasındayız, varsa bekleyen yönlendirmeyi iptal et
-        if (pendingWelcomeRef.current) {
-          clearTimeout(pendingWelcomeRef.current);
-          pendingWelcomeRef.current = null;
-        }
-      } else {
-        // Korumalı sayfadayız ve kullanıcı yok -> Welcome'a yönlendir
-        if (!pendingWelcomeRef.current) {
-          pendingWelcomeRef.current = setTimeout(() => {
+      // Kullanıcı yoksa bekleyen welcome yönlendirmesini iptal et (user değişimi)
+      if (pendingWelcomeRef.current) {
+        clearTimeout(pendingWelcomeRef.current);
+        pendingWelcomeRef.current = null;
+      }
+      if (!inAuthGroup && !isModalOrRating) {
+        // Korumalı sayfadayız ve kullanıcı kesinlikle yok → Welcome'a yönlendir
+        pendingWelcomeRef.current = setTimeout(() => {
+          // Timer ateşlendiğinde hâlâ user yoksa git
+          if (!useAuthStore.getState().user) {
             console.log("🚀 YÖNLENDİRİLİYOR: /welcome");
             router.replace("/welcome");
-            pendingWelcomeRef.current = null;
-          }, 1500);
-        }
+          }
+          pendingWelcomeRef.current = null;
+        }, 1500);
       }
       return;
     }
