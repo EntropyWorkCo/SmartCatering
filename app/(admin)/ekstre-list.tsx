@@ -27,13 +27,8 @@ export default function EkstreListScreen() {
     const [htmlContent, setHtmlContent] = useState("");
 
     // ── Ay Kapanışı State ──────────────────────────────────────
-    const prevMonth = (() => {
-        const d = new Date();
-        d.setMonth(d.getMonth() - 1);
-        return { year: d.getFullYear(), month: d.getMonth() + 1 };
-    })();
-    const [closeYear, setCloseYear]   = useState(prevMonth.year);
-    const [closeMonth, setCloseMonth] = useState(prevMonth.month);
+    const [closeYear, setCloseYear]   = useState(new Date().getFullYear());
+    const [closeMonth, setCloseMonth] = useState(new Date().getMonth() + 1);
     const [closeSummaryModal, setCloseSummaryModal] = useState(false);
     const [closeSummary, setCloseSummary] = useState<{ affectedOrders: number; totalAmount: number; affectedFirms: number } | null>(null);
     const [closeLoading, setCloseLoading] = useState(false);
@@ -71,9 +66,9 @@ export default function EkstreListScreen() {
         let y = closeYear;
         if (m < 1)  { m = 12; y -= 1; }
         if (m > 12) { m = 1;  y += 1; }
-        // Gelecek aya geçmeyi engelle
-        const now = new Date();
-        if (y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth() + 1)) return;
+        // Sadece gelecek ayı engelle — bu ay (cari ay) kapatılabilir
+        const current = new Date();
+        if (y > current.getFullYear() || (y === current.getFullYear() && m > current.getMonth() + 1)) return;
         setCloseMonth(m);
         setCloseYear(y);
     };
@@ -98,10 +93,18 @@ export default function EkstreListScreen() {
             const affectedOrders = summary?.length ?? 0;
             const totalAmount    = summary?.reduce((s: number, o: any) => s + (o.total_amount || 0), 0) ?? 0;
             const uniqueUserIds  = [...new Set((summary || []).map((o: any) => o.user_id))];
-            const { data: companyData } = await supabase
-                .from('companies').select('id')
-                .in('user_id', uniqueUserIds.length > 0 ? uniqueUserIds : ['__none__']);
-            const affectedFirms = companyData?.length ?? 0;
+            let affectedFirms = 0;
+            if (uniqueUserIds.length > 0) {
+                const [ownerRes, empRes] = await Promise.all([
+                    supabase.from('companies').select('id').in('user_id', uniqueUserIds),
+                    supabase.from('users').select('company_id').in('id', uniqueUserIds).not('company_id', 'is', null),
+                ]);
+                const companyIdSet = new Set([
+                    ...(ownerRes.data || []).map((c: any) => c.id),
+                    ...(empRes.data  || []).filter((u: any) => u.company_id).map((u: any) => u.company_id),
+                ]);
+                affectedFirms = companyIdSet.size;
+            }
 
             setCloseSummary({ affectedOrders, totalAmount, affectedFirms });
             setCloseSummaryModal(true);

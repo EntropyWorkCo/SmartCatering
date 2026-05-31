@@ -160,12 +160,20 @@ export default function MonthCloseScreen() {
     const [previewLoading, setPreviewLoading] = useState(false);
     const [closing, setClosing] = useState(false);
 
-    // Firmalar yükle
+    // Firmalar yükle / yenile
+    const loadFirms = async () => {
+        setFirmsLoading(true);
+        const { data } = await supabase
+            .from("companies")
+            .select("id, company_name, balance")
+            .order("company_name");
+        setFirms(data || []);
+        setFirmsLoading(false);
+    };
+
     useEffect(() => {
         if (mode !== "SINGLE") return;
-        setFirmsLoading(true);
-        supabase.from("companies").select("id, company_name, balance").order("company_name")
-            .then(({ data }) => { setFirms(data || []); setFirmsLoading(false); });
+        loadFirms();
     }, [mode]);
 
     // Ay kaydır
@@ -211,6 +219,8 @@ export default function MonthCloseScreen() {
                 const r = await closeSingleFirm(selYear, selMonth, selectedFirm.id);
                 result = { affectedOrders: r.affectedOrders, totalAmount: r.totalAmount, affectedFirms: 1 };
             }
+            // Kapatılan firmaların balance'larını anlık yansit
+            await loadFirms();
             Alert.alert(
                 "✅ Ay Kapanışı Tamamlandı",
                 `${MONTHS[selMonth - 1]} ${selYear}\n\n` +
