@@ -45,17 +45,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (_event === 'INITIAL_SESSION') return;
         
         if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
-          const { role, firmaId } = await resolveRoleData(session);
-          // Yalnızca gerçek bir rol geldiyse yaz (null ile üzerine yazma)
+          let { role, firmaId } = await resolveRoleData(session);
+          // Admin cache guard
+          try {
+            const cachedIsAdmin = await AsyncStorage.getItem("isAdmin");
+            if (cachedIsAdmin === "true") role = 'admin';
+          } catch (_) {}
+
+          // user/session HER ZAMAN yazılır — aksi hâlde _layout user'ı göremez
+          // role sadece gerçek bir değer geldiyse güncellenir (null ile üzerine yazılmaz)
           if (role !== null) {
-            set({ 
-              session, 
-              user: session?.user || null, 
-              role, 
-              firmaId, 
+            set({
+              session,
+              user: session?.user || null,
+              role,
+              firmaId,
               isAdmin: role === 'admin',
-              loading: false 
+              loading: false,
             });
+          } else {
+            // Rol henüz belirlenemedi ama kullanıcı doğrulandı
+            // user/session'ı yaz, rol TOKEN_REFRESHED veya tekrar çözümlemeyle gelecek
+            set({ session, user: session?.user || null, loading: false });
           }
         } else if (_event === 'SIGNED_OUT') {
           set({ session: null, user: null, role: null, firmaId: null, isAdmin: false, loading: false });
