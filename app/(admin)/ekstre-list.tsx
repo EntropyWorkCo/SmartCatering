@@ -91,20 +91,12 @@ export default function EkstreListScreen() {
                 .not('order_type', 'in', EXCL);
 
             const affectedOrders = summary?.length ?? 0;
-            const totalAmount    = summary?.reduce((s: number, o: any) => s + (o.total_amount || 0), 0) ?? 0;
-            const uniqueUserIds  = [...new Set((summary || []).map((o: any) => o.user_id))];
-            let affectedFirms = 0;
-            if (uniqueUserIds.length > 0) {
-                const [ownerRes, empRes] = await Promise.all([
-                    supabase.from('companies').select('id').in('user_id', uniqueUserIds),
-                    supabase.from('users').select('company_id').in('id', uniqueUserIds).not('company_id', 'is', null),
-                ]);
-                const companyIdSet = new Set([
-                    ...(ownerRes.data || []).map((c: any) => c.id),
-                    ...(empRes.data  || []).filter((u: any) => u.company_id).map((u: any) => u.company_id),
-                ]);
-                affectedFirms = companyIdSet.size;
-            }
+
+            // companies.balance üzerinden hesapla — adisyon toplamı admin RLS'i yüzünden eksik gelebilir
+            const { data: compsWithDebt } = await supabase
+                .from('companies').select('id, balance').gt('balance', 0);
+            const totalAmount   = (compsWithDebt || []).reduce((s: number, c: any) => s + (c.balance || 0), 0);
+            const affectedFirms = (compsWithDebt || []).length;
 
             setCloseSummary({ affectedOrders, totalAmount, affectedFirms });
             setCloseSummaryModal(true);
