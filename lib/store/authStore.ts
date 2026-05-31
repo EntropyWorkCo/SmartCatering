@@ -97,6 +97,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             scheduleRoleRetry(session, get, set);
           }
         } else if (_event === 'SIGNED_OUT') {
+          // Admin cache'i de temizle — yoksa yeni oturum açan kullanıcı admin sanılır
+          AsyncStorage.multiRemove(["isAdmin", "userRole"]).catch(() => {});
           set({ session: null, user: null, role: null, firmaId: null, isAdmin: false, loading: false });
         }
       });

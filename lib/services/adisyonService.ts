@@ -63,6 +63,23 @@ export const adisyonService = {
         const personName = userData?.full_name?.split(' ')[0] || 'Bir çalışan';
         const itemSummary = items.map(i => `${i.quantity}x ${i.name}`).join(', ');
 
+        // Kurumsal çalışan için meal_attendance'a doğrudan yaz.
+        // Trigger bazen RLS veya timezone sorunundan yazamıyor; bu fallback bunu garantiler.
+        // Firma sahibi meal_attendance'ı görebilir (RLS izni var) ama adisyon'u göremez.
+        if (userData?.company_id && orderType !== "MANUAL_DEBT" && orderType !== "MANUAL_PAYMENT") {
+            const turkeyDate = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const { error: maError } = await supabase.from("meal_attendance").insert({
+                user_id: userId,
+                company_id: userData.company_id,
+                attendance_date: turkeyDate,
+                adisyon_id: adisyon.id,
+            });
+            // 23505 = unique_violation: bugün zaten kayıt var, normaldir
+            if (maError && maError.code !== '23505') {
+                console.warn('[meal_attendance] yazma hatası:', maError.code, maError.message);
+            }
+        }
+
         // Şirket sahibini bul (çalışanın company_id'si varsa)
         let companyOwnerId: string | null = null;
         if (userData?.company_id) {

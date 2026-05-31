@@ -2,7 +2,7 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { supabase } from "../supabase";
 
-const isExpoGo = Constants.appOwnership === 'expo';
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Edge Function helper — sunucu tarafı push gönderimi (background/killed safe)
@@ -186,7 +186,7 @@ export const notificationService = {
    */
   async registerForPushNotificationsAsync() {
     const { Platform } = require("react-native");
-    const isAndroidExpoGo = Platform.OS === 'android' && Constants.appOwnership === 'expo';
+    const isAndroidExpoGo = Platform.OS === 'android' && Constants.executionEnvironment === 'storeClient';
 
     if (isAndroidExpoGo) {
       console.log("Skipping push registration on Android Expo Go (Not supported on SDK 53+)");

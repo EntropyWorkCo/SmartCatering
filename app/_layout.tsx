@@ -25,10 +25,9 @@ import { supabase } from "@/lib/supabase";
 
 // ─── GLOBAL BİLDİRİM HANDLER ───
 // Uygulama AÇIKKEN gelen bildirimlerin banner olarak düşmesini sağlar.
-// Expo Go SDK 53+ artık expo-notifications'ı desteklemiyor.
-// Statik import yerine guard içinde lazy require kullanıyoruz.
-const isExpoGo = Constants.appOwnership === 'expo';
-if (!isExpoGo) {
+// SDK 53+ crash sorunu SADECE Android Expo Go'da — iOS Expo Go'da handler kurulabilir.
+const isAndroidExpoGo = Platform.OS === 'android' && Constants.executionEnvironment === 'storeClient';
+if (!isAndroidExpoGo) {
   try {
     const Notifications = require('expo-notifications');
     Notifications.setNotificationHandler({
@@ -247,7 +246,7 @@ function RootLayoutNav({ user, role, loading }: any) {
 
     const setupListeners = async () => {
       try {
-        const isAndroidExpoGo = Platform.OS === 'android' && (Constants.appOwnership as any) === 'expo';
+        const isAndroidExpoGo = Platform.OS === 'android' && Constants.executionEnvironment === 'storeClient';
         
         if (!isAndroidExpoGo) {
           const Notifications = require("expo-notifications");
