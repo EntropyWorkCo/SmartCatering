@@ -39,14 +39,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
         console.log("🔄 Auth State:", _event);
         if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED' || _event === 'INITIAL_SESSION') {
-          const { role, firmaId } = await resolveRoleData(session);
-          set({ 
-            session, 
-            user: session?.user || null, 
-            role, 
-            firmaId, 
+          let { role, firmaId } = await resolveRoleData(session);
+          // Son guard: resolveRoleData geç bitip admin rolünü ezmesini engelle.
+          // Stale INITIAL_SESSION veya normal login race condition'ı burada yakalanır.
+          try {
+            const cachedIsAdmin = await AsyncStorage.getItem("isAdmin");
+            if (cachedIsAdmin === "true") role = 'admin';
+          } catch (_) {}
+          set({
+            session,
+            user: session?.user || null,
+            role,
+            firmaId,
             isAdmin: role === 'admin',
-            loading: false 
+            loading: false
           });
         } else if (_event === 'SIGNED_OUT') {
           set({ session: null, user: null, role: null, firmaId: null, isAdmin: false, loading: false });
@@ -78,10 +84,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
 
-      const { role, firmaId } = await resolveRoleData(finalSession);
+      let { role, firmaId } = await resolveRoleData(finalSession);
+      // Son guard: initialize da stale sonuç yazabilir, tekrar kontrol et.
+      try {
+        const cachedIsAdmin = await AsyncStorage.getItem("isAdmin");
+        if (cachedIsAdmin === "true") role = 'admin';
+      } catch (_) {}
 
-      set({ 
-        session: finalSession, 
+      set({
+        session: finalSession,
         user: finalSession?.user || null,
         role,
         firmaId,
@@ -113,7 +124,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
  */
 async function resolveRoleData(session: any): Promise<{ role: UserRole, firmaId: string | null }> {
     if (!session?.user) return { role: 'bireysel', firmaId: null };
-    
+
+    // Admin login, setSession'dan önce bu değerleri yazar. onAuthStateChange'in üstüne yazmasını engelle.
+    try {
+        const cachedIsAdmin = await AsyncStorage.getItem("isAdmin");
+        const cachedRole = await AsyncStorage.getItem("userRole");
+        if (cachedIsAdmin === "true" && cachedRole === "admin") {
+            return { role: 'admin', firmaId: null };
+        }
+    } catch (_) {}
+
     const timeoutPromise = new Promise<{ role: UserRole, firmaId: string | null }>((resolve) => {
         setTimeout(() => {
             console.warn("⚠️ Rol çözümleme zaman aşımı.");

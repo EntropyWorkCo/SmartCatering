@@ -631,7 +631,7 @@ export default function CorporateInfoScreen() {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => { Keyboard.dismiss(); router.push("/profile"); }}>
+                <TouchableOpacity style={styles.backBtn} onPress={() => { Keyboard.dismiss(); router.canGoBack() ? router.back() : router.replace("/(tabs)/profile"); }}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <View style={{ flex: 1 }}>

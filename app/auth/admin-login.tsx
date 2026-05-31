@@ -71,22 +71,29 @@ export default function AdminLoginScreen() {
 
       } else {
         // Normal Admin girişi
+        // Admin işaretini ÖNCE koy — SIGNED_IN event'i anında tetikleneceği için
+        // resolveRoleData o an AsyncStorage'ı okur, 'bireysel' yazmasını önler.
+        await AsyncStorage.setItem("isAdmin", "true");
+        await AsyncStorage.setItem("userRole", "admin");
+        useAuthStore.getState().setRole('admin');
+
         const { error: authError } = await supabase.auth.signInWithPassword({
           email: email,
           password: code,
         });
 
-        if (authError) throw authError;
+        if (authError) {
+          // Giriş başarısız — admin işaretlerini geri al
+          await AsyncStorage.multiRemove(["isAdmin", "userRole"]);
+          useAuthStore.getState().setRole(null);
+          throw authError;
+        }
 
-        // Rol kontrolü yapalım
+        // Gerçekten admin mi doğrula
         const isAdminCheck = await userService.checkIsAdmin();
-        if (isAdminCheck) {
-          await AsyncStorage.setItem("isAdmin", "true");
-          await AsyncStorage.setItem("userRole", "admin");
-          // Re-trigger auth store for normal login to ensure isAdmin is picked up
-          useAuthStore.getState().setRole('admin');
-          await useAuthStore.getState().initialize(true);
-        } else {
+        if (!isAdminCheck) {
+          await AsyncStorage.multiRemove(["isAdmin", "userRole"]);
+          useAuthStore.getState().setRole(null);
           await supabase.auth.signOut();
           throw new Error("Yönetici yetkiniz bulunmuyor.");
         }

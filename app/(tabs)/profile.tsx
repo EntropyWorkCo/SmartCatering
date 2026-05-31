@@ -54,6 +54,8 @@ export default function ProfileScreen() {
     const [fullName, setFullName] = useState("");
     const [photoUrl, setPhotoUrl] = useState<string | null>(null);
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+    // Bu oturumda kullanıcı fotoğraf seçtiyse effect'in üstüne yazmasını engelle
+    const photoPickedThisSession = React.useRef(false);
     const [saving, setSaving] = useState(false);
     const [balance, setBalance] = useState<number | null>(null);
 
@@ -78,6 +80,9 @@ export default function ProfileScreen() {
             if (profile) {
                 setFullName(profile.full_name || "");
             }
+
+            // Bu oturumda fotoğraf seçildiyse storage'dan okuma — üstüne yazma
+            if (photoPickedThisSession.current) return;
 
             // Profil fotoğrafını önce yerel bellekten, yoksa veritabanından al
             const storedPhoto = await AsyncStorage.getItem(`profile_photo_${user?.id}`);
@@ -120,19 +125,17 @@ export default function ProfileScreen() {
 
         if (!result.canceled) {
             const uri = result.assets[0].uri;
-            // Anlık önizleme için hemen göster
+            // Anlık önizleme — henüz kayıt yok, bu oturumda picked=true
             setPhotoUrl(uri);
+            photoPickedThisSession.current = true;
 
             if (!user?.id) return;
 
-            // 1. AsyncStorage'a kaydet (hızlı yerel erişim)
-            await AsyncStorage.setItem(`profile_photo_${user.id}`, uri);
-
-            // 2. Supabase Storage'a yükle → kalıcı URL al → DB'ye kaydet
+            // Supabase Storage'a yükle → kalıcı URL al → DB + AsyncStorage'a kaydet
             try {
                 const response = await fetch(uri);
                 const blob = await response.blob();
-                const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
+                const ext = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
                 const filePath = `${user.id}/avatar.${ext}`;
 
                 const { error: uploadError } = await supabase.storage
@@ -143,7 +146,8 @@ export default function ProfileScreen() {
                     });
 
                 if (uploadError) {
-                    console.warn('Fotoğraf yükleme hatası (yerel kayıt geçerli):', uploadError.message);
+                    console.warn('Fotoğraf yükleme hatası:', uploadError.message);
+                    // Upload başarısız — AsyncStorage'a yerel URI yazma, kalıcı olmaz
                     return;
                 }
 
@@ -163,12 +167,11 @@ export default function ProfileScreen() {
                     .update({ avatar_url: finalUrl } as any)
                     .eq('id', user.id);
 
-                // AsyncStorage'ı kalıcı URL ile güncelle
+                // Yalnızca başarılı upload sonrası AsyncStorage'a kalıcı URL yaz
                 await AsyncStorage.setItem(`profile_photo_${user.id}`, finalUrl);
                 setPhotoUrl(finalUrl);
             } catch (storageErr) {
-                // Storage çalışmazsa yerel fotoğraf gösterilmeye devam eder
-                console.warn('Storage hatası (kritik değil):', storageErr);
+                console.warn('Storage hatası:', storageErr);
             }
         }
     };

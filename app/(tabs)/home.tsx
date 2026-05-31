@@ -514,7 +514,7 @@ export default function HomeScreen() {
 
 
         {/* Balance Card for Individual Accounts */}
-        {!isCompany && (
+        {!profileLoading && !isCompany && (
           <View style={[styles.balanceCard, { marginTop: 16, marginBottom: 32 }]}>
             <MaterialIcons name="account-balance-wallet" size={120} color={colors.text === '#f8fafc' ? 'rgba(6, 78, 59, 0.05)' : 'rgba(255,255,255,0.03)'} style={styles.balanceBgIcon} />
             <Text style={styles.balanceLabel}>GÜNCEL BORÇ DURUMU</Text>

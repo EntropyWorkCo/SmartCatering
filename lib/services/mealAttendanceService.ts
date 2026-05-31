@@ -100,7 +100,34 @@ export const mealAttendanceService = {
       (attendance || []).map((a) => [a.user_id, a.adisyon_id])
     );
 
-    // 4. Yemek yapanların ne yediğini çek (adisyon_items join)
+    // 4. Fallback: meal_attendance'da eksik kalanlar için adisyon'a direkt bak.
+    //    Firma sahibi için trigger JOIN bazen başarısız olur; bu bunu düzeltir.
+    const missingIds = allPeople
+      .filter((p) => !attendanceMap.has(p.id))
+      .map((p) => p.id);
+
+    if (missingIds.length > 0) {
+      // Türkiye günü sınırlarını UTC'ye çevir (UTC+3)
+      const dateStart = new Date(`${targetDate}T00:00:00+03:00`).toISOString();
+      const dateEnd   = new Date(`${targetDate}T23:59:59.999+03:00`).toISOString();
+
+      const { data: directOrders } = await supabase
+        .from("adisyon")
+        .select("user_id, id")
+        .in("user_id", missingIds)
+        .gte("created_at", dateStart)
+        .lte("created_at", dateEnd)
+        .not("order_type", "in", '("MANUAL_DEBT","MANUAL_PAYMENT")')
+        .not("status", "in", '("CANCELLED","İptal")');
+
+      (directOrders || []).forEach((order: any) => {
+        if (!attendanceMap.has(order.user_id)) {
+          attendanceMap.set(order.user_id, order.id);
+        }
+      });
+    }
+
+    // 6. Yemek yapanların ne yediğini çek (adisyon_items join)
     const adisyonIds = [...attendanceMap.values()].filter(Boolean) as string[];
     const itemsMap = new Map<string, MealItem[]>();
 
@@ -120,7 +147,7 @@ export const mealAttendanceService = {
       });
     }
 
-    // 5. Birleştir ve döndür
+    // 7. Birleştir ve döndür
     return allPeople.map((person) => {
       const adisyonId = attendanceMap.has(person.id)
         ? (attendanceMap.get(person.id) ?? undefined)
