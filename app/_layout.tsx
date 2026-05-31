@@ -135,13 +135,13 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
       if (!inAuthGroup && !isModalOrRating) {
         // Korumalı sayfadayız ve kullanıcı kesinlikle yok → Welcome'a yönlendir
         pendingWelcomeRef.current = setTimeout(() => {
-          // Timer ateşlendiğinde hâlâ user yoksa git
+          // Timer ateşlendiğinde son kez kontrol et — giriş gerçekleştiyse gitme
           if (!useAuthStore.getState().user) {
             console.log("🚀 YÖNLENDİRİLİYOR: /welcome");
             router.replace("/welcome");
           }
           pendingWelcomeRef.current = null;
-        }, 1500);
+        }, 2000);  // 1500→2000ms: ağır ağlarda biraz daha marj
       }
       return;
     }
@@ -203,6 +203,19 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
       pendingWelcomeRef.current = null;
     }
   }, [user]);
+
+  // GÜVENLİK AĞLARI: user varken role null kalırsa 8sn sonra 'bireysel' zorla
+  useEffect(() => {
+    if (!user || role !== null) return;
+    const fallbackTimer = setTimeout(() => {
+      const st = useAuthStore.getState();
+      if (st.user && st.role === null) {
+        console.warn("⚠️ _layout: Rol 8sn boyunca belirlenemedi, 'bireysel' olarak devam ediliyor.");
+        useAuthStore.setState({ role: 'bireysel', firmaId: null, isAdmin: false });
+      }
+    }, 8000);
+    return () => clearTimeout(fallbackTimer);
+  }, [user, role]);
 
   if (!loaded) {
     return (
