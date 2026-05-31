@@ -32,28 +32,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setRole: (role: UserRole) => set({ role, loading: false }),
 
   initialize: async (force = false) => {
+    // Eğer zaten başlatılmışsa ve force değilse çalışma
     if (get().initialized && !force) return;
+    // Eğer zaten yükleme devam ediyorsa ve initialized false ise de çalışma (çift çağrı koruması)
+    if (!force && !get().initialized && get().subscription) return;
 
     // 1. ÖNCE DİNLEYİCİYİ BAŞLAT (Herhangi bir mesajı kaçırmamak için)
     if (!get().subscription) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
         console.log("🔄 Auth State:", _event);
-        if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED' || _event === 'INITIAL_SESSION') {
-          let { role, firmaId } = await resolveRoleData(session);
-          // Son guard: resolveRoleData geç bitip admin rolünü ezmesini engelle.
-          // Stale INITIAL_SESSION veya normal login race condition'ı burada yakalanır.
-          try {
-            const cachedIsAdmin = await AsyncStorage.getItem("isAdmin");
-            if (cachedIsAdmin === "true") role = 'admin';
-          } catch (_) {}
-          set({
-            session,
-            user: session?.user || null,
-            role,
-            firmaId,
-            isAdmin: role === 'admin',
-            loading: false
-          });
+        // INITIAL_SESSION: getSession zaten işliyor, çift çalışmayı önle
+        if (_event === 'INITIAL_SESSION') return;
+        
+        if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
+          const { role, firmaId } = await resolveRoleData(session);
+          // Yalnızca gerçek bir rol geldiyse yaz (null ile üzerine yazma)
+          if (role !== null) {
+            set({ 
+              session, 
+              user: session?.user || null, 
+              role, 
+              firmaId, 
+              isAdmin: role === 'admin',
+              loading: false 
+            });
+          }
         } else if (_event === 'SIGNED_OUT') {
           set({ session: null, user: null, role: null, firmaId: null, isAdmin: false, loading: false });
         }
@@ -123,17 +126,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
  * Rol hesaplama mantığını merkezi bir yardımcı fonksiyona taşıyoruz.
  */
 async function resolveRoleData(session: any): Promise<{ role: UserRole, firmaId: string | null }> {
-    if (!session?.user) return { role: 'bireysel', firmaId: null };
-
-    // Admin login, setSession'dan önce bu değerleri yazar. onAuthStateChange'in üstüne yazmasını engelle.
-    try {
-        const cachedIsAdmin = await AsyncStorage.getItem("isAdmin");
-        const cachedRole = await AsyncStorage.getItem("userRole");
-        if (cachedIsAdmin === "true" && cachedRole === "admin") {
-            return { role: 'admin', firmaId: null };
-        }
-    } catch (_) {}
-
+    // Session yoksa null dön — bireysel defaultu yanlış rol atamasına yol açar
+    if (!session?.user) return { role: null, firmaId: null };
+    
     const timeoutPromise = new Promise<{ role: UserRole, firmaId: string | null }>((resolve) => {
         setTimeout(() => {
             console.warn("⚠️ Rol çözümleme zaman aşımı.");
@@ -188,9 +183,12 @@ async function resolveRoleData(session: any): Promise<{ role: UserRole, firmaId:
                 }
             } catch (e) {
                 console.warn("Database role check failed:", e);
+                // DB hatası: null dön, yanlış rol atama
+                return { role: null, firmaId: null };
             }
         }
 
+        // Soft user veya profil bulunamadıysa bireysel
         return { role: 'bireysel', firmaId: null };
     })();
 

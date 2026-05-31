@@ -218,17 +218,23 @@ export const billingService = {
     const affectedOrders = summary?.length ?? 0;
     const totalAmount    = summary?.reduce((s, o) => s + (o.total_amount || 0), 0) ?? 0;
 
-    // Kaç farklı firma etkileniyor (user_id bazında companies sorgusu)
+    // 2. Kaç farklı firma etkileniyor
+    // Hem firma sahiplerini hem çalışanları kapsayan çift yönlü arama
     const uniqueUserIds = [...new Set((summary || []).map((o) => o.user_id))];
-    const { data: companyData } = await supabase
-      .from("companies")
-      .select("id")
-      .in("user_id", uniqueUserIds.length > 0 ? uniqueUserIds : ["__none__"]);
-    const affectedFirms = companyData?.length ?? 0;
+    let companyIdSet = new Set<string>();
+    if (uniqueUserIds.length > 0) {
+      const [ownerRes, empRes] = await Promise.all([
+        supabase.from("companies").select("id").in("user_id", uniqueUserIds),
+        supabase.from("users").select("company_id").in("id", uniqueUserIds).not("company_id", "is", null),
+      ]);
+      (ownerRes.data || []).forEach((c) => companyIdSet.add(c.id));
+      (empRes.data  || []).forEach((u) => { if (u.company_id) companyIdSet.add(u.company_id); });
+    }
+    const affectedFirms = companyIdSet.size;
 
     if (affectedOrders === 0) return { affectedOrders: 0, totalAmount: 0, affectedFirms: 0 };
 
-    // 2. Güncelle — PAID yap
+    // 3. Güncelle — PAID yap
     const { error: updateErr } = await supabase
       .from("adisyon")
       .update({ status: "PAID", paid_at: new Date().toISOString() })
@@ -239,12 +245,35 @@ export const billingService = {
 
     if (updateErr) throw updateErr;
 
-    // 3. Tüm etkilenen firmaların bakiyesini sıfırla
-    if (companyData && companyData.length > 0) {
+    // 4. Etkilenen tüm firmaların bakiyesini sıfırla (sahip + çalışan üzerinden bulunanlar dahil)
+    const companyIdsArr = [...companyIdSet];
+    if (companyIdsArr.length > 0) {
       await supabase
         .from("companies")
         .update({ balance: 0, last_debt_update: new Date().toISOString() })
-        .in("id", companyData.map((c) => c.id));
+        .in("id", companyIdsArr);
+    }
+
+    // 5. Audit trail — her firma için kapanış kaydı düş (closeMonth ile tutarlı)
+    if (companyIdsArr.length > 0) {
+      const monthName = new Date(year, month - 1, 1).toLocaleDateString("tr-TR", { month: "long", year: "numeric" });
+      const { data: companyOwners } = await supabase
+        .from("companies")
+        .select("user_id")
+        .in("id", companyIdsArr);
+      if (companyOwners && companyOwners.length > 0) {
+        await supabase.from("adisyon").insert(
+          companyOwners.map((c) => ({
+            user_id: c.user_id,
+            total_amount: 0,
+            status: "PAID",
+            order_type: "MANUAL_DEBT",
+            note: `✅ Ay Kapanışı (Admin): ${monthName}`,
+            created_at: new Date().toISOString(),
+            paid_at: new Date().toISOString(),
+          }))
+        );
+      }
     }
 
     return { affectedOrders, totalAmount, affectedFirms };

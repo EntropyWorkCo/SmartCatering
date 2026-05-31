@@ -79,11 +79,19 @@ async function fetchPreview(year: number, month: number, companyId?: string) {
     let affectedFirms = 0;
     if (!companyId) {
         const uniqueUserIds = [...new Set((summary || []).map((o: any) => o.user_id))];
-        const { data: compData } = await supabase
-            .from("companies")
-            .select("id")
-            .in("user_id", uniqueUserIds.length > 0 ? uniqueUserIds : ["__none__"]);
-        affectedFirms = compData?.length ?? 0;
+        if (uniqueUserIds.length > 0) {
+            // Firma sahipleri: companies.user_id üzerinden
+            // Çalışanlar: users.company_id üzerinden (iki yönlü arama)
+            const [ownerRes, empRes] = await Promise.all([
+                supabase.from("companies").select("id").in("user_id", uniqueUserIds),
+                supabase.from("users").select("company_id").in("id", uniqueUserIds).not("company_id", "is", null),
+            ]);
+            const companyIdSet = new Set([
+                ...(ownerRes.data || []).map((c: any) => c.id),
+                ...(empRes.data  || []).filter((u: any) => u.company_id).map((u: any) => u.company_id),
+            ]);
+            affectedFirms = companyIdSet.size;
+        }
     } else {
         affectedFirms = 1;
     }
@@ -133,11 +141,10 @@ export default function MonthCloseScreen() {
     const colors = Colors[theme];
     const styles = getStyles(colors);
 
-    // Ay/Yıl seçici — default: önceki ay
-    const prevMonthDate = new Date();
-    prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
-    const [selYear,  setSelYear]  = useState(prevMonthDate.getFullYear());
-    const [selMonth, setSelMonth] = useState(prevMonthDate.getMonth() + 1);
+    // Ay/Yıl seçici — default: bu ay (en güncel borçlar burada)
+    const now = new Date();
+    const [selYear,  setSelYear]  = useState(now.getFullYear());
+    const [selMonth, setSelMonth] = useState(now.getMonth() + 1);
 
     // Mod: toplu vs tekil
     const [mode, setMode] = useState<"BULK" | "SINGLE">("BULK");
@@ -167,9 +174,9 @@ export default function MonthCloseScreen() {
         let y = selYear;
         if (m < 1)  { m = 12; y--; }
         if (m > 12) { m = 1;  y++; }
-        const now = new Date();
-        // Gelecek aya geçme
-        if (y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth() + 1)) return;
+        const current = new Date();
+        // Sadece gelecek ayı engelle — bu ay (cari ay) kapatılabilir
+        if (y > current.getFullYear() || (y === current.getFullYear() && m > current.getMonth() + 1)) return;
         setSelMonth(m);
         setSelYear(y);
     };

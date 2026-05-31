@@ -114,6 +114,8 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
   }, [loaded, forceLoad]);
 
   const pendingWelcomeRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Birden fazla eş zamanlı yönlendirmeyi engellemek için kilit
+  const isRedirectingRef = React.useRef(false);
 
   // 2. Auth Guard & Yönlendirme Mantığı
   useEffect(() => {
@@ -124,15 +126,15 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
 
     // Kullanıcı giriş yapmamışsa
     if (!user) {
+      isRedirectingRef.current = false;
       if (inAuthGroup || isModalOrRating) {
-        // Giriş sayfasındayız, varsa bekleyen yönlendirmeyi iptal et (Geri atmasın)
+        // Giriş sayfasındayız, varsa bekleyen yönlendirmeyi iptal et
         if (pendingWelcomeRef.current) {
           clearTimeout(pendingWelcomeRef.current);
           pendingWelcomeRef.current = null;
         }
       } else {
-        // Korumalı sayfadayız (Tabs gibi) ve kullanıcı yok -> Welcome'a yönlendir
-        // Zaten bir sayaç varsa tekrar başlatma
+        // Korumalı sayfadayız ve kullanıcı yok -> Welcome'a yönlendir
         if (!pendingWelcomeRef.current) {
           pendingWelcomeRef.current = setTimeout(() => {
             console.log("🚀 YÖNLENDİRİLİYOR: /welcome");
@@ -150,8 +152,20 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
       pendingWelcomeRef.current = null;
     }
 
-    // Kullanıcı giriş yapmışsa ve ana sayfadaysa (veya auth sayfalarındaysa) yönlendir
+    // Rol henüz belirlenmemiş (null) — yönlendirme yapma, bekle
+    if (role === null) {
+      console.log("⏳ Rol bekleniyor, yönlendirme ertelendi");
+      return;
+    }
+
+    // Kullanıcı giriş yapmışsa ve auth/index sayfasındaysa yönlendir
     if (inAuthGroup || !segments[0]) {
+      // Eğer zaten yönlendirme yapılıyorsa tekrar yapma
+      if (isRedirectingRef.current) {
+        console.log("🔒 Zaten yönlendiriliyor, atlandı");
+        return;
+      }
+
       let targetPath: any = "";
 
       switch (role) {
@@ -164,16 +178,23 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
           targetPath = "/(tabs)";
           break;
         default:
-          if (!authLoading) targetPath = "/(tabs)";
+          // Bilinmeyen rol — güvenli tarafta kal
+          targetPath = "/(tabs)";
           break;
       }
 
       if (targetPath) {
-        console.log("🚀 ROL BAZLI YÖNLENDİRME:", targetPath);
+        isRedirectingRef.current = true;
+        console.log("🚀 ROL BAZLI YÖNLENDİRME:", role, "->", targetPath);
         router.replace(targetPath);
+        // Yönlendirme bittikten sonra kilidi aç
+        setTimeout(() => { isRedirectingRef.current = false; }, 500);
       }
     }
-  }, [user, role, segments, loading, authLoading]);
+  // authLoading dependency KASITLI OLARAK ÇIKARILDI:
+  // authLoading değişimi çift yönlendirmeye (sayfa üst üste binmesi) neden oluyordu.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, role, segments, loading]);
 
   // User set olduğu an /welcome timer'ını iptal et (loading bitmese bile)
   useEffect(() => {

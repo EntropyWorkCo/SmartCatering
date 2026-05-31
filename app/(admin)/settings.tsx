@@ -70,7 +70,7 @@ export default function AdminSettings() {
                     <SettingsBtn
                         icon="lock-clock"
                         label="Ay Kapanışı"
-                        onPress={() => router.push("/(admin)/month-close")}
+                        onPress={() => router.push("/(admin)/month-close" as any)}
                         colors={colors}
                         styles={styles}
                         accent
