@@ -216,10 +216,8 @@ export const billingService = {
     if (summaryErr) throw summaryErr;
 
     const affectedOrders = summary?.length ?? 0;
-    const totalAmount    = summary?.reduce((s, o) => s + (o.total_amount || 0), 0) ?? 0;
 
-    // 2. Kaç farklı firma etkileniyor
-    // Hem firma sahiplerini hem çalışanları kapsayan çift yönlü arama
+    // 2. Etkilenen firmaları bul (sahip + çalışan üzerinden)
     const uniqueUserIds = [...new Set((summary || []).map((o) => o.user_id))];
     let companyIdSet = new Set<string>();
     if (uniqueUserIds.length > 0) {
@@ -230,9 +228,20 @@ export const billingService = {
       (ownerRes.data || []).forEach((c) => companyIdSet.add(c.id));
       (empRes.data  || []).forEach((u) => { if (u.company_id) companyIdSet.add(u.company_id); });
     }
-    const affectedFirms = companyIdSet.size;
 
-    if (affectedOrders === 0) return { affectedOrders: 0, totalAmount: 0, affectedFirms: 0 };
+    // Her zaman tüm borçlu firmaları kapat (adisyon kaydı olmasa bile)
+    const { data: allDebted } = await supabase
+      .from("companies").select("id, balance").gt("balance", 0);
+    (allDebted || []).forEach((c) => companyIdSet.add(c.id));
+
+    const affectedFirms = companyIdSet.size;
+    // Gerçek sıfırlanacak tutar = tüm borçlu firmaların balance toplamı
+    const totalAmount = (allDebted || []).reduce((s, c) => s + (c.balance || 0), 0);
+
+    // Hiç yapılacak iş yoksa erken çık
+    if (affectedOrders === 0 && affectedFirms === 0) {
+      return { affectedOrders: 0, totalAmount: 0, affectedFirms: 0 };
+    }
 
     // 3. Güncelle — PAID yap
     const { error: updateErr } = await supabase

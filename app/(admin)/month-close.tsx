@@ -40,7 +40,7 @@ const MONTHS = [
 const CLOSED_STATUSES = '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal","COMPLETED","Tamamlandı")';
 const EXCLUDED_TYPES  = '("MANUAL_PAYMENT","MANUAL_DEBT")';
 
-// ── Yardımcı: Önizleme sorgula ───────────────────────────────────────────────
+// ── Yardımcı: Önizleme sorgula ──────────────────────────────────────────────
 async function fetchPreview(year: number, month: number, companyId?: string) {
     const startDate = new Date(year, month - 1, 1).toISOString();
     const endDate   = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
@@ -53,46 +53,48 @@ async function fetchPreview(year: number, month: number, companyId?: string) {
         .not("status", "in", CLOSED_STATUSES)
         .not("order_type", "in", EXCLUDED_TYPES);
 
+    let ids: string[] = [];
     if (companyId) {
-        // Firma kullanıcıları + firma sahibi
-        const { data: empRows } = await supabase
-            .from("users")
-            .select("id")
-            .eq("company_id", companyId);
-        const { data: ownerRow } = await supabase
-            .from("companies")
-            .select("user_id")
-            .eq("id", companyId)
-            .maybeSingle();
-        const ids = [
-            ...(empRows || []).map((e: any) => e.id),
-            ownerRow?.user_id,
-        ].filter(Boolean);
-        if (ids.length === 0) return { affectedOrders: 0, totalAmount: 0, affectedFirms: 0 };
-        q = q.in("user_id", ids);
+        const { data: empRows } = await supabase.from("users").select("id").eq("company_id", companyId);
+        const { data: ownerRow } = await supabase.from("companies").select("user_id").eq("id", companyId).maybeSingle();
+        ids = [...(empRows || []).map((e: any) => e.id), ownerRow?.user_id].filter(Boolean);
+        if (ids.length > 0) q = q.in("user_id", ids);
     }
 
     const { data: summary } = await q;
     const affectedOrders = summary?.length ?? 0;
-    const totalAmount    = summary?.reduce((s: number, o: any) => s + (o.total_amount || 0), 0) ?? 0;
 
+    // “Sıfırlanacak tutar” = gerçek companies.balance (MANUAL_DEBT dahil herşeyi kapsar)
+    let totalAmount = 0;
     let affectedFirms = 0;
+
     if (!companyId) {
-        const uniqueUserIds = [...new Set((summary || []).map((o: any) => o.user_id))];
-        if (uniqueUserIds.length > 0) {
-            // Firma sahipleri: companies.user_id üzerinden
-            // Çalışanlar: users.company_id üzerinden (iki yönlü arama)
-            const [ownerRes, empRes] = await Promise.all([
-                supabase.from("companies").select("id").in("user_id", uniqueUserIds),
-                supabase.from("users").select("company_id").in("id", uniqueUserIds).not("company_id", "is", null),
-            ]);
-            const companyIdSet = new Set([
-                ...(ownerRes.data || []).map((c: any) => c.id),
-                ...(empRes.data  || []).filter((u: any) => u.company_id).map((u: any) => u.company_id),
-            ]);
-            affectedFirms = companyIdSet.size;
+        // Toplu: balance'i sıfırın üzerinde olan TÜM firmalar
+        const { data: compsWithDebt } = await supabase
+            .from("companies").select("id, balance").gt("balance", 0);
+        totalAmount   = (compsWithDebt || []).reduce((s: number, c: any) => s + (c.balance || 0), 0);
+        affectedFirms = (compsWithDebt || []).length;
+        // Adisyon'dan gelen ama bakiyesi 0 gözükmeyen firmalar için union
+        if ((summary || []).length > 0) {
+            const uniqueUserIds = [...new Set((summary || []).map((o: any) => o.user_id))];
+            if (uniqueUserIds.length > 0) {
+                const [ownerRes, empRes] = await Promise.all([
+                    supabase.from("companies").select("id, balance").in("user_id", uniqueUserIds),
+                    supabase.from("users").select("company_id").in("id", uniqueUserIds).not("company_id", "is", null),
+                ]);
+                const extraIds = new Set([
+                    ...(ownerRes.data || []).map((c: any) => c.id),
+                    ...(empRes.data || []).filter((u: any) => u.company_id).map((u: any) => u.company_id),
+                ]);
+                // Zaten sayılmayan firmaları ekle
+                const existingComps = new Set((compsWithDebt || []).map((c: any) => c.id));
+                extraIds.forEach(id => { if (!existingComps.has(id)) affectedFirms++; });
+            }
         }
     } else {
+        // Tekil: firmaın gerçek balance'ı
+        const { data: comp } = await supabase.from("companies").select("balance").eq("id", companyId).maybeSingle();
+        totalAmount   = comp?.balance || 0;
         affectedFirms = 1;
     }
 
@@ -105,33 +107,36 @@ async function closeSingleFirm(year: number, month: number, companyId: string) {
     const endDate   = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
 
     const { data: empRows } = await supabase.from("users").select("id").eq("company_id", companyId);
-    const { data: ownerRow } = await supabase.from("companies").select("user_id").eq("id", companyId).maybeSingle();
+    const { data: ownerRow } = await supabase.from("companies").select("user_id, balance").eq("id", companyId).maybeSingle();
     const ids = [...(empRows || []).map((e: any) => e.id), ownerRow?.user_id].filter(Boolean);
-    if (ids.length === 0) return { affectedOrders: 0, totalAmount: 0 };
 
-    // Önizleme
-    const { data: summary } = await supabase
-        .from("adisyon").select("id, total_amount")
-        .gte("created_at", startDate).lte("created_at", endDate)
-        .in("user_id", ids)
-        .not("status", "in", CLOSED_STATUSES).not("order_type", "in", EXCLUDED_TYPES);
+    // Gerçek balance (MANUAL_DEBT dahil herş eyi kapsar)
+    const actualBalance = ownerRow?.balance || 0;
 
-    const affectedOrders = summary?.length ?? 0;
-    const totalAmount    = summary?.reduce((s: number, o: any) => s + (o.total_amount || 0), 0) ?? 0;
+    let affectedOrders = 0;
+    if (ids.length > 0) {
+        const { data: summary } = await supabase
+            .from("adisyon").select("id, total_amount")
+            .gte("created_at", startDate).lte("created_at", endDate)
+            .in("user_id", ids)
+            .not("status", "in", CLOSED_STATUSES).not("order_type", "in", EXCLUDED_TYPES);
+        affectedOrders = summary?.length ?? 0;
 
-    if (affectedOrders === 0) return { affectedOrders: 0, totalAmount: 0 };
+        if (affectedOrders > 0) {
+            await supabase.from("adisyon")
+                .update({ status: "PAID", paid_at: new Date().toISOString() })
+                .gte("created_at", startDate).lte("created_at", endDate)
+                .in("user_id", ids)
+                .not("status", "in", CLOSED_STATUSES).not("order_type", "in", EXCLUDED_TYPES);
+        }
+    }
 
-    await supabase.from("adisyon")
-        .update({ status: "PAID", paid_at: new Date().toISOString() })
-        .gte("created_at", startDate).lte("created_at", endDate)
-        .in("user_id", ids)
-        .not("status", "in", CLOSED_STATUSES).not("order_type", "in", EXCLUDED_TYPES);
-
+    // Her zaman balance'i sıfırla (adisyon kaydı olmasa bile)
     await supabase.from("companies")
         .update({ balance: 0, last_debt_update: new Date().toISOString() })
         .eq("id", companyId);
 
-    return { affectedOrders, totalAmount };
+    return { affectedOrders, totalAmount: actualBalance };
 }
 
 // ── Ana Bileşen ──────────────────────────────────────────────────────────────
@@ -427,9 +432,9 @@ export default function MonthCloseScreen() {
                                 <Text style={styles.cancelBtnText}>Vazgeç</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.confirmBtn, preview?.affectedOrders === 0 && { opacity: 0.4 }]}
-                                onPress={preview?.affectedOrders === 0 ? undefined : handleConfirm}
-                                disabled={(preview?.affectedOrders ?? 0) === 0}
+                                style={[styles.confirmBtn, (preview?.affectedOrders === 0 && (preview?.totalAmount ?? 0) === 0) && { opacity: 0.4 }]}
+                                onPress={(preview?.affectedOrders === 0 && (preview?.totalAmount ?? 0) === 0) ? undefined : handleConfirm}
+                                disabled={(preview?.affectedOrders ?? 0) === 0 && (preview?.totalAmount ?? 0) === 0}
                             >
                                 <MaterialIcons name="lock" size={16} color="#fff" />
                                 <Text style={styles.confirmBtnText}>Onayla ve Kapat</Text>
