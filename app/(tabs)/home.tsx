@@ -84,7 +84,9 @@ export default function HomeScreen() {
   };
 
   const dailyMenu = useMemo(() => {
-    return menu.filter(m => ["ÇORBA", "ANA YEMEK", "YARDIMCI", "TATLI", "MEYVE"].includes(m.category.toUpperCase()));
+    // DB'deki gerçek kategori adlarına göre filtrele (web admin paneli "ÇORBA ÇEŞİTLERİ" ve "TAMAMLAYICI" kullanıyor)
+    const DAILY_CATEGORIES = ["ÇORBA ÇEŞİTLERİ", "ANA YEMEK", "YARDIMCI", "TAMAMLAYICI", "TATLI", "MEYVE"];
+    return menu.filter(m => DAILY_CATEGORIES.includes(m.category?.toUpperCase?.() ?? m.category));
   }, [menu]);
 
   useEffect(() => {

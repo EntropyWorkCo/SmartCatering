@@ -500,7 +500,7 @@ export default function AdminMenuAdd() {
                                             <MaterialIcons name={
                                                 cat.id === "TABLDOT" ? "restaurant-menu" :
                                                     cat.id === "TEK ÇEŞİT" ? "room-service" :
-                                                        cat.id === "İÇECEK" ? "local-drink" : "star"
+                                                        cat.id === "İÇECEKLER" ? "local-drink" : "star"
                                             } size={20} color={colors.primary} />
                                             <Text style={styles.categoryTitleText}>{cat.label}</Text>
                                             <View style={styles.categoryTitleLine} />
@@ -626,8 +626,8 @@ const ItemCard = ({ item, isPoolTab, handleToggleStatus, handleEditItem, handleD
                         <Image source={{ uri: item.image_url }} style={{ width: '100%', height: '100%', borderRadius: 8 }} resizeMode="cover" />
                     ) : (
                         <MaterialIcons name={
-                            item.category === "İÇECEK" ? "local-drink" :
-                                item.category === "ÇORBA" ? "soup-kitchen" : "restaurant"
+                            item.category === "İÇECEKLER" || item.category === "İÇECEK" ? "local-drink" :
+                                item.category === "ÇORBA ÇEŞİTLERİ" || item.category === "ÇORBA" ? "soup-kitchen" : "restaurant"
                         } size={28} color={colors.primary} />
                     )}
                 </View>

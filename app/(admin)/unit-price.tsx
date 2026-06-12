@@ -48,10 +48,10 @@ export default function UnitPriceFormScreen() {
                     if (data && data.length > 0) {
                         const newPrices = { ...prices };
                         data.forEach((item: any) => {
-                            if (item.category === "ÇORBA") newPrices.CORBA = item.price.toString();
+                            if (item.category === "ÇORBA ÇEŞİTLERİ") newPrices.CORBA = item.price.toString();
                             if (item.category === "ANA YEMEK") newPrices.ANAYEMEK = item.price.toString();
                             if (item.category === "YARDIMCI") newPrices.YARDIMCI = item.price.toString();
-                            if (item.category === "İÇECEK") newPrices.ICECEKLER = item.price.toString();
+                            if (item.category === "İÇECEKLER") newPrices.ICECEKLER = item.price.toString();
                         });
                         setPrices(newPrices);
                     }
@@ -70,10 +70,10 @@ export default function UnitPriceFormScreen() {
         try {
             // Update default category prices in Supabase
             const categories = [
-                { category: "ÇORBA", price: Number(prices.CORBA) },
+                { category: "ÇORBA ÇEŞİTLERİ", price: Number(prices.CORBA) },
                 { category: "ANA YEMEK", price: Number(prices.ANAYEMEK) },
                 { category: "YARDIMCI", price: Number(prices.YARDIMCI) },
-                { category: "İÇECEK", price: Number(prices.ICECEKLER) },
+                { category: "İÇECEKLER", price: Number(prices.ICECEKLER) },
             ];
 
             for (const item of categories) {
