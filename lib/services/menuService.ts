@@ -7,7 +7,7 @@ export const menuService = {
     const { data, error } = await supabase
       .from("menu_items")
       .select("*")
-      .in("status", ["active", "sold_out"])
+      .in("status", ["active", "sold_out", "draft"])
       .order("created_at", { ascending: false });
     if (error) throw error;
     return data;

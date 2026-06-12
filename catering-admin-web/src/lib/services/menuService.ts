@@ -62,6 +62,13 @@ export const menuService = {
     if (error) throw error;
   },
 
+  async deleteItemsInBulk(ids: string[]) {
+    // Paralel olarak tek tek sil (daha güvenilir)
+    await Promise.all(
+      ids.map(id => this.deleteMenuItem(id))
+    );
+  },
+
   async toggleItemStatus(id: string, newStatus: 'passive' | 'active' | 'sold_out' | 'draft') {
     const { error } = await supabase
       .from("menu_items")
@@ -154,7 +161,7 @@ export const menuService = {
       .select("*")
       .neq("status", "sistem_fiyati")
       .neq("status", "archived")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: true });
     if (error) throw error;
     return data;
   }

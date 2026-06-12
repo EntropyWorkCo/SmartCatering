@@ -100,14 +100,16 @@ export default function MenuScreen() {
       ...systemPrices.filter(p => p.category === "EKSTRA")
     ];
   } else if (selectedCategory === "TEK ÇEŞİTLER") {
-    filteredMenu = systemPrices.filter(p => p.category === "TEK ÇEŞİT");
+    const dailyMenuItems = dailyMenu.filter(m => !["İÇECEK", "TEK_ÇEŞİT"].includes(m.category));
+    filteredMenu = [...dailyMenuItems, ...systemPrices.filter(p => p.category === "TEK ÇEŞİT")];
   } else if (selectedCategory === "İÇECEKLER") {
     filteredMenu = [
       ...menu.filter(m => m.category === "İÇECEK"),
       ...systemPrices.filter(p => p.category === "İÇECEK")
     ];
   } else if (selectedCategory === "EKSTRALAR") {
-    filteredMenu = systemPrices.filter(p => p.category === "EKSTRA");
+    const extraItems = dailyMenu.filter(m => ["ANA YEMEK", "YARDIMCI", "TAMAMLAYICI"].includes(m.category));
+    filteredMenu = [...extraItems, ...systemPrices.filter(p => p.category === "EKSTRA")];
   }
 
   const handleAddToCart = (item: any) => {
@@ -305,21 +307,33 @@ export default function MenuScreen() {
         {((selectedCategory === "TÜMÜ" || selectedCategory === "GÜNÜN MENÜSÜ") && dailyMenu.length > 0) && (
           <View style={{ paddingTop: 24, paddingHorizontal: 24 }}>
             <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 16 }}>Günün Menüsü</Text>
-            
-            {(["ÇORBA", "ANA YEMEK", "YARDIMCI"] as const).map(catKey => {
+
+            {Array.from(new Set(dailyMenu.map(m => m.category)))
+              .filter(cat => cat !== "İÇECEK")
+              .sort((a, b) => {
+                const order = ["ÇORBA ÇEŞİTLERİ", "ANA YEMEK", "YARDIMCI", "TAMAMLAYICI"];
+                const indexA = order.indexOf(a);
+                const indexB = order.indexOf(b);
+                if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+                if (indexA === -1) return 1;
+                if (indexB === -1) return -1;
+                return indexA - indexB;
+              })
+              .map(catKey => {
               const catItems = dailyMenu.filter(item => item.category === catKey);
               if (catItems.length === 0) return null;
-              
+
               const catLabels: Record<string, string> = {
-                "ÇORBA": "Çorbalar",
+                "ÇORBA ÇEŞİTLERİ": "Çorbalar",
                 "ANA YEMEK": "Ana Yemekler",
-                "YARDIMCI": "Yardımcı Yemekler"
+                "YARDIMCI": "Yardımcı Yemekler",
+                "TAMAMLAYICI": "Tamamlayıcılar"
               };
 
               return (
                 <View key={catKey} style={{ marginBottom: 20 }}>
                   <Text style={{ fontSize: 13, fontWeight: 'bold', color: colors.primary, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>
-                    {catLabels[catKey]}
+                    {catLabels[catKey] || catKey}
                   </Text>
                   <View style={{ gap: 16 }}>
                     {catItems.map(item => (
@@ -525,9 +539,9 @@ export default function MenuScreen() {
 
             <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 100 }}>
               {Array.from(new Set(dailyMenu.map(m => m.category)))
-                .filter(cat => cat !== "İÇECEK")
+                .filter(cat => cat !== "İÇECEK" && cat !== "TEK_ÇEŞİT")
                 .sort((a, b) => {
-                  const order = ["ÇORBA", "ANA YEMEK", "YARDIMCI", "EKSTRA", "TATLI"];
+                  const order = ["ÇORBA ÇEŞİTLERİ", "ANA YEMEK", "YARDIMCI", "TAMAMLAYICI"];
                   const indexA = order.indexOf(a);
                   const indexB = order.indexOf(b);
                   if (indexA === -1 && indexB === -1) return a.localeCompare(b);

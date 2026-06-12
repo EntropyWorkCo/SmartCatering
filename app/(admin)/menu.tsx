@@ -24,15 +24,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const CATEGORIES = [
     { id: "ANA YEMEK", label: "ANA YEMEK" },
     { id: "YARDIMCI", label: "YARDIMCI" },
-    { id: "ÇORBA", label: "ÇORBA ÇEŞİTLERİ" },
-    { id: "EKSTRA", label: "EKSTRA FARKLAR" },
-    { id: "İÇECEK", label: "İÇECEKLER" }
+    { id: "ÇORBA ÇEŞİTLERİ", label: "ÇORBA ÇEŞİTLERİ" },
+    { id: "TAMAMLAYICI", label: "TAMAMLAYICI" },
+    { id: "EKSTRA FARKLAR", label: "EKSTRA FARKLAR" },
+    { id: "İÇECEKLER", label: "İÇECEKLER" }
 ];
 
 const SYS_CATEGORIES = [
     { id: "TEK ÇEŞİT", label: "TEK ÇEŞİT" },
-    { id: "EKSTRA", label: "EKSTRA FARKLARI" },
-    { id: "İÇECEK", label: "İÇECEKLER" },
+    { id: "EKSTRA FARKLARI", label: "EKSTRA FARKLARI" },
+    { id: "TAMAMLAYICI", label: "TAMAMLAYICI" },
+    { id: "İÇECEKLER", label: "İÇECEKLER" },
     { id: "TABLDOT", label: "TABLDOT MENÜ" }
 ];
 
