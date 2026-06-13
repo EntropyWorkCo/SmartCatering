@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.entropywork.smartcatering",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
@@ -20,7 +20,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.entropywork.smartcatering",
-      "versionCode": 5
+      "versionCode": 6
     },
     "web": {
       "bundler": "metro",
