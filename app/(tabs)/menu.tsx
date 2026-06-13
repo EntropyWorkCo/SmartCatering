@@ -472,10 +472,11 @@ export default function MenuScreen() {
                                         ) : (
                                           item.status !== 'sold_out' && (
                                             <TouchableOpacity
-                                              style={{ backgroundColor: colors.cardHighlight, padding: 8, borderRadius: 10 }}
-                                              onPress={(e) => { e.stopPropagation?.(); openDetailModal(item); }}
+                                              style={[styles.addBtnLarge, { marginTop: 0 }]}
+                                              onPress={(e) => { e.stopPropagation?.(); handleAddToCart(item); }}
                                             >
-                                              <MaterialIcons name="info-outline" size={18} color={colors.primary} />
+                                              <MaterialIcons name="add" size={14} color="#fff" />
+                                              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>EKLE</Text>
                                             </TouchableOpacity>
                                           )
                                         )}
@@ -652,10 +653,11 @@ export default function MenuScreen() {
                                         ) : (
                                           item.status !== 'sold_out' && (
                                             <TouchableOpacity
-                                              style={{ backgroundColor: colors.cardHighlight, padding: 8, borderRadius: 10 }}
-                                              onPress={() => openDetailModal(item)}
+                                              style={[styles.addBtnLarge, { marginTop: 0 }]}
+                                              onPress={(e) => { e.stopPropagation?.(); handleAddToCart(item); }}
                                             >
-                                              <MaterialIcons name="info-outline" size={18} color={colors.primary} />
+                                              <MaterialIcons name="add" size={14} color="#fff" />
+                                              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>EKLE</Text>
                                             </TouchableOpacity>
                                           )
                                         )}

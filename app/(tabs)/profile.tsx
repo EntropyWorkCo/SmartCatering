@@ -131,7 +131,6 @@ export default function ProfileScreen() {
 
             if (!user?.id) return;
 
-            // Supabase Storage'a yükle → kalıcı URL al → DB + AsyncStorage'a kaydet
             try {
                 const response = await fetch(uri);
                 const blob = await response.blob();
@@ -147,7 +146,6 @@ export default function ProfileScreen() {
 
                 if (uploadError) {
                     console.warn('Fotoğraf yükleme hatası:', uploadError.message);
-                    // Upload başarısız — AsyncStorage'a yerel URI yazma, kalıcı olmaz
                     return;
                 }
 
@@ -158,18 +156,15 @@ export default function ProfileScreen() {
                 const publicUrl = urlData?.publicUrl;
                 if (!publicUrl) return;
 
-                // Cache-buster ekle (CDN'den taze çeksin)
                 const finalUrl = `${publicUrl}?t=${Date.now()}`;
 
-                // DB'ye yaz
                 await supabase
                     .from('users')
                     .update({ avatar_url: finalUrl } as any)
                     .eq('id', user.id);
 
-                // Yalnızca başarılı upload sonrası AsyncStorage'a kalıcı URL yaz
-                await AsyncStorage.setItem(`profile_photo_${user.id}`, finalUrl);
-                setPhotoUrl(finalUrl);
+                // DB'de Supabase URL, cihazda local URI sakla
+                await AsyncStorage.setItem(`profile_photo_${user.id}`, uri);
             } catch (storageErr) {
                 console.warn('Storage hatası:', storageErr);
             }

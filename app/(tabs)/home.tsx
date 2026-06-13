@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useMenu } from "@/lib/hooks/useMenu";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { adisyonService } from "@/lib/services/adisyonService";
+import { supabase } from "@/lib/supabase";
 import { useCartStore } from "@/lib/store/cartStore";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 
@@ -223,20 +224,16 @@ export default function HomeScreen() {
 
   const [localPhoto, setLocalPhoto] = React.useState<string | null>(null);
 
-  // Profile'den dönünce veya ilk yüklemede fotoğrafı tazele
+  // Profile'den dönünce AsyncStorage'daki local URI'yi yükle
   useFocusEffect(
     React.useCallback(() => {
       if (!user?.id) return;
       (async () => {
-        // Önce AsyncStorage'daki cache'e bak
         const cached = await AsyncStorage.getItem(`profile_photo_${user.id}`);
         if (cached) {
           setLocalPhoto(cached);
-          return;
-        }
-        // Cache yoksa DB'deki avatar_url'e bak ve cache'e al
-        if (profile?.avatar_url) {
-          await AsyncStorage.setItem(`profile_photo_${user.id}`, profile.avatar_url);
+        } else if (profile?.avatar_url) {
+          // Cache yoksa DB URL'sini dene (web/cross-device fallback)
           setLocalPhoto(profile.avatar_url);
         }
       })();
