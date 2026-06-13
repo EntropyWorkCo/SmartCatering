@@ -41,7 +41,21 @@ export default function AdminMessages() {
 
     const fetchData = async () => {
         setLoading(true);
-        
+
+        // Firma sahiplerinin şirket adları (user_id → company_name)
+        const { data: companiesData } = await supabase
+            .from("companies")
+            .select("user_id, company_name");
+        const ownerCompanyMap: Record<string, string> = {};
+        (companiesData || []).forEach((c: any) => {
+            if (c.user_id) ownerCompanyMap[c.user_id] = c.company_name;
+        });
+
+        const getCompanyName = (user: any, company: any) =>
+            company?.company_name
+            || (user?.id ? ownerCompanyMap[user.id] : null)
+            || null;
+
         // 1. Fetch Private Messages
         const { data: pData } = await supabase
             .from("messages")
@@ -56,7 +70,7 @@ export default function AdminMessages() {
                     id: m.id,
                     userId: user?.id,
                     userName: user?.full_name || "Müşteri",
-                    companyName: company?.company_name || null,
+                    companyName: getCompanyName(user, company),
                     date: new Date(m.created_at).toLocaleDateString('tr-TR') + " " + new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                     note: m.content,
                     is_read: m.is_read,
@@ -69,7 +83,7 @@ export default function AdminMessages() {
         // 2. Fetch Order Messages
         const { data: oData } = await supabase
             .from("adisyon")
-            .select("*, users(full_name, companies!users_company_id_fkey(company_name))")
+            .select("*, users(id, full_name, companies!users_company_id_fkey(company_name))")
             .not("note", "is", null)
             .not("note", "eq", "")
             .not("order_type", "eq", "MANUAL_DEBT")
@@ -82,7 +96,7 @@ export default function AdminMessages() {
                 return {
                     id: o.id,
                     userName: user?.full_name || "Müşteri",
-                    companyName: company?.company_name || null,
+                    companyName: getCompanyName(user, company),
                     orderNumber: String(o.id).substring(0, 6).toUpperCase(),
                     date: new Date(o.created_at).toLocaleDateString('tr-TR') + " " + new Date(o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                     note: o.note,

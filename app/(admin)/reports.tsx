@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 export default function AdminReports() {
     const { orders } = useAdisyon();
     const insets = useSafeAreaInsets();
-    const [view, setView] = useState<"MAIN" | "SALES" | "STATS" | "FEEDBACK">(
+    const [view, setView] = useState<"MAIN" | "SALES" | "STATS" | "FEEDBACK" | "APP_FEEDBACK">(
         "MAIN"
     );
 
@@ -36,12 +36,19 @@ export default function AdminReports() {
             const fetchRatings = async () => {
                 const { data, error } = await supabase
                     .from("feedbacks")
-                    .select("*, users(full_name, companies!users_company_id_fkey(company_name))")
+                    .select("*, users(id, full_name, role, company_id, companies!users_company_id_fkey(company_name))")
                     .order("created_at", { ascending: false });
 
-                if (error) {
-                    console.error("Error fetching ratings:", error);
-                }
+                if (error) console.error("Error fetching ratings:", error);
+
+                // Firma sahiplerinin şirket adlarını ayrıca çek (user_id → companies)
+                const { data: companiesData } = await supabase
+                    .from("companies")
+                    .select("user_id, company_name");
+                const ownerCompanyMap: Record<string, string> = {};
+                (companiesData || []).forEach((c: any) => {
+                    if (c.user_id) ownerCompanyMap[c.user_id] = c.company_name;
+                });
 
                 if (data) {
                     const formatted = data.map((r: any) => {
@@ -61,10 +68,15 @@ export default function AdminReports() {
                             } catch(e) {}
                         }
 
+                        // Çalışan: company join'den gelir | Firma sahibi: ownerCompanyMap'ten gelir
+                        const companyName = company?.company_name
+                            || (user?.id ? ownerCompanyMap[user.id] : null)
+                            || 'Bireysel';
+
                         return {
                             id: r.id,
                             userName: user?.full_name || 'Müşteri',
-                            company: company?.company_name || 'Bireysel',
+                            company: companyName,
                             generalStars: r.rating,
                             rating_details: parsedDetails,
                             note: parsedNote,
@@ -81,12 +93,17 @@ export default function AdminReports() {
         }, [])
     );
 
+    const orderRatings = ratings.filter(r => r.type !== 'app_feedback');
+    const appRatings = ratings.filter(r => r.type === 'app_feedback');
+
     if (view === "SALES")
         return <DailySalesView onBack={() => setView("MAIN")} orders={orders} colors={colors} styles={styles} />;
     if (view === "STATS")
-        return <PerformanceDashboard onBack={() => setView("MAIN")} ratings={ratings} colors={colors} styles={styles} />;
+        return <PerformanceDashboard onBack={() => setView("MAIN")} ratings={orderRatings} colors={colors} styles={styles} />;
     if (view === "FEEDBACK")
-        return <FeedbackView onBack={() => setView("MAIN")} ratings={ratings} colors={colors} styles={styles} />;
+        return <FeedbackView onBack={() => setView("MAIN")} ratings={orderRatings} colors={colors} styles={styles} />;
+    if (view === "APP_FEEDBACK")
+        return <FeedbackView onBack={() => setView("MAIN")} ratings={appRatings} colors={colors} styles={styles} title="Uygulama Görüşleri" isAppFeedback />;
 
     return (
         <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
@@ -114,7 +131,7 @@ export default function AdminReports() {
                     <ReportMenuItem
                         icon="star"
                         label="Müşteri Geri Bildirimleri"
-                        subtitle={`Ortalama: ${ratings.filter(r => r.generalStars > 0).length > 0 ? (ratings.filter(r => r.generalStars > 0).reduce((acc, r) => acc + (r.generalStars || 0), 0) / ratings.filter(r => r.generalStars > 0).length).toFixed(1) : "5.0"} | ${ratings.length} Yorum`}
+                        subtitle={`${orderRatings.filter(r => r.generalStars > 0).length > 0 ? (orderRatings.filter(r => r.generalStars > 0).reduce((acc, r) => acc + r.generalStars, 0) / orderRatings.filter(r => r.generalStars > 0).length).toFixed(1) : "5.0"} ⭐ | ${orderRatings.length} sipariş yorumu`}
                         onClick={() => setView("FEEDBACK")}
                         colors={colors}
                         styles={styles}
@@ -122,8 +139,16 @@ export default function AdminReports() {
                     <ReportMenuItem
                         icon="query-stats"
                         label="Performans Analizi"
-                        subtitle="Mutfak başarısı ve kategori skorları."
+                        subtitle="Sipariş puanlarının istatistiksel özeti."
                         onClick={() => setView("STATS")}
+                        colors={colors}
+                        styles={styles}
+                    />
+                    <ReportMenuItem
+                        icon="feedback"
+                        label="Uygulama Görüşleri"
+                        subtitle={`${appRatings.length} kullanıcı görüşü`}
+                        onClick={() => setView("APP_FEEDBACK")}
                         isLast
                         colors={colors}
                         styles={styles}
@@ -698,13 +723,8 @@ const StatCard = ({ icon, label, score, color, trend, styles }: any) => (
     </View>
 );
 
-const FeedbackView = ({ onBack, ratings, colors, styles }: any) => {
+const FeedbackView = ({ onBack, ratings, colors, styles, title = "Müşteri Geri Bildirimleri", isAppFeedback = false }: any) => {
     const insets = useSafeAreaInsets();
-    const [feedbackTab, setFeedbackTab] = useState<"ORDER" | "APP">("ORDER");
-
-    const filteredRatings = ratings.filter((r: any) => 
-        feedbackTab === "ORDER" ? r.type !== 'app_feedback' : r.type === 'app_feedback'
-    );
 
     return (
         <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
@@ -712,27 +732,12 @@ const FeedbackView = ({ onBack, ratings, colors, styles }: any) => {
                 <TouchableOpacity onPress={onBack} style={styles.backButton}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.title}>Müşteri Yorumları</Text>
-            </View>
-
-            <View style={{ flexDirection: "row", marginHorizontal: 24, marginBottom: 16, backgroundColor: colors.surfaceBorder, padding: 4, borderRadius: 12 }}>
-                <TouchableOpacity
-                    style={[{ flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: 8 }, feedbackTab === "ORDER" && { backgroundColor: colors.surface }]}
-                    onPress={() => setFeedbackTab("ORDER")}
-                >
-                    <Text style={[{ fontSize: 13, fontWeight: "bold", color: colors.muted }, feedbackTab === "ORDER" && { color: colors.text }]}>SİPARİŞ YORUMLARI</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[{ flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: 8 }, feedbackTab === "APP" && { backgroundColor: colors.surface }]}
-                    onPress={() => setFeedbackTab("APP")}
-                >
-                    <Text style={[{ fontSize: 13, fontWeight: "bold", color: colors.muted }, feedbackTab === "APP" && { color: colors.text }]}>UYGULAMA GÖRÜŞLERİ</Text>
-                </TouchableOpacity>
+                <Text style={styles.title}>{title}</Text>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                {filteredRatings.length > 0 ? (
-                    filteredRatings.map((r: any) => (
+                {ratings.length > 0 ? (
+                    ratings.map((r: any) => (
                         <View key={r.id} style={styles.feedbackCard}>
                             <View style={styles.feedbackTop}>
                                 <View style={styles.feedbackUser}>
@@ -848,8 +853,8 @@ const getStyles = (colors: any) => StyleSheet.create({
 
     // Feedback View
     feedbackCard: { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.surfaceBorder, marginBottom: 16 },
-    feedbackTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
-    feedbackUser: { flexDirection: "row", alignItems: "center", gap: 12 },
+    feedbackTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+    feedbackUser: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, marginRight: 8 },
     feedbackAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceBorder, alignItems: "center", justifyContent: "center" },
     feedbackName: { fontSize: 14, fontWeight: "bold", color: colors.text, marginBottom: 2 },
     feedbackCompany: { fontSize: 12, color: colors.muted },
