@@ -70,7 +70,8 @@ export default function Reports() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const ordersData = await adisyonService.getAllOrders();
+      // Raporlar için son 180 gün yeterli (aylık rapor en geniş pencere)
+      const ordersData = await adisyonService.getAllOrders({ daysBack: 180, limit: 1000 });
       setOrders(ordersData);
 
       const { data: fbData } = await supabase
@@ -514,10 +515,11 @@ function DebtsView({ onBack, setOrders }: any) {
   const fetchDebts = async () => {
     try {
       setLoading(true);
-      const { data: usersData } = await supabase.from('users').select('*');
-      const { data: companiesData } = await supabase.from('companies').select('*');
-      const ordersData = await adisyonService.getAllOrders();
-      
+      // Sadece gerekli kolonları çek — tüm satırları değil
+      const { data: usersData } = await supabase.from('users').select('id, full_name, phone, company_id');
+      const { data: companiesData } = await supabase.from('companies').select('id, company_name, user_id, balance');
+      // Borç hesabı tarihsel veri gerektirir — 365 gün
+      const ordersData = await adisyonService.getAllOrders({ daysBack: 365, limit: 2000 });
       setOrders(ordersData);
 
       if (usersData) {

@@ -59,11 +59,17 @@ export const adisyonService = {
     return data || [];
   },
 
-  async getAllOrders() {
+  async getAllOrders(options?: { daysBack?: number; limit?: number }) {
+    const { daysBack = 90, limit = 500 } = options || {};
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+
     const { data: orders, error: ordersError } = await supabase
       .from("adisyon")
       .select("*, adisyon_items(*, menu_items(name)), users(*)")
-      .order("created_at", { ascending: false });
+      .gte("created_at", cutoffDate.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
     if (ordersError) throw ordersError;
 
@@ -73,8 +79,8 @@ export const adisyonService = {
 
     return (orders || []).map((order: any) => {
       const user = order.users?.[0] || order.users;
-      
-      // Find company: 
+
+      // Find company:
       // 1. By company_id (employee)
       // 2. By user_id (owner)
       const company = companies?.find(c => c.id === user?.company_id || c.user_id === user?.id);

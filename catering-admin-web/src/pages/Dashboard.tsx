@@ -88,8 +88,20 @@ export default function Dashboard() {
               handleNewOrder(newOrder);
             }
           } else if (payload.eventType === 'UPDATE') {
-            // Refresh data when an order is updated (e.g., status changed to completed)
-            fetchDashboardData();
+            // Sadece etkilenen siparişi local state'te güncelle, DB'ye gitme
+            const updatedOrder = payload.new as any;
+            setRecentOrders(prev => {
+              const isLiveOrder = ["PAKET", "Sipariş Ver"].includes(updatedOrder.order_type);
+              const status = (updatedOrder.status || "").toUpperCase();
+              const isFinalized = ["COMPLETED", "TAMAMLANDI", "CANCELLED", "İPTAL", "PAID", "ÖDENDİ"].includes(status);
+
+              if (!isLiveOrder || isFinalized) {
+                // Tamamlandı veya iptal edildi → listeden çıkar
+                return prev.filter(o => o.id !== updatedOrder.id);
+              }
+              // Hâlâ aktif → sadece status güncelle
+              return prev.map(o => o.id === updatedOrder.id ? { ...o, status: updatedOrder.status } : o);
+            });
           }
         }
       )
@@ -128,8 +140,8 @@ export default function Dashboard() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // 1. Fetch Orders
-      const allOrders = await adisyonService.getAllOrders();
+      // 1. Fetch Orders — Dashboard için son 30 gün yeterli
+      const allOrders = await adisyonService.getAllOrders({ daysBack: 30, limit: 300 });
       const todayOrders = allOrders.filter(o => new Date(o.created_at) >= today);
       
       // 2. Calculate Stats

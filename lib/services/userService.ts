@@ -95,9 +95,25 @@ export const userService = {
         .eq("user_id", userId);
 
       if (error) throw error;
+
+      // Firma adresi değiştiyse tüm çalışanların adresini de güncelle
+      if (data.invoiceAddress) {
+        try {
+          await supabase
+            .from("users")
+            .update({ address: data.invoiceAddress } as any)
+            .eq("company_id", existingCompany.id)
+            .neq("role", "owner")
+            .neq("role", "deleted");
+          console.log("✅ Çalışan adresleri firma adresiyle senkronize edildi.");
+        } catch (e) {
+          // Kritik değil — firma bilgisi yine de kaydedildi
+          console.warn("Çalışan adresi senkronizasyon hatası (kritik değil):", e);
+        }
+      }
     } else {
       // Şirket kaydı yoksa yeni bir tane oluştur
-      const { error } = await supabase
+      const { data: newCompany, error } = await supabase
         .from("companies")
         .insert({
           user_id: userId,
@@ -105,9 +121,14 @@ export const userService = {
           tax_number: data.taxNumber,
           company_phone: data.companyPhone,
           address: data.invoiceAddress,
-        });
+        })
+        .select("id")
+        .single();
 
       if (error) throw error;
+
+      // Yeni firma kuruldu — şu an hiç çalışan yok ama ileride eklenebilir (addEmployee zaten halleder)
+      console.log("✅ Yeni firma oluşturuldu:", newCompany?.id);
     }
 
     // KRİTİK: Kullanıcıyı kurumsal olarak işaretle (is_company flag'ini güncelle)

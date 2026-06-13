@@ -207,12 +207,18 @@ export const adisyonService = {
     }
   },
 
-  async getAllOrders() {
+  async getAllOrders(options?: { daysBack?: number; limit?: number }) {
+    const { daysBack = 90, limit = 500 } = options || {};
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+
     try {
       const { data, error } = await supabase
         .from("adisyon")
         .select("*, adisyon_items(*, menu_items(name)), users(*, companies!users_company_id_fkey(*))")
-        .order("created_at", { ascending: false });
+        .gte("created_at", cutoffDate.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(limit);
 
       if (error) {
         console.error("getAllOrders Error:", error);
