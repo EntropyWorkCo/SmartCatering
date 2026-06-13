@@ -179,7 +179,6 @@ function SalesView({ onBack, orders }: any) {
   const [period, setPeriod] = useState<"DAILY" | "WEEKLY" | "MONTHLY">("MONTHLY");
   
   const stats = useMemo(() => {
-    const now = new Date();
     const validOrders = orders.filter((o: any) => {
       const status = String(o.status || '').toUpperCase();
       const type = String(o.order_type || '').toUpperCase();
