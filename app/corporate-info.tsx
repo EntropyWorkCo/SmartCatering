@@ -85,7 +85,7 @@ export default function CorporateInfoScreen() {
     }, [user?.id]);
 
     const actualCompanyId = fetchedCompanyId || profile?.corporate_info?.id || profile?.company_id;
-    const isCompanyOwner = profile?.role === 'owner' || profile?.role === 'corporate';
+    const isCompanyOwner = profile?.role === 'firma_sahibi' || profile?.role === 'owner' || profile?.role === 'corporate';
 
     useEffect(() => {
         if (!authLoading && !profileLoading && !isCompanyOwner) {

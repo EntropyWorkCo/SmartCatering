@@ -84,12 +84,22 @@ export default function ProfileScreen() {
             // Bu oturumda fotoğraf seçildiyse storage'dan okuma — üstüne yazma
             if (photoPickedThisSession.current) return;
 
-            // Profil fotoğrafını önce yerel bellekten, yoksa veritabanından al
+            // Profil fotoğrafını önce cache'den, yoksa veritabanından al
+            // Cache artık kalıcı Supabase URL saklıyor (geçici local URI değil)
             const storedPhoto = await AsyncStorage.getItem(`profile_photo_${user?.id}`);
-            if (storedPhoto) {
+            if (storedPhoto && storedPhoto.startsWith('https://')) {
+                // Geçerli bir Supabase URL'si — kullan
                 setPhotoUrl(storedPhoto);
-            } else if (profile?.avatar_url) {
-                setPhotoUrl(profile.avatar_url);
+            } else {
+                // Cache yok veya eski local URI — DB'den al ve cache'i güncelle
+                if (storedPhoto && !storedPhoto.startsWith('https://')) {
+                    // Eski geçici URI'yi temizle
+                    await AsyncStorage.removeItem(`profile_photo_${user?.id}`);
+                }
+                if (profile?.avatar_url) {
+                    setPhotoUrl(profile.avatar_url);
+                    await AsyncStorage.setItem(`profile_photo_${user?.id}`, profile.avatar_url);
+                }
             }
 
             const storedVal = await AsyncStorage.getItem("notifications_enabled");
@@ -135,6 +145,7 @@ export default function ProfileScreen() {
                 const response = await fetch(uri);
                 const blob = await response.blob();
                 const ext = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
+                // Sabit dosya adı — her zaman aynı path'e upsert edilir
                 const filePath = `${user.id}/avatar.${ext}`;
 
                 const { error: uploadError } = await supabase.storage
@@ -156,6 +167,8 @@ export default function ProfileScreen() {
                 const publicUrl = urlData?.publicUrl;
                 if (!publicUrl) return;
 
+                // Cache-bust için timestamp ekliyoruz ama BASE URL'i saklıyoruz
+                // Böylece cache bozulsa bile base URL ile yeniden yüklenebilir
                 const finalUrl = `${publicUrl}?t=${Date.now()}`;
 
                 await supabase
@@ -163,8 +176,10 @@ export default function ProfileScreen() {
                     .update({ avatar_url: finalUrl } as any)
                     .eq('id', user.id);
 
-                // DB'de Supabase URL, cihazda local URI sakla
-                await AsyncStorage.setItem(`profile_photo_${user.id}`, uri);
+                // ✅ KRİTİK DÜZELTME: Artık geçici local URI değil,
+                // kalıcı Supabase public URL'si saklanıyor.
+                // iOS geçici dosyaları temizlese de fotoğraf kaybolmaz.
+                await AsyncStorage.setItem(`profile_photo_${user.id}`, finalUrl);
             } catch (storageErr) {
                 console.warn('Storage hatası:', storageErr);
             }

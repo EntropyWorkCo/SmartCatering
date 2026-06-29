@@ -10,8 +10,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.entropywork.smartcatering",
-      "buildNumber": "6",
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "buildNumber": "7",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "entitlements": {
+        "aps-environment": "production"
+      }
     },
     "android": {
       "googleServicesFile": "./google-services.json",

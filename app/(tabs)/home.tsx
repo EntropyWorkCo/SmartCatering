@@ -230,11 +230,19 @@ export default function HomeScreen() {
       if (!user?.id) return;
       (async () => {
         const cached = await AsyncStorage.getItem(`profile_photo_${user.id}`);
-        if (cached) {
+        if (cached && cached.startsWith('https://')) {
+          // Geçerli Supabase URL — kullan
           setLocalPhoto(cached);
-        } else if (profile?.avatar_url) {
-          // Cache yoksa DB URL'sini dene (web/cross-device fallback)
-          setLocalPhoto(profile.avatar_url);
+        } else {
+          // Cache yok veya eski geçici URI — temizle ve DB'den al
+          if (cached && !cached.startsWith('https://')) {
+            await AsyncStorage.removeItem(`profile_photo_${user.id}`);
+          }
+          if (profile?.avatar_url) {
+            setLocalPhoto(profile.avatar_url);
+            // Cache'i güncel Supabase URL ile yenile
+            await AsyncStorage.setItem(`profile_photo_${user.id}`, profile.avatar_url);
+          }
         }
       })();
     }, [user?.id, profile?.avatar_url])

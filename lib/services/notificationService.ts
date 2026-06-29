@@ -2,7 +2,12 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { supabase } from "../supabase";
 
+// executionEnvironment değerleri:
+//   'storeClient'  → Expo Go uygulaması
+//   'standalone'   → App Store / production build
+//   'bare'         → expo run:ios / development build
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
+const isProductionBuild = Constants.executionEnvironment === 'standalone';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Edge Function helper — sunucu tarafı push gönderimi (background/killed safe)
