@@ -83,7 +83,11 @@ export const pdfService = {
             const dateStr = dateObj.toLocaleDateString('tr-TR');
             const timeStr = dateObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
             
-            const itemsStr = a.items?.map((i: any) => i.menu_items?.name).join(', ') || 'Sipariş';
+            const itemsStr = a.items?.map((i: any) => {
+                const qty: number = i.quantity || 1;
+                const name: string = i.menu_items?.name || 'Yemek';
+                return qty > 1 ? `${qty}x ${name}` : name;
+            }).join(', ') || 'Sipariş';
 
             return `
                 <tr class="${rowClass}">

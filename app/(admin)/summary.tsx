@@ -2,6 +2,7 @@ import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { adisyonService } from "@/lib/services/adisyonService";
 import { billingService } from "@/lib/services/billingService";
+import { pricingService } from "@/lib/services/pricingService";
 import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
@@ -26,6 +27,8 @@ import {
     RefreshControl
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import PreviewModalBody from './PreviewModalBody';
 
 export default function SummaryScreen() {
   const { orders, loading, updateOrderStatus, fetchOrders } = useAdisyon();
@@ -57,6 +60,20 @@ export default function SummaryScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Fiyat Ayarlama Modalı State
+  const [priceModalVisible, setPriceModalVisible] = useState(false);
+  const [priceCompany, setPriceCompany] = useState<any | null>(null);
+  const [priceInputs, setPriceInputs] = useState<{ two: string; three: string; four: string }>({ two: '', three: '', four: '' });
+  const [loadingPrices, setLoadingPrices] = useState(false);
+  const [savingPrices, setSavingPrices] = useState(false);
+
+  // Bu Ayı Hesapla Modalı State
+  const [calcModalVisible, setCalcModalVisible] = useState(false);
+  const [calcAccount, setCalcAccount] = useState<any | null>(null);
+  const [calcResult, setCalcResult] = useState<{ total: number; breakdown: { selectionCount: number; count: number; unitPrice: number; subtotal: number }[] } | null>(null);
+  const [calculatingMonth, setCalculatingMonth] = useState(false);
+  const [confirmingCalc, setConfirmingCalc] = useState(false);
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
@@ -95,6 +112,116 @@ export default function SummaryScreen() {
 
   const [mainTab, setMainTab] = useState<"BIREYSEL" | "KURUMSAL">("KURUMSAL");
   const [previewAccount, setPreviewAccount] = useState<any | null>(null);
+
+  // PreviewAccount için türetilmiş veriler
+  const previewData = useMemo(() => {
+    if (!previewAccount) return null;
+    const allOrders: any[] = previewAccount.orders || [];
+    const mealOrders = allOrders.filter((o: any) =>
+      o.order_type === 'Şimdi Ye' || o.order_type === 'Sipariş Ver'
+    );
+    const financialEntries = allOrders
+      .filter((o: any) => o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT')
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const closings = financialEntries.filter((e: any) => (e.note || '').includes('Ay Kapanışı'));
+    const lastClosingTime: number | null = closings.length ? new Date(closings[0].created_at).getTime() : null;
+
+    // Son ödeme zamanı (en yeni MANUAL_PAYMENT)
+    const lastPaymentEntry = financialEntries.find((e: any) => e.order_type === 'MANUAL_PAYMENT');
+    const lastPaymentTime: number | null = lastPaymentEntry ? new Date(lastPaymentEntry.created_at).getTime() : null;
+
+    const byDay: Record<string, { dateKey: string; date: Date; dayOrders: any[] }> = {};
+    mealOrders.forEach((o: any) => {
+      const d = new Date(o.created_at);
+      const key = d.toISOString().split('T')[0];
+      if (!byDay[key]) byDay[key] = { dateKey: key, date: d, dayOrders: [] };
+      const dTime = d.getTime();
+
+      // isPaid öncelik sırası — her zaman explicit ödeme/kapanış kanıtı aranır:
+      // 1. Ay kapanışı kaydı varsa → kapanış tarihinden önceki siparişler ödendi
+      // 2. Ödeme (MANUAL_PAYMENT) kaydı varsa → son ödeme tarihinden önceki siparişler ödendi
+      // 3. Siparişin kendi status alanı (legacy)
+      // NOT: Bakiye=0 tek başına "ödendi" saymaz — ödeme kaydı olmadan yeni siparişler hâlâ açık kalır
+      const isPaid = lastClosingTime !== null
+        ? dTime < lastClosingTime
+        : lastPaymentTime !== null
+          ? dTime < lastPaymentTime
+          : ['PAID', 'ÖDENDİ', 'COMPLETED', 'TAMAMLANDI'].includes((o.status || '').toUpperCase());
+
+      byDay[key].dayOrders.push({ ...o, isPaid });
+    });
+    const mealDays = Object.values(byDay).sort((a, b) => b.date.getTime() - a.date.getTime());
+    const debtAmount: number = previewAccount.isCorporate ? previewAccount.manualDebt : previewAccount.total;
+    const hasDebt = debtAmount !== 0;
+    const debtPositive = debtAmount > 0;
+    const hasMeals = mealDays.length !== 0;
+    const hasFinancial = financialEntries.length !== 0;
+    const isEmpty = !hasMeals && !hasFinancial;
+    const totalPlates = mealDays.reduce((s: number, d: any) => s + (d.dayOrders as any[]).length, 0);
+    const debtColor = debtPositive ? '#ef4444' : '#16a34a';
+    const debtLabel = debtPositive ? `₺${debtAmount.toLocaleString('tr-TR')}` : 'Temiz';
+
+    // Finansal satırlar için hazırlanmış veri
+    const financialRows = financialEntries.map((entry: any, idx: number) => {
+      const isPayment = entry.order_type === 'MANUAL_PAYMENT';
+      const isClosing = (entry.note || '').includes('Ay Kapanışı');
+      const label = isPayment ? 'Kısmi Ödeme' : isClosing ? 'Ay Kapanışı' : 'Borç Girişi';
+      const badgeKey = isPayment ? 'payment' : isClosing ? 'closing' : 'open';
+      const badgeLabel = isPayment ? 'İşlendi' : isClosing ? 'Kapandı' : 'Açık';
+      const badgeColor = isPayment ? '#3B6D11' : isClosing ? '#185FA5' : '#854F0B';
+      const amountColor = isPayment ? '#16a34a' : '#111827';
+      const amountSign = isPayment ? '-' : '+';
+      const hasAmount = entry.total_amount > 0;
+      const amountStr = hasAmount ? `${amountSign}₺${entry.total_amount.toLocaleString('tr-TR')}` : '';
+      const notLast = idx !== financialEntries.length - 1;
+      return { ...entry, label, badgeKey, badgeLabel, badgeColor, amountColor, amountStr, hasAmount, notLast };
+    });
+
+    // Yemek günleri için hazırlanmış veri
+    const mealDaysEnriched = mealDays.map((dayObj: any) => ({
+      ...dayObj,
+      dayOrdersEnriched: (dayObj.dayOrders as any[]).map((order: any) => {
+        const items: any[] = order.adisyon_items || [];
+
+        // 1. selections dolu olan tabldot kalemi (menu ekranı)
+        const tabldotItem = items.find((i: any) => Array.isArray(i.selections) && i.selections.length);
+
+        // 2. Fallback: selections null ama menu_items.name'den TABLDOT anlaşılan (home ekranı)
+        const packageFallback = !tabldotItem
+          ? items.find((i: any) => {
+              const cat: string = i.menu_items?.category || '';
+              const nm: string = i.menu_items?.name || '';
+              return cat === 'TABLDOT' || nm.toUpperCase().includes('TABLDOT') || nm.toUpperCase().includes('PAKET');
+            })
+          : null;
+
+        let selectionCount: number = tabldotItem?.selections?.length || 0;
+        const mealContents: string[] = tabldotItem?.selections?.map((s: any) => s.item_name).filter(Boolean) || [];
+
+        if (selectionCount === 0 && packageFallback) {
+          const nm: string = packageFallback.menu_items?.name || '';
+          if (nm.includes('2') || nm.toUpperCase().includes('2 ÇEŞİT')) selectionCount = 2;
+          else if (nm.includes('3') || nm.toUpperCase().includes('3 ÇEŞİT')) selectionCount = 3;
+          else selectionCount = 4;
+        }
+
+        const hasSelections = selectionCount !== 0;
+        const activeTabldotItem = tabldotItem || packageFallback;
+        const tabldotQuantity: number = activeTabldotItem?.quantity || 1;
+        const otherItems = items.filter((i: any) => i !== activeTabldotItem);
+        const hasOtherItems = otherItems.length !== 0;
+        const initials = (order.userName || 'M').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+        const tabldotLabel = `${selectionCount}'lü Tabldot`;
+        return { ...order, selectionCount, hasSelections, mealContents, otherItems, hasOtherItems, initials, tabldotLabel, tabldotQuantity };
+      }),
+    }));
+
+    return {
+      mealDays, financialEntries, debtAmount, hasDebt, debtPositive, hasMeals, hasFinancial,
+      isEmpty, totalPlates, debtColor, debtLabel, financialRows, mealDaysEnriched,
+    };
+  }, [previewAccount]);
 
   const groupedAccounts = useMemo(() => {
     try {
@@ -147,7 +274,7 @@ export default function SummaryScreen() {
             finalManualDebt = ownedCompany.balance || 0;
         }
 
-        const isActuallyCorporate = !!finalCompanyName;
+        const isActuallyCorporate = !!finalCompanyName || order.isCorporate === true;
 
         const match =
           (mainTab === "KURUMSAL" && isActuallyCorporate) ||
@@ -347,6 +474,124 @@ export default function SummaryScreen() {
         }
       ]
     );
+  };
+
+  const handleCalculateMonth = async (account: any) => {
+    if (!account.companyId) {
+      Alert.alert('Hata', 'Bu hesap için firma ID bulunamadı.');
+      return;
+    }
+    setCalcAccount(account);
+    setCalcResult(null);
+    setCalcModalVisible(true);
+    setCalculatingMonth(true);
+    try {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      // Firma sahibi + çalışanların user_id'lerini bul
+      const { data: employees } = await supabase
+        .from('users')
+        .select('id')
+        .eq('company_id', account.companyId);
+
+      const userIds = [
+        account.userId,
+        ...((employees || []).map((u: any) => u.id)),
+      ].filter((id, idx, arr) => !!id && arr.indexOf(id) === idx);
+
+      // Bu ay bu kullanıcıların yemek siparişlerini DB'den direkt çek
+      // selections explicit seçiliyor — account.orders'a güvenmiyoruz
+      const { data: monthOrders, error } = await supabase
+        .from('adisyon')
+        .select('id, order_type, created_at, adisyon_items(id, selections, menu_items(id, name, category))')
+        .in('user_id', userIds)
+        .in('order_type', ['Şimdi Ye', 'Sipariş Ver'])
+        .gte('created_at', monthStart.toISOString());
+
+      if (error) throw error;
+
+      const result = await pricingService.calculateMonthlyTotal(
+        account.companyId,
+        monthOrders || []
+      );
+      setCalcResult(result);
+    } catch {
+      Alert.alert('Hata', 'Hesaplama yapılırken hata oluştu.');
+      setCalcModalVisible(false);
+    } finally {
+      setCalculatingMonth(false);
+    }
+  };
+
+  const handleConfirmCalc = async () => {
+    if (!calcAccount || !calcResult) return;
+    setConfirmingCalc(true);
+    try {
+      const todayStr = new Date().toLocaleDateString('tr-TR');
+      await billingService.addManualEntry(
+        calcAccount.userId,
+        calcResult.total,
+        todayStr,
+        todayStr,
+        'DEBT',
+        'Aylık Tabldot Hesabı'
+      );
+      const updatedBalance = (calcAccount.manualDebt || 0) + calcResult.total;
+      await billingService.updateCompanyBalance(calcAccount.companyId, updatedBalance);
+      setCompanies((prev) => prev.map((c) =>
+        c.id === calcAccount.companyId ? { ...c, balance: updatedBalance } : c
+      ));
+      Alert.alert('Başarılı', `₺${calcResult.total.toLocaleString('tr-TR')} borç olarak eklendi.`);
+      setCalcModalVisible(false);
+      setCalcResult(null);
+    } catch {
+      Alert.alert('Hata', 'Borç kaydedilirken hata oluştu.');
+    } finally {
+      setConfirmingCalc(false);
+    }
+  };
+
+  const handleOpenPriceModal = async (account: any) => {
+    if (!account.companyId) {
+      Alert.alert('Hata', 'Bu hesap için firma ID bulunamadı.');
+      return;
+    }
+    setPriceCompany(account);
+    setPriceModalVisible(true);
+    setLoadingPrices(true);
+    try {
+      const prices = await pricingService.getCompanyPrices(account.companyId);
+      const map: Record<number, string> = {};
+      prices.forEach((p) => { map[p.selection_count] = p.unit_price.toString(); });
+      setPriceInputs({
+        two: map[2] || '',
+        three: map[3] || '',
+        four: map[4] || '',
+      });
+    } catch {
+      Alert.alert('Hata', 'Fiyatlar yüklenirken hata oluştu.');
+    } finally {
+      setLoadingPrices(false);
+    }
+  };
+
+  const handleSavePrices = async () => {
+    if (!priceCompany) return;
+    setSavingPrices(true);
+    try {
+      await pricingService.setPrices(priceCompany.companyId, [
+        { selectionCount: 2, unitPrice: parseFloat(priceInputs.two) || 0 },
+        { selectionCount: 3, unitPrice: parseFloat(priceInputs.three) || 0 },
+        { selectionCount: 4, unitPrice: parseFloat(priceInputs.four) || 0 },
+      ]);
+      Alert.alert('Başarılı', 'Fiyatlar kaydedildi.');
+      setPriceModalVisible(false);
+    } catch {
+      Alert.alert('Hata', 'Fiyatlar kaydedilirken hata oluştu.');
+    } finally {
+      setSavingPrices(false);
+    }
   };
 
   const handleExportPDF = async (account: any) => {
@@ -591,7 +836,7 @@ export default function SummaryScreen() {
           <Text style={styles.totalAmount}>₺{totalDebt.toLocaleString("tr-TR")}</Text>
         </View>
 
-        <Text style={{ fontSize: 10, fontWeight: '900', color: colors.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginTop: 24, marginBottom: 12 }}>FİRMA & BORÇ LİSTESİ</Text>
+        <Text style={{ fontSize: 10, fontWeight: '900', color: colors.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginTop: 24, marginBottom: 12 }}>{mainTab === 'KURUMSAL' ? 'FİRMA & BORÇ LİSTESİ' : 'MÜŞTERİ & BORÇ LİSTESİ'}</Text>
 
         {loading ? (
           <View style={{ alignItems: 'center', paddingVertical: 40 }}>
@@ -620,79 +865,58 @@ export default function SummaryScreen() {
             </View>
 
             <View style={styles.accountActions}>
-              <TouchableOpacity style={styles.outlineBtn} onPress={() => setPreviewAccount(account)}>
-                <Text style={styles.outlineBtnText}>Döküm İncele</Text>
-              </TouchableOpacity>
-
               {account.isCorporate ? (
-                <>
-                  <TouchableOpacity 
-                     style={[styles.primaryBtn, { backgroundColor: "#2196F3", marginLeft: 8 }]} 
-                     onPress={() => {
-                       setSelectedCompanyId(account.companyId || "");
-                       setNewDebtAmount((account.manualDebt || 0).toString());
-                       setDebtModalVisible(true);
-                     }}
-                  >
-                    <Text style={styles.primaryBtnText}>Borç Gir</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  <TouchableOpacity style={styles.sqBtn} onPress={() => setPreviewAccount(account)}>
+                    <MaterialIcons name="receipt-long" size={18} color="#fff" />
+                    <Text style={styles.sqBtnText}>Döküm</Text>
                   </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                     style={[styles.primaryBtn, { backgroundColor: "#FF9800", marginLeft: 8 }]}
-                     onPress={() => {
-                       setSelectedAccountForPayment(account);
-                       setPaymentAmount("");
-                       setPartialModalVisible(true);
-                     }}
-                  >
-                    <Text style={styles.primaryBtnText}>Kısmi Ödeme</Text>
+                  <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#2196F3' }]} onPress={() => { setSelectedCompanyId(account.companyId || ''); setNewDebtAmount(''); setDebtModalVisible(true); }}>
+                    <MaterialIcons name="add-circle-outline" size={18} color="#fff" />
+                    <Text style={styles.sqBtnText}>Borç Gir</Text>
                   </TouchableOpacity>
-
-                  {/* Ay Kapanışı butonu — sadece kurumsal hesaplarda */}
-                  {account.isCorporate && (
-                    <TouchableOpacity
-                      style={[styles.primaryBtn, { backgroundColor: '#6366f1', marginLeft: 8 }]}
-                      onPress={() => handleCloseMonthAdmin(account)}
-                      disabled={closingMonth}
-                    >
-                      {closingMonth ? (
-                        <ActivityIndicator color="#fff" size="small" />
-                      ) : (
-                        <Text style={styles.primaryBtnText}>Ay Kapat</Text>
-                      )}
+                  <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#FF9800' }]} onPress={() => { setSelectedAccountForPayment(account); setPaymentAmount(''); setPartialModalVisible(true); }}>
+                    <MaterialIcons name="payments" size={18} color="#fff" />
+                    <Text style={styles.sqBtnText}>Ödeme</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#6366f1' }]} onPress={() => handleCloseMonthAdmin(account)} disabled={closingMonth}>
+                    {closingMonth ? <ActivityIndicator color="#fff" size="small" /> : <MaterialIcons name="event-available" size={18} color="#fff" />}
+                    <Text style={styles.sqBtnText}>Ay Kapat</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#f59e0b' }]} onPress={() => handleCalculateMonth(account)}>
+                    <MaterialIcons name="calculate" size={18} color="#fff" />
+                    <Text style={styles.sqBtnText}>Hesapla</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#0ea5e9' }]} onPress={() => handleOpenPriceModal(account)}>
+                    <MaterialIcons name="attach-money" size={18} color="#fff" />
+                    <Text style={styles.sqBtnText}>Fiyat</Text>
+                  </TouchableOpacity>
+                  {account.manualDebt > 0 && (
+                    <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#4CAF50' }]} onPress={() => handleClearDebt(account)}>
+                      <MaterialIcons name="check-circle-outline" size={18} color="#fff" />
+                      <Text style={styles.sqBtnText}>Ödendi</Text>
                     </TouchableOpacity>
                   )}
-
-                  {(account.manualDebt > 0) && (
-                    <TouchableOpacity 
-                       style={[styles.primaryBtn, { backgroundColor: "#4CAF50", marginLeft: 8 }]} 
-                       onPress={() => handleClearDebt(account)}
-                    >
-                      <Text style={styles.primaryBtnText}>Borç Ödendi</Text>
-                    </TouchableOpacity>
-                  )}
-                </>
+                </View>
               ) : (
-                  account.total > 0 ? (
-                    <View style={{ flexDirection: 'row', flex: 2 }}>
-                      <TouchableOpacity 
-                        style={[styles.primaryBtn, { backgroundColor: "#FF9800", marginLeft: 8 }]} 
-                        onPress={() => {
-                          setSelectedAccountForPayment(account);
-                          setPaymentAmount("");
-                          setPartialModalVisible(true);
-                        }}
-                      >
-                        <Text style={styles.primaryBtnText}>Kısmi Ödeme</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  <TouchableOpacity style={styles.sqBtn} onPress={() => setPreviewAccount(account)}>
+                    <MaterialIcons name="receipt-long" size={18} color="#fff" />
+                    <Text style={styles.sqBtnText}>Döküm</Text>
+                  </TouchableOpacity>
+                  {account.total > 0 && (
+                    <>
+                      <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#FF9800' }]} onPress={() => { setSelectedAccountForPayment(account); setPaymentAmount(''); setPartialModalVisible(true); }}>
+                        <MaterialIcons name="payments" size={18} color="#fff" />
+                        <Text style={styles.sqBtnText}>Ödeme</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity 
-                         style={[styles.primaryBtn, { backgroundColor: "#4CAF50", marginLeft: 8 }]} 
-                         onPress={() => handleClearDebt(account)}
-                      >
-                        <Text style={styles.primaryBtnText}>Borç Ödendi</Text>
+                      <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#4CAF50' }]} onPress={() => handleClearDebt(account)}>
+                        <MaterialIcons name="check-circle-outline" size={18} color="#fff" />
+                        <Text style={styles.sqBtnText}>Ödendi</Text>
                       </TouchableOpacity>
-                    </View>
-                  ) : null
+                    </>
+                  )}
+                </View>
               )}
             </View>
           </View>
@@ -753,7 +977,6 @@ export default function SummaryScreen() {
                 }}
               />
             )}
-
             {showEndPicker && (
               <DateTimePicker
                 value={endDate}
@@ -765,6 +988,7 @@ export default function SummaryScreen() {
                 }}
               />
             )}
+
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setDebtModalVisible(false)}>
                 <Text style={{ color: colors.muted }}>İptal</Text>
@@ -779,50 +1003,26 @@ export default function SummaryScreen() {
     </Modal>
 
       {/* Önizleme Modalı */}
-      {previewAccount && (
-        <Modal visible={!!previewAccount} transparent={false} animationType="slide">
-          <View style={[styles.invoiceModalContainer, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-             <View style={styles.invoiceHeader}>
-               <Text style={[styles.invoiceTitle, { color: colors.text }]}>Sipariş Özeti</Text>
-               <TouchableOpacity onPress={() => setPreviewAccount(null)} style={styles.invoiceCloseBtn}>
-                 <Text style={{ color: colors.primary, fontSize: 16, fontWeight: 'bold' }}>Kapat</Text>
-               </TouchableOpacity>
-             </View>
-             <ScrollView style={styles.modalBody}>
-               <View style={styles.invoiceMetaGroup}>
-                  <Text style={[styles.invoiceMetaLabel, { color: colors.muted }]}>MÜŞTERİ / FİRMA ÜNVANI</Text>
-                  <Text style={[styles.invoiceMetaValue, { color: colors.text }]}>{previewAccount.displayName}</Text>
-               </View>
-               <TouchableOpacity style={styles.pdfBtn} onPress={() => handleExportPDF(previewAccount)}>
-                 <MaterialIcons name="picture-as-pdf" size={20} color="#fff" />
-                 <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>PDF Olarak İndir</Text>
-               </TouchableOpacity>
-
-               <View style={styles.invoiceDivider} />
-               <Text style={[styles.modalSectionTitle, { color: colors.text }]}>HİZMET DÖKÜMÜ (LİSTE)</Text>
-               {previewAccount.orders.map((order: any) => (
-                 <View key={order.id} style={styles.simpleOrderRow}>
-                   <Text style={[styles.simpleOrderDate, { color: colors.text }]}>{new Date(order.created_at).toLocaleDateString("tr-TR")}</Text>
-                   {order.order_type === 'MANUAL_DEBT' ? (
-                     <Text style={{ color: colors.primary, fontSize: 13, fontWeight: 'bold' }}>• Dönem Borcu ({order.note}): ₺{order.total_amount?.toLocaleString("tr-TR")}</Text>
-                   ) : order.order_type === 'MANUAL_PAYMENT' ? (
-                     <Text style={{ color: "#4CAF50", fontSize: 13, fontWeight: 'bold' }}>• Ödeme Alındı ({order.note}): ₺{order.total_amount?.toLocaleString("tr-TR")}</Text>
-                   ) : (
-                     order.adisyon_items?.map((item: any) => (
-                       <Text key={item.id} style={{ color: colors.muted, fontSize: 12 }}>• {item.quantity}x {item.menu_items?.name}</Text>
-                     ))
-                   )}
-                 </View>
-               ))}
-               <View style={styles.invoiceDivider} />
-               <View style={styles.invoiceTotalBox}>
-                 <Text style={[styles.invoiceTotalLabel, { color: colors.text }]}>GÜNCEL BORÇ</Text>
-                 <Text style={[styles.invoiceTotalValue, { color: colors.primary }]}>₺{(previewAccount.isCorporate ? previewAccount.manualDebt : previewAccount.total).toLocaleString("tr-TR")}</Text>
-               </View>
-             </ScrollView>
+      <Modal visible={!!previewAccount} transparent={false} animationType="slide">
+        <View style={[styles.invoiceModalContainer, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+          <View style={styles.invoiceHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.invoiceMetaLabel, { color: colors.muted }]}>{previewAccount?.isCorporate ? 'FİRMA' : 'MÜŞTERİ'}</Text>
+              <Text style={[styles.invoiceTitle, { color: colors.text }]} numberOfLines={1}>{previewAccount?.displayName}</Text>
+            </View>
+            <TouchableOpacity onPress={() => setPreviewAccount(null)} style={styles.invoiceCloseBtn}>
+              <MaterialIcons name="close" size={24} color={colors.muted} />
+            </TouchableOpacity>
           </View>
-        </Modal>
-      )}
+          <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
+            <TouchableOpacity style={styles.pdfBtn} onPress={() => handleExportPDF(previewAccount)}>
+              <MaterialIcons name="picture-as-pdf" size={20} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>PDF Ekstre İndir</Text>
+            </TouchableOpacity>
+            <PreviewModalBody previewData={previewData} colors={colors} styles={styles} />
+          </ScrollView>
+        </View>
+      </Modal>
 
       {/* Parçalı Ödeme Modalı */}
       <Modal visible={partialModalVisible} transparent animationType="fade">
@@ -840,15 +1040,120 @@ export default function SummaryScreen() {
                 placeholderTextColor={colors.muted}
                 autoFocus
               />
-              
-
-
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.modalCancel} onPress={() => setPartialModalVisible(false)}>
                   <Text style={{ color: colors.muted }}>İptal</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.modalConfirm} onPress={handlePartialPayment} disabled={updatingDebt}>
                   {updatingDebt ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold' }}>Ödemeyi Kaydet</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Bu Ayı Hesapla Modalı */}
+      <Modal visible={calcModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              {new Date().toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })} Hesabı
+            </Text>
+            {calcAccount ? (
+              <Text style={{ fontSize: 12, color: colors.muted, marginBottom: 16 }}>{calcAccount.displayName}</Text>
+            ) : null}
+
+            {calculatingMonth ? (
+              <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 32 }} />
+            ) : calcResult ? (
+              <View style={{ marginBottom: 20 }}>
+                {calcResult.breakdown.filter((b) => b.count !== 0).map((b) => (
+                  <View key={b.selectionCount} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderColor: colors.surfaceBorder }}>
+                    <Text style={{ color: colors.text, fontSize: 13 }}>{b.selectionCount}{"'"}lü Tabldot</Text>
+                    <Text style={{ color: colors.muted, fontSize: 12 }}>{b.count} tabak × ₺{b.unitPrice.toLocaleString('tr-TR')}</Text>
+                    <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>₺{b.subtotal.toLocaleString('tr-TR')}</Text>
+                  </View>
+                ))}
+                {calcResult.breakdown.every((b) => b.count === 0) ? (
+                  <Text style={{ color: colors.muted, textAlign: 'center', paddingVertical: 16 }}>Bu dönemde açık tabldot siparişi yok.</Text>
+                ) : (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12 }}>
+                    <Text style={{ color: colors.text, fontWeight: '900', fontSize: 15 }}>TOPLAM</Text>
+                    <Text style={{ color: colors.primary, fontWeight: '900', fontSize: 20 }}>₺{calcResult.total.toLocaleString('tr-TR')}</Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => { setCalcModalVisible(false); setCalcResult(null); }}>
+                <Text style={{ color: colors.muted }}>İptal</Text>
+              </TouchableOpacity>
+              {calcResult && calcResult.total !== 0 ? (
+                <TouchableOpacity style={styles.modalConfirm} onPress={handleConfirmCalc} disabled={confirmingCalc}>
+                  {confirmingCalc ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold' }}>Borç Olarak Ekle</Text>}
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Fiyat Ayarlama Modalı */}
+      <Modal visible={priceModalVisible} transparent animationType="fade">
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Tabldot Fiyatları</Text>
+              {priceCompany ? (
+                <Text style={{ fontSize: 12, color: colors.muted, marginBottom: 16 }}>{priceCompany.displayName}</Text>
+              ) : null}
+              {loadingPrices ? (
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 24 }} />
+              ) : (
+                <View style={{ gap: 12, marginBottom: 20 }}>
+                  <View>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, marginBottom: 6 }}>{"2'Lİ TABLDOT (₺/TABAK)"}</Text>
+                    <TextInput
+                      style={[styles.debtInput, { color: colors.text, borderColor: colors.surfaceBorder, marginBottom: 0 }]}
+                      keyboardType="numeric"
+                      value={priceInputs.two}
+                      onChangeText={(v) => setPriceInputs((prev) => ({ ...prev, two: v }))}
+                      placeholder="0"
+                      placeholderTextColor={colors.muted}
+                    />
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, marginBottom: 6 }}>{"3'LÜ TABLDOT (₺/TABAK)"}</Text>
+                    <TextInput
+                      style={[styles.debtInput, { color: colors.text, borderColor: colors.surfaceBorder, marginBottom: 0 }]}
+                      keyboardType="numeric"
+                      value={priceInputs.three}
+                      onChangeText={(v) => setPriceInputs((prev) => ({ ...prev, three: v }))}
+                      placeholder="0"
+                      placeholderTextColor={colors.muted}
+                    />
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, marginBottom: 6 }}>{"4'LÜ TABLDOT (₺/TABAK)"}</Text>
+                    <TextInput
+                      style={[styles.debtInput, { color: colors.text, borderColor: colors.surfaceBorder, marginBottom: 0 }]}
+                      keyboardType="numeric"
+                      value={priceInputs.four}
+                      onChangeText={(v) => setPriceInputs((prev) => ({ ...prev, four: v }))}
+                      placeholder="0"
+                      placeholderTextColor={colors.muted}
+                    />
+                  </View>
+                </View>
+              )}
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalCancel} onPress={() => setPriceModalVisible(false)}>
+                  <Text style={{ color: colors.muted }}>İptal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalConfirm} onPress={handleSavePrices} disabled={savingPrices || loadingPrices}>
+                  {savingPrices ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold' }}>Kaydet</Text>}
                 </TouchableOpacity>
               </View>
             </View>
@@ -880,7 +1185,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   miniStatValue: { fontSize: 16, fontWeight: 'bold', color: colors.text },
   accountCard: { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.surfaceBorder },
   accountTop: { marginBottom: 12 },
-  accountTextCont: {  },
+  accountTextCont: {},
   accountName: { fontSize: 16, fontWeight: "bold", color: colors.text, marginBottom: 4 },
   accountBalance: { fontSize: 12, color: colors.muted },
   accountActions: { flexDirection: 'row', gap: 12 },
@@ -888,6 +1193,8 @@ const getStyles = (colors: any) => StyleSheet.create({
   outlineBtnText: { fontSize: 12, fontWeight: 'bold', color: colors.text },
   primaryBtn: { flex: 1, backgroundColor: colors.primary, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
   primaryBtnText: { fontSize: 12, fontWeight: 'bold', color: '#fff' },
+  sqBtn: { width: 64, height: 64, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  sqBtnText: { fontSize: 10, fontWeight: '700', color: '#fff', textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   modalContent: { width: '100%', padding: 24, borderRadius: 20 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
@@ -910,5 +1217,33 @@ const getStyles = (colors: any) => StyleSheet.create({
   simpleOrderDate: { fontSize: 13, fontWeight: 'bold', marginBottom: 4 },
   invoiceTotalBox: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16 },
   invoiceTotalLabel: { fontSize: 14, fontWeight: 'bold' },
-  invoiceTotalValue: { fontSize: 24, fontWeight: '900' }
+  invoiceTotalValue: { fontSize: 24, fontWeight: '900' },
+  previewStatCard: { flex: 1, padding: 16, borderRadius: 16, borderWidth: 1 },
+  previewStatLabel: { fontSize: 10, fontWeight: '700', color: '#6b7280', marginBottom: 4, letterSpacing: 0.5 },
+  previewStatValue: { fontSize: 20, fontWeight: '900', color: '#111827' },
+  previewSectionLabel: { fontSize: 10, fontWeight: '900', color: '#6b7280', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12, marginTop: 8 },
+  previewDayBlock: { marginBottom: 16, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb' },
+  previewDayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#f9fafb' },
+  previewDayDate: { fontSize: 13, fontWeight: '700', color: '#374151' },
+  previewPersonRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderColor: '#f3f4f6' },
+  previewAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#e0e7ff', alignItems: 'center', justifyContent: 'center' },
+  previewAvatarText: { fontSize: 12, fontWeight: '700', color: '#4f46e5' },
+  previewPersonName: { fontSize: 13, fontWeight: '600', color: '#111827', marginBottom: 4 },
+  previewTabldotTag: { alignSelf: 'flex-start', backgroundColor: '#f0fdf4', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#bbf7d0', marginBottom: 4 },
+  previewTabldotTagText: { fontSize: 11, fontWeight: '700', color: '#16a34a' },
+  previewMealChip: { backgroundColor: '#f3f4f6', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  previewMealChipText: { fontSize: 11, color: '#374151' },
+  previewOtherItem: { fontSize: 12, color: '#6b7280' },
+  previewBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
+  previewBadgeText: { fontSize: 10, fontWeight: '700' },
+  previewBadgeOpen: { backgroundColor: '#fef3c7', borderColor: '#fde68a' },
+  previewBadgePaid: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  previewBadgePayment: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  previewBadgeClosing: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' },
+  previewFinanceCard: { borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', overflow: 'hidden', marginBottom: 16 },
+  previewFinanceRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 8 },
+  previewFinanceDate: { fontSize: 11, color: '#6b7280', width: 60 },
+  previewFinanceLabel: { fontSize: 13, fontWeight: '600', color: '#111827' },
+  previewFinanceNote: { fontSize: 11, color: '#6b7280' },
+  previewFinanceAmount: { fontSize: 13, fontWeight: '700' },
 });

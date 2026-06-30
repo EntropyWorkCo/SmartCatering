@@ -462,15 +462,13 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
 
             {/* Sub Filter Tabs */}
             <View style={styles.filterTabsContainer}>
+                <TouchableOpacity style={[styles.filterTab, filterPeriod === "DAILY" && styles.filterTabActive]} onPress={() => setFilterPeriod("DAILY")}>
+                    <Text style={[styles.filterTabText, filterPeriod === "DAILY" && styles.filterTabTextActive]}>Günlük</Text>
+                </TouchableOpacity>
                 {mainTab === "BIREYSEL" && (
-                    <>
-                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "DAILY" && styles.filterTabActive]} onPress={() => setFilterPeriod("DAILY")}>
-                            <Text style={[styles.filterTabText, filterPeriod === "DAILY" && styles.filterTabTextActive]}>Günlük</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "WEEKLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("WEEKLY")}>
-                            <Text style={[styles.filterTabText, filterPeriod === "WEEKLY" && styles.filterTabTextActive]}>Haftalık</Text>
-                        </TouchableOpacity>
-                    </>
+                    <TouchableOpacity style={[styles.filterTab, filterPeriod === "WEEKLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("WEEKLY")}>
+                        <Text style={[styles.filterTabText, filterPeriod === "WEEKLY" && styles.filterTabTextActive]}>Haftalık</Text>
+                    </TouchableOpacity>
                 )}
                 <TouchableOpacity style={[styles.filterTab, filterPeriod === "MONTHLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("MONTHLY")}>
                     <Text style={[styles.filterTabText, filterPeriod === "MONTHLY" && styles.filterTabTextActive]}>Aylık</Text>
@@ -732,7 +730,9 @@ const FeedbackView = ({ onBack, ratings, colors, styles, title = "Müşteri Geri
                 <TouchableOpacity onPress={onBack} style={styles.backButton}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.title}>{title}</Text>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.title}>{title}</Text>
+                </View>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

@@ -62,8 +62,9 @@ export default function CorporateInfoScreen() {
     const [orders, setOrders] = useState<any[]>([]);
     const [ordersLoading, setOrdersLoading] = useState(false);
     const [adminDebt, setAdminDebt] = useState<number>(0);
-    const [periodFilter, setPeriodFilter] = useState<'15_DAYS' | 'MONTHLY' | 'YEARLY'>('15_DAYS');
-    const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
+    const [selectedMonth, setSelectedMonth] = useState<{label:string;shortLabel:string;month:number;year:number}|null>(null);
+    const [statusFilter, setStatusFilter] = useState<'ALL'|'OPEN'|'PAID'>('ALL');
+    const [weekFilter, setWeekFilter] = useState(false);
 
     const [fetchedCompanyId, setFetchedCompanyId] = useState<string | null>(null);
 
@@ -416,39 +417,77 @@ export default function CorporateInfoScreen() {
         }
     };
 
+    const monthList = useMemo(() => {
+        const names = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+        const now = new Date();
+        return Array.from({length:12}, (_,i) => {
+            const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+            return {
+                label: `${names[d.getMonth()]} ${d.getFullYear()}`,
+                shortLabel: `${names[d.getMonth()].substring(0,3)} ${d.getFullYear()}`,
+                month: d.getMonth()+1,
+                year: d.getFullYear(),
+            };
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!selectedMonth && monthList.length > 0) setSelectedMonth(monthList[0]);
+    }, [monthList]);
+
     const filteredOrders = useMemo(() => {
-        const thresholdDate = new Date();
-        if (periodFilter === '15_DAYS') {
-            thresholdDate.setDate(thresholdDate.getDate() - 15);
-        } else if (periodFilter === 'MONTHLY') {
-            thresholdDate.setMonth(thresholdDate.getMonth() - 1);
-        } else if (periodFilter === 'YEARLY') {
-            thresholdDate.setFullYear(thresholdDate.getFullYear() - 1);
-        }
-
         return orders.filter(o => {
-            if (["CANCELLED", "İptal"].includes(o.status)) return false;
-            // Manuel kayıtlar her zaman veya en azından bu filtreye takılmadan gelsin istenebilir, 
-            // ama şimdilik tarih filtresine uysunlar.
-            const orderDate = new Date(o.created_at || o.date);
-            return orderDate >= thresholdDate;
+            if (["CANCELLED","İptal"].includes(o.status)) return false;
+            const d = new Date(o.created_at || o.date);
+            if (weekFilter) {
+                const now = new Date();
+                const startOfWeek = new Date(now);
+                const day = now.getDay();
+                const diff = day === 0 ? -6 : 1 - day;
+                startOfWeek.setDate(now.getDate() + diff);
+                startOfWeek.setHours(0,0,0,0);
+                return d >= startOfWeek;
+            }
+            if (selectedMonth) {
+                return d.getMonth()+1 === selectedMonth.month && d.getFullYear() === selectedMonth.year;
+            }
+            return true;
         });
-    }, [orders, periodFilter]);
+    }, [orders, selectedMonth, weekFilter]);
 
-    const ordersByMonth = useMemo(() => {
-        const grouped: Record<string, any[]> = {};
-        
-        filteredOrders.forEach(order => {
-             const d = new Date(order.created_at || order.date);
-             const monthNames = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
-             const key = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
-             
-             if (!grouped[key]) grouped[key] = [];
-             grouped[key].push(order);
+    const { mealOrdersFiltered, financialEntriesFiltered, mealDays, lastClosingDate } = useMemo(() => {
+        const meals = filteredOrders.filter((o: any) => o.order_type === 'Şimdi Ye' || o.order_type === 'Sipariş Ver');
+        const financial = orders
+            .filter((o: any) => o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT')
+            .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+        const closings = financial.filter((e: any) => (e.note || '').includes('Ay Kapanışı'));
+        const lastClosing: Date | null = closings.length > 0 ? new Date(closings[0].created_at) : null;
+
+        const mealsWithStatus = meals.map((o: any) => ({
+            ...o,
+            isPaid: lastClosing
+                ? new Date(o.created_at) < lastClosing
+                : ['PAID','ÖDENDİ','COMPLETED','TAMAMLANDI'].includes((o.status||'').toUpperCase()),
+        }));
+
+        const finalMeals = statusFilter === 'OPEN' ? mealsWithStatus.filter((o: any) => !o.isPaid)
+            : statusFilter === 'PAID' ? mealsWithStatus.filter((o: any) => o.isPaid)
+            : mealsWithStatus;
+
+        const byDay: Record<string, {dateKey:string;date:Date;mealOrders:any[]}> = {};
+        finalMeals.forEach((o: any) => {
+            const d = new Date(o.created_at);
+            const key = d.toISOString().split('T')[0];
+            if (!byDay[key]) byDay[key] = { dateKey: key, date: d, mealOrders: [] };
+            byDay[key].mealOrders.push(o);
         });
-        
-        return grouped;
-    }, [filteredOrders]);
+        const days = Object.values(byDay).sort((a,b) => b.date.getTime()-a.date.getTime());
+
+        const filteredFinancial = statusFilter === 'OPEN' ? [] : financial;
+
+        return { mealOrdersFiltered: finalMeals, financialEntriesFiltered: filteredFinancial, mealDays: days, lastClosingDate: lastClosing };
+    }, [filteredOrders, orders, statusFilter]);
 
     const totalDebt = adminDebt;
 
@@ -497,12 +536,19 @@ export default function CorporateInfoScreen() {
         const dateStr = new Date().toLocaleDateString('tr-TR');
         
         // Dönem Başlangıç Tarihi Hesabı
-        const thresholdDate = new Date();
-        if (periodFilter === '15_DAYS') thresholdDate.setDate(thresholdDate.getDate() - 15);
-        else if (periodFilter === 'MONTHLY') thresholdDate.setMonth(thresholdDate.getMonth() - 1);
-        else if (periodFilter === 'YEARLY') thresholdDate.setFullYear(thresholdDate.getFullYear() - 1);
-        
-        const donemAraligi = `${thresholdDate.toLocaleDateString('tr-TR')} - ${dateStr}`;
+        let thresholdDate = new Date();
+        let donemAraligi = dateStr;
+        if (weekFilter) {
+            const day = thresholdDate.getDay();
+            const diff = day === 0 ? -6 : 1 - day;
+            thresholdDate.setDate(thresholdDate.getDate() + diff);
+            thresholdDate.setHours(0,0,0,0);
+            donemAraligi = `${thresholdDate.toLocaleDateString('tr-TR')} - ${dateStr}`;
+        } else if (selectedMonth) {
+            thresholdDate = new Date(selectedMonth.year, selectedMonth.month-1, 1);
+            const endDate = new Date(selectedMonth.year, selectedMonth.month, 0);
+            donemAraligi = `${thresholdDate.toLocaleDateString('tr-TR')} - ${endDate.toLocaleDateString('tr-TR')}`;
+        }
 
         let devreden_bakiye = 0;
         let bu_donemin_borcu = 0;
@@ -793,113 +839,176 @@ export default function CorporateInfoScreen() {
 
                 {/* DEBTS TAB */}
                 {activeTab === 'DEBTS' && (
-                    <View style={{ gap: 24 }}>
-                        <View style={[styles.sectionCard, { alignItems: 'center', backgroundColor: colors.dangerBg, borderColor: colors.danger, borderWidth: 1 }]}>
-                            <Text style={{ fontSize: 12, color: colors.danger, fontWeight: 'bold', marginBottom: 4, textTransform: 'uppercase' }}>Toplam Ödenmemiş Borç</Text>
-                            <Text style={{ fontSize: 36, fontWeight: '900', color: colors.danger }}>{adminDebt > 0 ? `₺${adminDebt.toLocaleString('tr-TR')}` : 'Borç Bulunmuyor'}</Text>
+                    <View style={{ gap: 16 }}>
+                        {/* Özet Kartlar */}
+                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                            <View style={[styles.sectionCard, { flex: 1, alignItems: 'center', paddingVertical: 16, backgroundColor: adminDebt > 0 ? colors.dangerBg : colors.surface, borderColor: adminDebt > 0 ? colors.danger : colors.surfaceBorder }]}>
+                                <Text style={{ fontSize: 10, fontWeight: 'bold', color: adminDebt > 0 ? colors.danger : colors.muted, marginBottom: 4 }}>GÜNCEL BORÇ</Text>
+                                <Text style={{ fontSize: 22, fontWeight: '900', color: adminDebt > 0 ? colors.danger : '#16a34a' }}>
+                                    {adminDebt > 0 ? `₺${adminDebt.toLocaleString('tr-TR')}` : 'Temiz'}
+                                </Text>
+                            </View>
+                            <View style={[styles.sectionCard, { flex: 1, alignItems: 'center', paddingVertical: 16 }]}>
+                                <Text style={{ fontSize: 10, fontWeight: 'bold', color: colors.muted, marginBottom: 4 }}>BU DÖNEM TABAK</Text>
+                                <Text style={{ fontSize: 22, fontWeight: '900', color: colors.text }}>{mealOrdersFiltered.length}</Text>
+                            </View>
                         </View>
 
-                        {/* Ay Kapanışı admin panelinde yapılır */}
-                        <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.surfaceBorder, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                            <MaterialIcons name="info-outline" size={16} color={colors.muted} />
-                            <Text style={{ flex: 1, fontSize: 11, color: colors.muted }}>Ay kapanışı Admin panelinden yapılır.</Text>
+                        {/* Ay Seçici */}
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+                            <TouchableOpacity
+                                style={[styles.monthPill, weekFilter && styles.monthPillActive]}
+                                onPress={() => setWeekFilter(true)}
+                            >
+                                <Text style={[styles.monthPillText, weekFilter && styles.monthPillTextActive]}>Bu Hafta</Text>
+                            </TouchableOpacity>
+                            {monthList.map((m) => (
+                                <TouchableOpacity
+                                    key={m.label}
+                                    style={[styles.monthPill, !weekFilter && selectedMonth?.label === m.label && styles.monthPillActive]}
+                                    onPress={() => { setWeekFilter(false); setSelectedMonth(m); }}
+                                >
+                                    <Text style={[styles.monthPillText, !weekFilter && selectedMonth?.label === m.label && styles.monthPillTextActive]}>
+                                        {m.shortLabel}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+
+                        {/* Durum Filtresi */}
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                            {(['ALL','OPEN','PAID'] as const).map(f => (
+                                <TouchableOpacity
+                                    key={f}
+                                    onPress={() => setStatusFilter(f)}
+                                    style={[styles.statusPill, statusFilter === f && styles.statusPillActive]}
+                                >
+                                    <Text style={[styles.statusPillText, statusFilter === f && styles.statusPillTextActive]}>
+                                        {f === 'ALL' ? 'Tümü' : f === 'OPEN' ? 'Açık' : 'Ödendi'}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
                         </View>
 
-                        <TouchableOpacity
-                            style={[styles.actionBtn, { backgroundColor: colors.primary }]}
-                            onPress={handleDownloadEkstre}
-                            disabled={saving}
-                        >
-                            {saving ? (
-                                <ActivityIndicator color="#fff" />
-                            ) : (
+                        {/* PDF Butonu */}
+                        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }]} onPress={handleDownloadEkstre} disabled={saving}>
+                            {saving ? <ActivityIndicator color="#fff" /> : (
                                 <>
                                     <MaterialIcons name="picture-as-pdf" size={20} color="#fff" style={{ marginRight: 8 }} />
-                                    <Text style={styles.actionBtnText}>Hesap Ekstresini İndir (PDF)</Text>
+                                    <Text style={styles.actionBtnText}>PDF Ekstre İndir</Text>
                                 </>
                             )}
                         </TouchableOpacity>
 
-                        <View style={styles.sectionCard}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Sipariş Dökümü</Text>
-                            </View>
-                            
-                            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-                                <TouchableOpacity onPress={() => setPeriodFilter('15_DAYS')} style={[styles.periodTab, periodFilter === '15_DAYS' && styles.periodTabActive]}>
-                                    <Text style={[styles.periodTabText, periodFilter === '15_DAYS' && styles.periodTabTextActive]}>15 Gün</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity onPress={() => setPeriodFilter('MONTHLY')} style={[styles.periodTab, periodFilter === 'MONTHLY' && styles.periodTabActive]}>
-                                    <Text style={[styles.periodTabText, periodFilter === 'MONTHLY' && styles.periodTabTextActive]}>Aylık</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity onPress={() => setPeriodFilter('YEARLY')} style={[styles.periodTab, periodFilter === 'YEARLY' && styles.periodTabActive]}>
-                                    <Text style={[styles.periodTabText, periodFilter === 'YEARLY' && styles.periodTabTextActive]}>Yıllık</Text>
-                                </TouchableOpacity>
-                            </View>
-
-                            {ordersLoading ? (
-                                <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 20 }} />
-                            ) : filteredOrders.length === 0 ? (
-                                <Text style={{ color: colors.muted, fontStyle: 'italic', marginVertical: 12 }}>Seçili döneme ait sipariş bulunmuyor.</Text>
-                            ) : (
-                                Object.entries(ordersByMonth).map(([monthKey, monthOrders]) => {
-                                    const isExpanded = expandedMonths[monthKey] || false;
-                                    return (
-                                        <View key={monthKey} style={{ marginBottom: 12 }}>
-                                            <TouchableOpacity 
-                                                onPress={() => setExpandedMonths(prev => ({ ...prev, [monthKey]: !isExpanded }))}
-                                                activeOpacity={0.7}
-                                                style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.background, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: isExpanded ? colors.primary + '80' : colors.surfaceBorder }}>
-                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                                    <MaterialIcons name="date-range" size={20} color={isExpanded ? colors.primary : colors.muted} />
-                                                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: isExpanded ? colors.primary : colors.text }}>{monthKey}</Text>
+                        {ordersLoading ? (
+                            <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: 32 }} />
+                        ) : (
+                            <>
+                                {/* YEMEKLERİ BÖLÜMÜ */}
+                                {mealDays.length > 0 && (
+                                    <>
+                                        <Text style={styles.dokumsectionLabel}>YEMEKLERİ</Text>
+                                        {mealDays.map(({ dateKey, date, mealOrders }) => (
+                                            <View key={dateKey} style={styles.dayBlock}>
+                                                <View style={styles.dayHeader}>
+                                                    <Text style={styles.dayDate}>
+                                                        {date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                                    </Text>
+                                                    <View style={[styles.dokumBadge, mealOrders[0]?.isPaid ? styles.dokumBadgePaid : styles.dokumBadgeOpen]}>
+                                                        <Text style={[styles.dokumBadgeText, { color: mealOrders[0]?.isPaid ? '#3B6D11' : '#854F0B' }]}>
+                                                            {mealOrders[0]?.isPaid ? 'Ödendi' : 'Açık'}
+                                                        </Text>
+                                                    </View>
                                                 </View>
-                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                                    <Text style={{ fontSize: 12, color: colors.muted, fontWeight: 'bold' }}>{monthOrders.length} Sipariş</Text>
-                                                    <MaterialIcons name={isExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"} size={24} color={colors.muted} />
-                                                </View>
-                                            </TouchableOpacity>
-
-                                            {isExpanded && (
-                                                <View style={{ paddingLeft: 16, paddingRight: 16, paddingTop: 12, paddingBottom: 8, backgroundColor: colors.surface, borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderLeftWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: colors.surfaceBorder, marginTop: -2 }}>
-                                                    {monthOrders.map((order: any) => {
-                                                        const date = new Date(order.created_at || order.date);
-                                                        return (
-                                                            <View key={order.id} style={{ borderBottomWidth: 1, borderColor: colors.surfaceBorder, paddingVertical: 12 }}>
-                                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                                    <Text style={{ fontWeight: 'bold', color: colors.text }}>
-                                                                        {order.order_type === 'MANUAL_DEBT' ? 'Kayıtlı Borç' : order.order_type === 'MANUAL_PAYMENT' ? 'Kayıtlı Ödeme' : order.userName}
-                                                                    </Text>
-                                                                </View>
-                                                                <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 8 }}>{date.toLocaleString('tr-TR')}</Text>
-                                                                
-                                                                {order.order_type?.startsWith('MANUAL') ? (
-                                                                    <View style={{ backgroundColor: colors.background, padding: 8, borderRadius: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                                        <Text style={{ fontSize: 12, color: colors.text, flex: 1, marginRight: 8 }}>
-                                                                            <Text style={{ fontWeight: 'bold', color: colors.muted }}>{order.order_type === 'MANUAL_DEBT' ? 'Dönem:' : 'Tarih:'}</Text> {order.note}
-                                                                        </Text>
-                                                                        <Text style={{ fontSize: 14, fontWeight: 'bold', color: order.order_type === 'MANUAL_PAYMENT' ? '#4CAF50' : colors.primary }}>
-                                                                            ₺{order.total_amount?.toLocaleString("tr-TR")}
-                                                                        </Text>
-                                                                    </View>
-                                                                ) : (
-                                                                    order.adisyon_items?.map((item: any) => (
-                                                                        <View key={item.id} style={{ flexDirection: 'row', marginBottom: 2 }}>
-                                                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.text, width: 24 }}>{item.quantity}x </Text>
-                                                                            <Text style={{ fontSize: 12, color: colors.muted }}>{item.menu_items?.name || 'Yemek'}</Text>
+                                                {mealOrders.map((order: any) => {
+                                                    const items = order.adisyon_items || [];
+                                                    const tabldotItem = items.find((i: any) => Array.isArray(i.selections) && i.selections.length > 0);
+                                                    const selectionCount = tabldotItem?.selections?.length || 0;
+                                                    const mealContents: string[] = tabldotItem?.selections?.map((s: any) => s.item_name).filter(Boolean) || [];
+                                                    const otherItems = items.filter((i: any) => !Array.isArray(i.selections) || i.selections.length === 0);
+                                                    const initials = (order.userName || 'M').split(' ').map((w: string) => w[0]).slice(0,2).join('').toUpperCase();
+                                                    return (
+                                                        <View key={order.id} style={[styles.personRow, order.isPaid && { opacity: 0.5 }]}>
+                                                            <View style={styles.dokumAvatar}>
+                                                                <Text style={styles.dokumAvatarText}>{initials}</Text>
+                                                            </View>
+                                                            <View style={{ flex: 1 }}>
+                                                                <Text style={styles.personName}>{order.userName || 'Müşteri'}</Text>
+                                                                {selectionCount > 0 ? (
+                                                                    <>
+                                                                        <View style={styles.tabldotTag}>
+                                                                            <Text style={styles.tabldotTagText}>{selectionCount}'lü Tabldot</Text>
                                                                         </View>
+                                                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                                                                            {mealContents.map((name, i) => (
+                                                                                <View key={i} style={styles.mealChip}>
+                                                                                    <Text style={styles.mealChipText}>{name}</Text>
+                                                                                </View>
+                                                                            ))}
+                                                                        </View>
+                                                                    </>
+                                                                ) : otherItems.length > 0 ? (
+                                                                    otherItems.map((item: any, i: number) => (
+                                                                        <Text key={i} style={styles.otherItemText}>
+                                                                            {item.quantity}x {item.menu_items?.name || 'Yemek'}
+                                                                        </Text>
                                                                     ))
+                                                                ) : (
+                                                                    <Text style={styles.otherItemText}>Yemek siparişi</Text>
                                                                 )}
                                                             </View>
-                                                        )
-                                                    })}
-                                                </View>
-                                            )}
+                                                        </View>
+                                                    );
+                                                })}
+                                            </View>
+                                        ))}
+                                    </>
+                                )}
+
+                                {/* HESAP HAREKETLERİ BÖLÜMÜ */}
+                                {financialEntriesFiltered.length > 0 && (
+                                    <>
+                                        <Text style={styles.dokumsectionLabel}>HESAP HAREKETLERİ</Text>
+                                        <View style={styles.financeCard}>
+                                            {financialEntriesFiltered.map((entry: any, idx: number) => {
+                                                const isPayment = entry.order_type === 'MANUAL_PAYMENT';
+                                                const isClosing = (entry.note || '').includes('Ay Kapanışı');
+                                                const entryDate = new Date(entry.created_at);
+                                                const label = isPayment ? 'Kısmi Ödeme' : isClosing ? 'Ay Kapanışı' : 'Borç Girişi';
+                                                const badgeStyle = isPayment ? styles.dokumBadgePayment : isClosing ? styles.dokumBadgeClosing : styles.dokumBadgeOpen;
+                                                const badgeLabel = isPayment ? 'İşlendi' : isClosing ? 'Kapandı' : 'Açık';
+                                                const badgeColor = isPayment ? '#3B6D11' : isClosing ? '#185FA5' : '#854F0B';
+                                                const notLast = idx !== financialEntriesFiltered.length - 1;
+                                                return (
+                                                    <View key={entry.id} style={[styles.financeRow, notLast && { borderBottomWidth: 0.5, borderColor: colors.surfaceBorder }]}>
+                                                        <Text style={styles.financeDate}>{entryDate.toLocaleDateString('tr-TR')}</Text>
+                                                        <View style={{ flex: 1 }}>
+                                                            <Text style={styles.financeLabel}>{label}</Text>
+                                                            {entry.note ? <Text style={styles.financeNote} numberOfLines={1}>{entry.note}</Text> : null}
+                                                        </View>
+                                                        {entry.total_amount > 0 && (
+                                                            <Text style={[styles.financeAmount, { color: isPayment ? '#16a34a' : colors.text }]}>
+                                                                {isPayment ? '-' : '+'}₺{entry.total_amount.toLocaleString('tr-TR')}
+                                                            </Text>
+                                                        )}
+                                                        <View style={[styles.dokumBadge, badgeStyle, { marginLeft: 8 }]}>
+                                                            <Text style={[styles.dokumBadgeText, { color: badgeColor }]}>{badgeLabel}</Text>
+                                                        </View>
+                                                    </View>
+                                                );
+                                            })}
                                         </View>
-                                    );
-                                })
-                            )}
-                        </View>
+                                    </>
+                                )}
+
+                                {mealDays.length === 0 && financialEntriesFiltered.length === 0 && (
+                                    <View style={{ alignItems: 'center', paddingVertical: 48, gap: 12 }}>
+                                        <MaterialIcons name="receipt-long" size={48} color={colors.surfaceBorder} />
+                                        <Text style={{ color: colors.muted, fontWeight: '600' }}>Bu dönem için kayıt bulunamadı.</Text>
+                                    </View>
+                                )}
+                            </>
+                        )}
                     </View>
                 )}
 
@@ -1293,6 +1402,202 @@ const getStyles = (colors: any) => StyleSheet.create({
     },
     periodTabTextActive: {
         color: '#fff',
+    },
+    // Ay seçici pills
+    monthPill: {
+        paddingVertical: 6,
+        paddingHorizontal: 14,
+        borderRadius: 20,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+    },
+    monthPillActive: {
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
+    },
+    monthPillText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.muted,
+    },
+    monthPillTextActive: {
+        color: '#fff',
+    },
+    // Durum filtresi
+    statusPill: {
+        paddingVertical: 6,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+    },
+    statusPillActive: {
+        backgroundColor: colors.primary + '18',
+        borderColor: colors.primary,
+    },
+    statusPillText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.muted,
+    },
+    statusPillTextActive: {
+        color: colors.primary,
+        fontWeight: 'bold',
+    },
+    // Section Label
+    dokumsectionLabel: {
+        fontSize: 11,
+        fontWeight: '800',
+        color: colors.muted,
+        letterSpacing: 1.5,
+        marginTop: 4,
+        marginBottom: 4,
+    },
+    // Gün bloğu
+    dayBlock: {
+        backgroundColor: colors.surface,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+        marginBottom: 8,
+        overflow: 'hidden',
+    },
+    dayHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: colors.background,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderColor: colors.surfaceBorder,
+    },
+    dayDate: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: colors.text,
+    },
+    // Kişi satırı
+    personRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        gap: 10,
+        borderBottomWidth: 0.5,
+        borderColor: colors.surfaceBorder,
+    },
+    dokumAvatar: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: colors.primary + '22',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    dokumAvatarText: {
+        fontSize: 12,
+        fontWeight: '800',
+        color: colors.primary,
+    },
+    personName: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: colors.text,
+        marginBottom: 2,
+    },
+    tabldotTag: {
+        alignSelf: 'flex-start',
+        backgroundColor: '#3b82f620',
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        marginTop: 2,
+    },
+    tabldotTagText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#1d4ed8',
+    },
+    mealChip: {
+        backgroundColor: colors.background,
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+    },
+    mealChipText: {
+        fontSize: 11,
+        color: colors.muted,
+        fontWeight: '500',
+    },
+    otherItemText: {
+        fontSize: 12,
+        color: colors.muted,
+        marginTop: 2,
+    },
+    // Badge'ler
+    dokumBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 8,
+    },
+    dokumBadgeText: {
+        fontSize: 10,
+        fontWeight: '700',
+    },
+    dokumBadgeOpen: {
+        backgroundColor: '#fef3c7',
+    },
+    dokumBadgePaid: {
+        backgroundColor: '#dcfce7',
+    },
+    dokumBadgePayment: {
+        backgroundColor: '#dcfce7',
+    },
+    dokumBadgeClosing: {
+        backgroundColor: '#dbeafe',
+    },
+    // Finans kartı
+    financeCard: {
+        backgroundColor: colors.surface,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: colors.surfaceBorder,
+        overflow: 'hidden',
+        marginBottom: 8,
+    },
+    financeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+    },
+    financeDate: {
+        fontSize: 11,
+        color: colors.muted,
+        width: 56,
+        fontWeight: '600',
+    },
+    financeLabel: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: colors.text,
+    },
+    financeNote: {
+        fontSize: 11,
+        color: colors.muted,
+        marginTop: 1,
+    },
+    financeAmount: {
+        fontSize: 13,
+        fontWeight: '800',
+        color: colors.text,
+        marginLeft: 'auto',
     },
     phoneInputWrapper: {
         flexDirection: 'row',

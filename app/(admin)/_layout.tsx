@@ -134,6 +134,7 @@ export default function AdminLayout() { //Admin panelindeki tüm sayfaların lay
             <Tabs.Screen name="change-code" options={{ href: null }} />
             <Tabs.Screen name="ekstre-list" options={{ href: null }} />
             <Tabs.Screen name="month-close" options={{ href: null }} />
+            <Tabs.Screen name="PreviewModalBody" options={{ href: null }} />
         </Tabs>
     );
 }
