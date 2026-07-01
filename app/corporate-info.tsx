@@ -274,12 +274,29 @@ export default function CorporateInfoScreen() {
         if (!actualCompanyId) return;
         setSaving(true);
         try {
-            const now = new Date();
-            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+            let firstDay: string;
+            let lastDay: string;
+
+            if (weekFilter) {
+                const now = new Date();
+                const day = now.getDay();
+                const diff = day === 0 ? -6 : 1 - day;
+                const startOfWeek = new Date(now);
+                startOfWeek.setDate(now.getDate() + diff);
+                startOfWeek.setHours(0, 0, 0, 0);
+                firstDay = startOfWeek.toISOString().split('T')[0];
+                lastDay = now.toISOString().split('T')[0];
+            } else if (selectedMonth) {
+                firstDay = new Date(selectedMonth.year, selectedMonth.month - 1, 1).toISOString().split('T')[0];
+                lastDay = new Date(selectedMonth.year, selectedMonth.month, 0).toISOString().split('T')[0];
+            } else {
+                const now = new Date();
+                firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+            }
             
             const data = await ekstreService.getEkstreVerisi(actualCompanyId, firstDay, lastDay);
-            const { uri } = await Print.printToFileAsync({ html: pdfService.generateEkstreHTML(data) });
+            const { uri } = await Print.printToFileAsync({ html: pdfService.generateHesapEkstresi(data) });
             await Sharing.shareAsync(uri);
         } catch (error) {
             console.error(error);
@@ -464,12 +481,17 @@ export default function CorporateInfoScreen() {
         const closings = financial.filter((e: any) => (e.note || '').includes('Ay Kapanışı'));
         const lastClosing: Date | null = closings.length > 0 ? new Date(closings[0].created_at) : null;
 
-        const mealsWithStatus = meals.map((o: any) => ({
-            ...o,
-            isPaid: lastClosing
-                ? new Date(o.created_at) < lastClosing
-                : ['PAID','ÖDENDİ','COMPLETED','TAMAMLANDI'].includes((o.status||'').toUpperCase()),
-        }));
+        const paymentEntries = financial.filter((e: any) => e.order_type === 'MANUAL_PAYMENT');
+        const lastPayment: Date | null = paymentEntries.length > 0 ? new Date(paymentEntries[0].created_at) : null;
+
+        const mealsWithStatus = meals.map((o: any) => {
+            const mealDate = new Date(o.created_at);
+            const isPaid =
+                (lastClosing !== null && mealDate < lastClosing) ||
+                (lastPayment !== null && mealDate < lastPayment) ||
+                ['PAID','ÖDENDİ','COMPLETED','TAMAMLANDI'].includes((o.status||'').toUpperCase());
+            return { ...o, isPaid };
+        });
 
         const finalMeals = statusFilter === 'OPEN' ? mealsWithStatus.filter((o: any) => !o.isPaid)
             : statusFilter === 'PAID' ? mealsWithStatus.filter((o: any) => o.isPaid)
@@ -527,140 +549,6 @@ export default function CorporateInfoScreen() {
             ]
         );
     };
-
-    const generatePdfEkstre = async () => {
-        if (filteredOrders.length === 0) {
-            return Alert.alert("Bilgi", "Seçili döneme ait sipariş kaydı bulunmuyor.");
-        }
-
-        const dateStr = new Date().toLocaleDateString('tr-TR');
-        
-        // Dönem Başlangıç Tarihi Hesabı
-        let thresholdDate = new Date();
-        let donemAraligi = dateStr;
-        if (weekFilter) {
-            const day = thresholdDate.getDay();
-            const diff = day === 0 ? -6 : 1 - day;
-            thresholdDate.setDate(thresholdDate.getDate() + diff);
-            thresholdDate.setHours(0,0,0,0);
-            donemAraligi = `${thresholdDate.toLocaleDateString('tr-TR')} - ${dateStr}`;
-        } else if (selectedMonth) {
-            thresholdDate = new Date(selectedMonth.year, selectedMonth.month-1, 1);
-            const endDate = new Date(selectedMonth.year, selectedMonth.month, 0);
-            donemAraligi = `${thresholdDate.toLocaleDateString('tr-TR')} - ${endDate.toLocaleDateString('tr-TR')}`;
-        }
-
-        let devreden_bakiye = 0;
-        let bu_donemin_borcu = 0;
-
-        orders.forEach((o: any) => {
-            const d = new Date(o.created_at || o.date);
-            const tutar = o.total_amount || 0;
-            const statusUpper = (o.status || "").toUpperCase();
-            
-            const isPaid = ["PAID", "ÖDENDİ", "COMPLETED", "TAMAMLANDI"].includes(statusUpper);
-            const isCancelled = ["CANCELLED", "İPTAL"].includes(statusUpper);
-
-            if (isCancelled) return;
-
-            if (d < thresholdDate) {
-                if (!isPaid) devreden_bakiye += tutar;
-            } else {
-                if (!isPaid) bu_donemin_borcu += tutar;
-            }
-        });
-
-        const guncel_toplam_borc = devreden_bakiye + bu_donemin_borcu;
-
-        const tableRows = filteredOrders.map((o: any) => {
-            const d = new Date(o.created_at || o.date);
-            const dateFormatted = `${d.toLocaleDateString('tr-TR')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-            
-            const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
-            const manualLabel = o.order_type === 'MANUAL_DEBT' ? 'Admin Borç Girişi' : 'Ödeme Kaydı';
-            
-            const adisyonDetay = o.adisyon_items && o.adisyon_items.length > 0 
-                ? o.adisyon_items.map((i: any) => i.menu_items?.name ? `${i.quantity}x ${i.menu_items.name}` : '').filter(Boolean).join(', ') 
-                : '';
-
-            const detailText = isManual 
-                ? `<strong>${manualLabel}</strong> - ₺${o.total_amount?.toLocaleString('tr-TR')} <br/><small style="color:#64748b;">(${o.order_type === 'MANUAL_DEBT' ? 'Dönem' : 'Tarih'}: ${o.note || ''})</small>` 
-                : `Hizmet: ${o.userName} - ${adisyonDetay || 'Sipariş Detayı'}`;
-
-            return `
-                <tr>
-                    <td style="padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; width: 120px; color: #64748b;">${dateFormatted}</td>
-                    <td style="padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; font-weight: 500;">✔️ ${detailText}</td>
-                </tr>
-            `;
-        }).join('');
-
-        const html = `
-    <html>
-    <body style="margin: 0; padding: 40px; font-family: Helvetica, Arial, sans-serif; color: #1e293b;">
-        <!-- Header -->
-        <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; margin-bottom: 30px;">
-            <div style="flex: 1;">
-                <div style="background: ${colors.primary}; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 900; font-style: italic; display: inline-block; font-size: 20px; margin-bottom: 8px;">MEYDAN LOKANTA</div>
-            </div>
-            <div style="flex: 1; text-align: right;">
-                <h1 style="font-size: 28px; font-weight: 900; color: #0f172a; margin: 0; text-transform: uppercase;">MÜŞTERİ HESAP ÖZETİ</h1>
-                <div style="font-size: 12px; color: #64748b; margin-top: 5px;">Seçili Dönem: <strong>${donemAraligi}</strong></div>
-            </div>
-        </div>
-
-        <!-- YENİ ÜST KISIM (ÖZET & TOPLAM BORÇ) -->
-        <div style="margin-bottom: 40px;">
-            <div style="font-size: 16px; font-weight: bold; color: #0f172a; margin-bottom: 12px;">Müşteri: ${companyName}</div>
-            
-            <table style="width: 100%; border-collapse: collapse; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-                <tr>
-                    <td style="padding: 12px 20px; font-size: 14px; color: #475569; border-bottom: 1px solid #e2e8f0;">Geçmişten Devreden Borç <em>(Dönem Öncesi)</em></td>
-                    <td style="padding: 12px 20px; font-size: 14px; font-weight: bold; text-align: right; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${devreden_bakiye.toLocaleString('tr-TR')} TL</td>
-                </tr>
-                <tr>
-                    <td style="padding: 12px 20px; font-size: 14px; color: #475569; border-bottom: 1px solid #e2e8f0;">Bu Dönemin Borcu <em>(${donemAraligi})</em></td>
-                    <td style="padding: 12px 20px; font-size: 14px; font-weight: bold; text-align: right; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${bu_donemin_borcu.toLocaleString('tr-TR')} TL</td>
-                </tr>
-                <tr style="background: #eef2ff;">
-                    <td style="padding: 16px 20px; font-size: 16px; font-weight: 900; color: #dc2626;">🔴 GÜNCEL TOPLAM BORCUNUZ</td>
-                    <td style="padding: 16px 20px; font-size: 20px; font-weight: 900; text-align: right; color: #dc2626;">${guncel_toplam_borc.toLocaleString('tr-TR')} TL</td>
-                </tr>
-            </table>
-        </div>
-
-        <!-- ALT KISIM (TÜKETİM DETAYLARI) -->
-        <div>
-            <h2 style="font-size: 14px; font-weight: bold; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px;">
-                Seçili Dönemde (${donemAraligi}) Alınan Hizmetler / Detaylar:
-            </h2>
-            
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
-                <tbody>
-                    ${tableRows}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Footer -->
-        <div style="margin-top: 60px; padding-top: 30px; border-top: 2px solid #f1f5f9; font-size: 11px; color: #94a3b8; display: flex; justify-content: space-between;">
-            <div style="font-style: italic;">Bu belge sistem tarafından otomatik oluşturulmuştur. Döküman Tarihi: ${dateStr}</div>
-            <div style="font-weight: 700; color: #64748b;">Meydan Lokanta</div>
-        </div>
-    </body>
-    </html>
-        `;
-
-        try {
-            const { uri } = await Print.printToFileAsync({ html });
-            const canShare = await Sharing.isAvailableAsync();
-            if (canShare) await Sharing.shareAsync(uri);
-        } catch (error) {
-            console.error(error);
-            Alert.alert("Hata", "PDF oluşturulurken bir sorun oluştu.");
-        }
-    };
-
 
     if (profileLoading || authLoading) {
         return (
@@ -850,7 +738,7 @@ export default function CorporateInfoScreen() {
                             </View>
                             <View style={[styles.sectionCard, { flex: 1, alignItems: 'center', paddingVertical: 16 }]}>
                                 <Text style={{ fontSize: 10, fontWeight: 'bold', color: colors.muted, marginBottom: 4 }}>BU DÖNEM TABAK</Text>
-                                <Text style={{ fontSize: 22, fontWeight: '900', color: colors.text }}>{mealOrdersFiltered.length}</Text>
+                                <Text style={{ fontSize: 22, fontWeight: '900', color: colors.text }}>{mealOrdersFiltered.reduce((acc: number, o: any) => acc + (o.adisyon_items?.reduce((s: number, i: any) => s + (i.quantity || 0), 0) || 0), 0)}</Text>
                             </View>
                         </View>
 
@@ -973,11 +861,12 @@ export default function CorporateInfoScreen() {
                                             {financialEntriesFiltered.map((entry: any, idx: number) => {
                                                 const isPayment = entry.order_type === 'MANUAL_PAYMENT';
                                                 const isClosing = (entry.note || '').includes('Ay Kapanışı');
+                                                const isDebtCovered = !isPayment && !isClosing && (entry.total_amount || 0) <= 0;
                                                 const entryDate = new Date(entry.created_at);
                                                 const label = isPayment ? 'Kısmi Ödeme' : isClosing ? 'Ay Kapanışı' : 'Borç Girişi';
-                                                const badgeStyle = isPayment ? styles.dokumBadgePayment : isClosing ? styles.dokumBadgeClosing : styles.dokumBadgeOpen;
-                                                const badgeLabel = isPayment ? 'İşlendi' : isClosing ? 'Kapandı' : 'Açık';
-                                                const badgeColor = isPayment ? '#3B6D11' : isClosing ? '#185FA5' : '#854F0B';
+                                                const badgeStyle = isPayment ? styles.dokumBadgePayment : isClosing ? styles.dokumBadgeClosing : isDebtCovered ? styles.dokumBadgePayment : styles.dokumBadgeOpen;
+                                                const badgeLabel = isPayment ? 'İşlendi' : isClosing ? 'Kapandı' : isDebtCovered ? 'Ödendi' : 'Açık';
+                                                const badgeColor = isPayment ? '#3B6D11' : isClosing ? '#185FA5' : isDebtCovered ? '#3B6D11' : '#854F0B';
                                                 const notLast = idx !== financialEntriesFiltered.length - 1;
                                                 return (
                                                     <View key={entry.id} style={[styles.financeRow, notLast && { borderBottomWidth: 0.5, borderColor: colors.surfaceBorder }]}>
@@ -1633,3 +1522,4 @@ const getStyles = (colors: any) => StyleSheet.create({
         letterSpacing: 1,
     }
 });
+

@@ -67,7 +67,7 @@ export default function AdminCustomers() {
                 setCustomers([]); // Eski verinin kısa süre görünmesini önle
                 try {
                     // Fetch users
-                    const { data: usersData, error: usersError } = await supabase.from('users').select('*');
+                    const { data: usersData, error: usersError } = await supabase.from('users').select('*').neq('role', 'deleted');
                     if (usersError) {
                         console.error("Müşteriler yüklenirken hata:", usersError);
                         return;

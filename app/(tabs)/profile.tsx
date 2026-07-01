@@ -3,10 +3,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useState } from "react";
+import { Image } from "expo-image";
 import {
     ActivityIndicator,
     Alert,
-    Image,
     Keyboard,
     KeyboardAvoidingView,
     Modal,
@@ -32,6 +32,7 @@ import { feedbackService } from "@/lib/services/feedbackService";
 import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
+import { useProfilePhotoStore } from "@/lib/store/profilePhotoStore";
 
 export default function ProfileScreen() {
     const router = useRouter();
@@ -52,9 +53,10 @@ export default function ProfileScreen() {
     );
 
     const [fullName, setFullName] = useState("");
-    const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+    const photoUrl = useProfilePhotoStore((s) => s.photoUrl);
+    const setPhotoUrl = useProfilePhotoStore((s) => s.setPhotoUrl);
+    const loadPhotoFromStorage = useProfilePhotoStore((s) => s.loadFromStorage);
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-    // Bu oturumda kullanıcı fotoğraf seçtiyse effect'in üstüne yazmasını engelle
     const photoPickedThisSession = React.useRef(false);
     const [saving, setSaving] = useState(false);
     const [balance, setBalance] = useState<number | null>(null);
@@ -81,25 +83,9 @@ export default function ProfileScreen() {
                 setFullName(profile.full_name || "");
             }
 
-            // Bu oturumda fotoğraf seçildiyse storage'dan okuma — üstüne yazma
             if (photoPickedThisSession.current) return;
-
-            // Profil fotoğrafını önce cache'den, yoksa veritabanından al
-            // Cache artık kalıcı Supabase URL saklıyor (geçici local URI değil)
-            const storedPhoto = await AsyncStorage.getItem(`profile_photo_${user?.id}`);
-            if (storedPhoto && storedPhoto.startsWith('https://')) {
-                // Geçerli bir Supabase URL'si — kullan
-                setPhotoUrl(storedPhoto);
-            } else {
-                // Cache yok veya eski local URI — DB'den al ve cache'i güncelle
-                if (storedPhoto && !storedPhoto.startsWith('https://')) {
-                    // Eski geçici URI'yi temizle
-                    await AsyncStorage.removeItem(`profile_photo_${user?.id}`);
-                }
-                if (profile?.avatar_url) {
-                    setPhotoUrl(profile.avatar_url);
-                    await AsyncStorage.setItem(`profile_photo_${user?.id}`, profile.avatar_url);
-                }
+            if (user?.id) {
+                await loadPhotoFromStorage(user.id, profile?.avatar_url);
             }
 
             const storedVal = await AsyncStorage.getItem("notifications_enabled");
@@ -135,54 +121,61 @@ export default function ProfileScreen() {
 
         if (!result.canceled) {
             const uri = result.assets[0].uri;
-            // Anlık önizleme — henüz kayıt yok, bu oturumda picked=true
+            // Anlık önizleme — state ve AsyncStorage aynı anda güncellenir
+            // Böylece home.tsx de focus aldığında aynı fotoğrafı görür
+            // Store'a yaz — Zustand singleton olduğu için navigasyonda hayatta kalır
             setPhotoUrl(uri);
             photoPickedThisSession.current = true;
+            // NOT: local URI AsyncStorage'a yazılmaz — reload'da geçersiz olur
 
             if (!user?.id) return;
 
-            try {
-                const response = await fetch(uri);
-                const blob = await response.blob();
-                const ext = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
-                // Sabit dosya adı — her zaman aynı path'e upsert edilir
-                const filePath = `${user.id}/avatar.${ext}`;
+            // Local URI bu oturum boyunca gosterilir — UI donmez
+            // Supabase yukleme arka planda yapilir, URL bir sonraki oturumda kullanilir
+            (async () => {
+                try {
+                    const response = await fetch(uri);
+                    const blob = await response.blob();
+                    // Gercek icerik tipini tespit et
+                    const mimeType = blob.type || 'image/jpeg';
+                    const ext = mimeType.includes('png') ? 'png' : mimeType.includes('gif') ? 'gif' : 'jpg';
+                    // Sabit path — her yuklemede ayni dosyayi upsert eder
+                    const filePath = user.id + '/avatar.' + ext;
 
-                const { error: uploadError } = await supabase.storage
-                    .from('avatars')
-                    .upload(filePath, blob, {
-                        upsert: true,
-                        contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
-                    });
+                    const { error: uploadError } = await supabase.storage
+                        .from('avatars')
+                        .upload(filePath, blob, {
+                            upsert: true,
+                            contentType: mimeType,
+                        });
 
-                if (uploadError) {
-                    console.warn('Fotoğraf yükleme hatası:', uploadError.message);
-                    return;
+                    if (uploadError) {
+                        console.warn('Fotograf yukleme hatasi:', uploadError.message);
+                        return;
+                    }
+
+                    // Signed URL — RLS politikalarından bağımsız, kesin çalışır
+                    const { data: signedData, error: signedError } = await supabase.storage
+                        .from('avatars')
+                        .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1 yıl
+
+                    if (signedError || !signedData?.signedUrl) {
+                        console.warn('Signed URL alınamadı:', signedError);
+                        return;
+                    }
+                    const signedUrl = signedData.signedUrl;
+
+                    await supabase
+                        .from('users')
+                        .update({ avatar_url: signedUrl } as any)
+                        .eq('id', user.id);
+
+                    await AsyncStorage.setItem('profile_photo_' + user.id, signedUrl);
+                    // Local URI bu oturumda store'da kalır — signed URL sonraki oturumda AsyncStorage'dan yüklenir
+                } catch (storageErr) {
+                    console.warn('Storage hatasi:', storageErr);
                 }
-
-                const { data: urlData } = supabase.storage
-                    .from('avatars')
-                    .getPublicUrl(filePath);
-
-                const publicUrl = urlData?.publicUrl;
-                if (!publicUrl) return;
-
-                // Cache-bust için timestamp ekliyoruz ama BASE URL'i saklıyoruz
-                // Böylece cache bozulsa bile base URL ile yeniden yüklenebilir
-                const finalUrl = `${publicUrl}?t=${Date.now()}`;
-
-                await supabase
-                    .from('users')
-                    .update({ avatar_url: finalUrl } as any)
-                    .eq('id', user.id);
-
-                // ✅ KRİTİK DÜZELTME: Artık geçici local URI değil,
-                // kalıcı Supabase public URL'si saklanıyor.
-                // iOS geçici dosyaları temizlese de fotoğraf kaybolmaz.
-                await AsyncStorage.setItem(`profile_photo_${user.id}`, finalUrl);
-            } catch (storageErr) {
-                console.warn('Storage hatası:', storageErr);
-            }
+            })();
         }
     };
 
@@ -267,8 +260,12 @@ export default function ProfileScreen() {
                 <View style={styles.imageSection}>
                     <TouchableOpacity onPress={handlePickImage} style={styles.imageContainer}>
                         <Image
-                            source={{ uri: photoUrl || `https://api.dicebear.com/7.x/avataaars/png?seed=${fullName || 'Misafir'}` }}
+                            source={photoUrl
+                                ? { uri: photoUrl }
+                                : { uri: `https://api.dicebear.com/7.x/avataaars/png?seed=${fullName || 'Misafir'}` }
+                            }
                             style={styles.profileImage}
+                            contentFit="cover"
                         />
                         <View style={styles.imageOverlay}>
                             <MaterialIcons name="camera-alt" size={24} color="#fff" />

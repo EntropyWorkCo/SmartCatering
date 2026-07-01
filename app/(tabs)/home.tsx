@@ -1,10 +1,11 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { Image } from "expo-image";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useRef } from "react";
-import { Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Colors from "@/constants/Colors";
@@ -16,6 +17,7 @@ import { adisyonService } from "@/lib/services/adisyonService";
 import { supabase } from "@/lib/supabase";
 import { useCartStore } from "@/lib/store/cartStore";
 import { useResolvedTheme } from "@/lib/store/themeStore";
+import { useProfilePhotoStore } from "@/lib/store/profilePhotoStore";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -222,34 +224,18 @@ export default function HomeScreen() {
       .find(o => o.order_type === "Sipariş Ver" && ["PENDING", "PREPARING", "READY", "HAZIR", "HAZIRLANIYOR", "BEKLEMEDE", "BEKLİYOR", "YOLDA"].includes(o.status.toUpperCase()));
   }, [orders]);
 
-  const [localPhoto, setLocalPhoto] = React.useState<string | null>(null);
+  const localPhoto = useProfilePhotoStore((s) => s.photoUrl);
+  const loadPhotoFromStorage = useProfilePhotoStore((s) => s.loadFromStorage);
 
-  // Profile'den dönünce AsyncStorage'daki local URI'yi yükle
-  useFocusEffect(
-    React.useCallback(() => {
-      if (!user?.id) return;
-      (async () => {
-        const cached = await AsyncStorage.getItem(`profile_photo_${user.id}`);
-        if (cached && cached.startsWith('https://')) {
-          // Geçerli Supabase URL — kullan
-          setLocalPhoto(cached);
-        } else {
-          // Cache yok veya eski geçici URI — temizle ve DB'den al
-          if (cached && !cached.startsWith('https://')) {
-            await AsyncStorage.removeItem(`profile_photo_${user.id}`);
-          }
-          if (profile?.avatar_url) {
-            setLocalPhoto(profile.avatar_url);
-            // Cache'i güncel Supabase URL ile yenile
-            await AsyncStorage.setItem(`profile_photo_${user.id}`, profile.avatar_url);
-          }
-        }
-      })();
-    }, [user?.id, profile?.avatar_url])
-  );
+  // Reload sonrası ya da store boşsa AsyncStorage/DB'den yükle
+  React.useEffect(() => {
+    if (!user?.id || localPhoto) return;
+    loadPhotoFromStorage(user.id, profile?.avatar_url);
+  }, [user?.id, profile?.avatar_url]);
 
   const firstName = profile?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || "Misafir";
-  const profileImage = localPhoto || profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/png?seed=${firstName}`;
+  // Supabase URL'deki eski timestamp'i temizle — AsyncStorage'da base URL saklanir
+  const profileImage = localPhoto || `https://api.dicebear.com/7.x/avataaars/png?seed=${firstName}`;
 
   const generatePdf = async () => {
     if (!orders) return;
@@ -408,7 +394,11 @@ export default function HomeScreen() {
               )}
             </TouchableOpacity>
             <TouchableOpacity style={styles.avatarContainer} onPress={() => router.push("/(tabs)/profile")} activeOpacity={0.8}>
-              <Image source={{ uri: profileImage }} style={styles.avatar} />
+              <Image
+                source={{ uri: profileImage }}
+                style={styles.avatar}
+                contentFit="cover"
+              />
             </TouchableOpacity>
           </View>
         </View>

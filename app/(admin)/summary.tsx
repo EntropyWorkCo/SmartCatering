@@ -3,6 +3,8 @@ import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { adisyonService } from "@/lib/services/adisyonService";
 import { billingService } from "@/lib/services/billingService";
 import { pricingService } from "@/lib/services/pricingService";
+import { ekstreService } from "@/lib/services/ekstreService";
+import { pdfService } from "@/lib/services/pdfService";
 import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
@@ -11,7 +13,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -112,6 +114,34 @@ export default function SummaryScreen() {
 
   const [mainTab, setMainTab] = useState<"BIREYSEL" | "KURUMSAL">("KURUMSAL");
   const [previewAccount, setPreviewAccount] = useState<any | null>(null);
+  const [previewSelectedMonth, setPreviewSelectedMonth] = useState<{ year: number; month: number } | null>(null);
+
+  // previewAccount degisince secili ayi cari aya resetle
+  useEffect(() => {
+    if (previewAccount) {
+      const now = new Date();
+      setPreviewSelectedMonth({ year: now.getFullYear(), month: now.getMonth() });
+    }
+  }, [previewAccount?.id]);
+
+  // Firma siparislerindeki tum gecmis aylari bul (yeniden eskiye sirali)
+  const previewAvailableMonths = useMemo(() => {
+    if (!previewAccount?.orders?.length) return [];
+    const seen = new Set<string>();
+    const months: { year: number; month: number; label: string }[] = [];
+    (previewAccount.orders as any[]).forEach((o: any) => {
+      const d = new Date(o.created_at);
+      const y = d.getFullYear();
+      const m = d.getMonth();
+      const key = y + '-' + m;
+      if (!seen.has(key)) {
+        seen.add(key);
+        months.push({ year: y, month: m, label: new Date(y, m, 1).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' }) });
+      }
+    });
+    months.sort((a, b) => b.year - a.year || b.month - a.month);
+    return months;
+  }, [previewAccount]);
 
   // PreviewAccount için türetilmiş veriler
   const previewData = useMemo(() => {
@@ -596,194 +626,18 @@ export default function SummaryScreen() {
 
   const handleExportPDF = async (account: any) => {
     try {
-      const dateStr = new Date().toLocaleDateString('tr-TR');
-      const html = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <style>
-              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
-              .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; }
-              .brand { color: ${colors.primary}; margin: 0; font-size: 24px; font-weight: 900; letter-spacing: -1px; }
-              .report-type { margin: 5px 0 0 0; color: #64748b; font-size: 14px; font-weight: bold; }
-              .meta-right { text-align: right; }
-              .meta-text { font-size: 12px; color: #64748b; }
-              .meta-text strong { color: #1e293b; }
-              .account-info { background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 30px; border: 1px solid #e2e8f0; }
-              .info-label { font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold; margin-bottom: 5px; }
-              .info-value { font-size: 18px; font-weight: bold; color: #1e293b; }
-              .section-title { font-size: 12px; font-weight: 900; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin: 30px 0 15px 0; }
-              table { width: 100%; border-collapse: collapse; }
-              th { text-align: left; font-size: 10px; color: #64748b; padding: 12px 10px; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; }
-              td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
-              .total-box { margin-top: 40px; padding: 25px; border-radius: 16px; background: ${colors.primary}08; border: 1px solid ${colors.primary}15; display: flex; justify-content: space-between; align-items: center; }
-              .total-label { font-size: 14px; font-weight: bold; color: #1e293b; }
-              .total-value { font-size: 28px; font-weight: 900; color: ${colors.primary}; }
-              .manual-note { margin-top: 5px; font-size: 12px; color: #ef4444; font-weight: bold; }
-              .footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid #f1f5f9; text-align: center; color: #94a3b8; font-size: 10px; }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <div>
-                <div style="background: ${colors.primary}; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 900; font-style: italic; display: inline-block; font-size: 20px; margin-bottom: 8px;">MEYDAN LOKANTA</div>
-                <p class="report-type">Hizmet Detay & Borç Ekstresi</p>
-              </div>
-              <div class="meta-right">
-                <div class="meta-text">Tarih: <strong>${dateStr}</strong></div>
-              </div>
-            </div>
+      const firmaId = account?.companyId;
+      if (!firmaId) return;
+      const sel = previewSelectedMonth ?? { year: new Date().getFullYear(), month: new Date().getMonth() };
+      const y = sel.year;
+      const m = sel.month;
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const firstDay = y + '-' + pad(m + 1) + '-01';
+      const lastDayDate = new Date(y, m + 1, 0);
+      const lastDay = y + '-' + pad(m + 1) + '-' + pad(lastDayDate.getDate());
 
-            <div class="account-info">
-              <div class="info-label">Müşteri / Firma Bilgisi</div>
-              <div class="info-value">${account.displayName}</div>
-            </div>
-
-            <h2 class="section-title">Hizmet ve İşlem Detayları</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th style="width: 100px;">Tarih</th>
-                  <th>Hizmet / Sipariş Detayı</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${(() => {
-                  // 1. Manuel borç/ödeme kayıtlarını ve personelin yediği tüm siparişleri kapsa
-                  const filteredOrders = account.orders.filter((o: any) => {
-                    const note = (o.note || "").toUpperCase();
-                    return !note.includes("BORCA AKTARILDI");
-                  });
-
-                  // 2. Birleştirilmiş Row Listesi (Tarih bazlı sıralama için)
-                  const unifiedEntries: any[] = [];
-                  const groupedMap: { [key: string]: any } = {};
-
-                  filteredOrders.forEach((o: any) => {
-                    const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
-                    
-                    if (isManual) {
-                        unifiedEntries.push({
-                            type: 'manual',
-                            date: new Date(o.created_at),
-                            order: o
-                        });
-                        return;
-                    }
-
-                    const dateKey = new Date(o.created_at).toLocaleDateString('tr-TR');
-                    const userKey = o.userName || 'Personel';
-                    const key = `${dateKey}_${userKey}`;
-
-                    if (!groupedMap[key]) {
-                      groupedMap[key] = { ...o, count: 1, items: [...(o.adisyon_items || [])] };
-                    } else {
-                      groupedMap[key].count += 1;
-                      if (o.adisyon_items) groupedMap[key].items.push(...o.adisyon_items);
-                    }
-                  });
-
-                  // Gruplanmış siparişleri listeye ekle
-                  Object.values(groupedMap).forEach((o: any) => {
-                    unifiedEntries.push({
-                        type: 'order',
-                        date: new Date(o.created_at),
-                        order: o
-                    });
-                  });
-
-                  // 3. TARİH SIRASINA GÖRE DİZ (Yeniden Eskiye)
-                  unifiedEntries.sort((a, b) => b.date.getTime() - a.date.getTime());
-
-                  // 4. AKILLI BAKİYE TAKİBİ (Waterfall Logic)
-                  let remainingBalance = account.isCorporate ? account.manualDebt : account.total;
-
-                  // 5. HTML Satırlarını Oluştur
-                  return unifiedEntries.map((entry) => {
-                    const { type, order: o } = entry;
-                    const dateStr = entry.date.toLocaleDateString('tr-TR');
-
-                    if (type === 'manual') {
-                        const isDebt = o.order_type === 'MANUAL_DEBT';
-                        
-                        // Eğer bu bir borç girişiyse ve hala bir bakiye varsa "AÇIK", bakiye bitmişse "KAPALI"
-                        let statusColor = '#22c55e'; // Varsayılan: Ödendi (Yeşil)
-                        let statusLabel = 'ÖDENDİ / KAPALI';
-                        let labelColor = '#64748b';
-
-                        if (isDebt) {
-                            if (remainingBalance > 0) {
-                                statusColor = '#f97316'; // Borç (Turuncu)
-                                statusLabel = 'BORÇ / AÇIK';
-                                labelColor = '#f97316';
-                                remainingBalance -= (o.total_amount || 0); // Bakiyeden düş
-                            } else {
-                                // Borç kaydı ama kümülatif bakiye zaten dolmuş (yani ödenmiş)
-                                statusColor = '#10b981';
-                                statusLabel = 'ÖDENDİ / KAPALI';
-                                labelColor = '#64748b';
-                            }
-                        } else {
-                            // Ödeme Kaydı
-                            statusColor = '#10b981';
-                            statusLabel = 'ÖDEME İŞLENDİ';
-                            labelColor = '#22c55e';
-                        }
-
-                        const labelText = isDebt ? `BORÇ GİRİŞİ: ${o.note || '-'}` : `ÖDEME ALINDI: ${o.note || '-'}`;
-
-                        return `
-                          <tr>
-                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size:11px;">${dateStr}</td>
-                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size:11px;">
-                                <strong style="color: ${labelColor};">${labelText}</strong><br/>
-                                <small style="color:#64748b;">Kayıt Tutarı: ₺${o.total_amount?.toLocaleString('tr-TR')}</small>
-                            </td>
-                          </tr>
-                        `;
-                    } else {
-                        const statusUpper = (o.status || "").toUpperCase();
-                        const isCancelled = ["CANCELLED", "İPTAL"].includes(statusUpper);
-                        
-                        const adisyonDetay = (o.items || []).map((i: any) => {
-                            const name = i.menu_items?.name || i.menu_item?.name || 'Ürün';
-                            return `${i.quantity}x ${name}`;
-                        }).filter(Boolean).join(', ');
-
-                        return `
-                          <tr>
-                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size:11px;">${dateStr}</td>
-                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size:11px;">
-                                <strong>${o.userName || 'Personel'}</strong> ${o.count > 1 ? `<span style="color:${colors.primary}; font-weight:bold;">(x${o.count})</span>` : ''}<br/>
-                                <small style="color:#64748b;">${adisyonDetay || 'Yemek Siparişi'}</small>
-                            </td>
-                          </tr>
-                        `;
-                    }
-                  }).join('');
-                })()}
-              </tbody>
-            </table>
-
-            <div class="total-box">
-              <div class="total-label">GÜNCEL TOPLAM BORÇ</div>
-              <div class="total-value">
-                ${(account.isCorporate ? account.manualDebt : account.total) <= 0 
-                  ? '<span style="color: #10b981;">ÖDENDİ</span>' 
-                  : `₺${(account.isCorporate ? account.manualDebt : account.total).toLocaleString('tr-TR')}`
-                }
-              </div>
-            </div>
-
-            <div class="footer">
-              <p>Bu belge bilgilendirme amaçlı otomatik olarak oluşturulmuştur.</p>
-              &copy; ${new Date().getFullYear()} Meydan Lokanta | Yönetim Paneli
-            </div>
-          </body>
-        </html>
-      `;
-
+      const data = await ekstreService.getEkstreVerisi(firmaId, firstDay, lastDay);
+      const html = await pdfService.generateHesapEkstresi(data);
       const { uri } = await Print.printToFileAsync({ html });
       await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
     } catch (error) {
@@ -1015,6 +869,28 @@ export default function SummaryScreen() {
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
+            {/* Ay Secici */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }} contentContainerStyle={{ paddingHorizontal: 0, gap: 8 }}>
+              {previewAvailableMonths.map((item) => {
+                const isSelected = previewSelectedMonth?.year === item.year && previewSelectedMonth?.month === item.month;
+                return (
+                  <TouchableOpacity
+                    key={item.year + '-' + item.month}
+                    onPress={() => setPreviewSelectedMonth({ year: item.year, month: item.month })}
+                    style={{
+                      paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                      backgroundColor: isSelected ? colors.primary : colors.surface,
+                      borderWidth: 1, borderColor: isSelected ? colors.primary : colors.surfaceBorder,
+                      marginRight: 6,
+                    }}
+                  >
+                    <Text style={{ color: isSelected ? '#fff' : colors.text, fontSize: 13, fontWeight: '600' }}>
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
             <TouchableOpacity style={styles.pdfBtn} onPress={() => handleExportPDF(previewAccount)}>
               <MaterialIcons name="picture-as-pdf" size={20} color="#fff" />
               <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>PDF Ekstre İndir</Text>

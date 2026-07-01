@@ -141,7 +141,7 @@ export default function EkstreListScreen() {
             const baslangic = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
             
             const data = await ekstreService.getEkstreVerisi(firma.id, baslangic, bitis);
-            const html = pdfService.generateEkstreHTML(data);
+            const html = pdfService.generateHesapEkstresi(data);
             
             setEkstreData(data);
             setHtmlContent(html);

@@ -1,8 +1,8 @@
 import { supabase } from "../supabase";
 
 /**
- * Ekstre (Hizmet & Borç dökümü) için gerekli tüm verileri çeker.
- * Yemek ve Borç verileri iki ayrı sorgu ile alınır.
+ * Ekstre (Hesap Ekstresi) için gerekli tüm verileri adisyon tablosundan çeker.
+ * yemek_kayitlari / aylik_borclar eski boş tablolara bakılmaz.
  */
 export const ekstreService = {
     async getEkstreVerisi(firmaId: string, baslangicTarihi: string, bitisTarihi: string) {
@@ -16,113 +16,85 @@ export const ekstreService = {
 
             if (firmaError) throw firmaError;
 
-            // 2. Yemek kayıtlarını getir (SADECE yemek_kayitlari tablosu) - HATA KORUMALI
-            let yemekListe: any[] = [];
-            try {
-                const { data: yemekler, error: yemeklerError } = await supabase
-                    .from('yemek_kayitlari' as any)
-                    .select('*')
-                    .eq('firma_id', firmaId)
-                    .gte('tarih', baslangicTarihi)
-                    .lte('tarih', bitisTarihi)
-                    .order('tarih', { ascending: true });
+            const companyUserId: string = firma.user_id;
 
-                if (yemeklerError) {
-                    if (yemeklerError.code === '42501') {
-                        console.warn("Yemek kayıtlarına erişim izni yok, boş liste ile devam ediliyor.");
-                    } else {
-                        throw yemeklerError;
-                    }
-                } else {
-                    yemekListe = yemekler || [];
-                }
-            } catch (err) {
-                console.error("Yemek kayıtları çekilirken hata (yok sayıldı):", err);
+            // 2. Şirket personellerinin id'lerini getir
+            const { data: employees } = await supabase
+                .from('users')
+                .select('id')
+                .eq('company_id', firmaId);
+
+            const employeeIds: string[] = (employees || []).map((e: any) => e.id);
+            if (companyUserId && !employeeIds.includes(companyUserId)) {
+                employeeIds.push(companyUserId);
             }
 
-            // 3. Borç geçmişini getir (SADECE aylik_borclar tablosu - son 6 ay) - HATA KORUMALI
-            let borcListe: any[] = [];
-            try {
-                const { data: borclar, error: borclarError } = await supabase
-                    .from('aylik_borclar' as any)
-                    .select('*')
-                    .eq('firma_id', firmaId)
-                    .order('yil', { ascending: false })
-                    .order('ay', { ascending: false })
-                    .limit(6);
+            // 3. MANUAL_DEBT / MANUAL_PAYMENT — firma sahibinin user_id'si ile kaydedilir
+            const { data: financialEntries } = await supabase
+                .from('adisyon')
+                .select('id, created_at, total_amount, order_type, note, user_id, status')
+                .eq('user_id', companyUserId)
+                .in('order_type', ['MANUAL_DEBT', 'MANUAL_PAYMENT'])
+                .gte('created_at', `${baslangicTarihi}T00:00:00`)
+                .lte('created_at', `${bitisTarihi}T23:59:59`)
+                .order('created_at', { ascending: true });
 
-                if (borclarError) {
-                    if (borclarError.code === '42501') {
-                        console.warn("Borç geçmişine erişim izni yok, boş liste ile devam ediliyor.");
-                    } else {
-                        throw borclarError;
-                    }
-                } else {
-                    borcListe = borclar || [];
-                }
-            } catch (err) {
-                console.error("Borç geçmişi çekilirken hata (yok sayıldı):", err);
-            }
+            // 4. Yemek siparişleri — tüm çalışanların adisyonları
+            const { data: mealOrders } = await supabase
+                .from('adisyon')
+                .select(`
+                    id, created_at, total_amount, order_type, note, user_id, status,
+                    users (full_name, company_id),
+                    adisyon_items (
+                        quantity,
+                        selections,
+                        menu_items (name, category)
+                    )
+                `)
+                .in('user_id', employeeIds)
+                .in('order_type', ['Şimdi Ye', 'Sipariş Ver'])
+                .gte('created_at', `${baslangicTarihi}T00:00:00`)
+                .lte('created_at', `${bitisTarihi}T23:59:59`)
+                .order('created_at', { ascending: true });
 
-            // 4. Personel adisyonlarını getir - HATA KORUMALI & BASİTLEŞTİRİLMİŞ
-            let adisyonListe: any[] = [];
-            try {
-                // Not: users!inner yerine daha garanti bir yöntemle çekiyoruz
-                const { data: adisyonlar, error: adisyonError } = await supabase
-                    .from('adisyon')
-                    .select(`
-                        id,
-                        created_at,
-                        total_amount,
-                        order_type,
-                        user_id,
-                        users (full_name, company_id),
-                        adisyon_items (
-                            quantity,
-                            menu_items (name)
-                        )
-                    `)
-                    .gte('created_at', `${baslangicTarihi}T00:00:00`)
-                    .lte('created_at', `${bitisTarihi}T23:59:59`)
-                    .order('created_at', { ascending: true });
+            // 5. Finansal özet (adisyon tablosundan)
+            const fEntries = financialEntries || [];
+            const mOrders = mealOrders || [];
 
-                if (!adisyonError && adisyonlar) {
-                    // Bu şirkete ait personelleri VEYA şirket sahibinin kendisini filtrele
-                    adisyonListe = adisyonlar.filter((a: any) => 
-                        a.users?.company_id === firmaId || a.user_id === firma.user_id
-                    );
-                }
-            } catch (err) {
-                console.error("Adisyonlar çekilirken hata:", err);
-            }
+            const toplamBorc = fEntries
+                .filter((e: any) => e.order_type === 'MANUAL_DEBT')
+                .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
 
-            // 5. İstatistikleri hesapla
-            const toplamYemekSayisi = yemekListe.reduce((acc, y) => acc + (y.kisi || 0), 0);
-            const yemekGenelToplam = yemekListe.reduce((acc, y) => acc + (y.toplam || 0), 0);
-            
-            const toplamBorc = borcListe.reduce((acc, b) => acc + (b.toplam_borc || 0), 0);
-            const toplamOdenen = borcListe.reduce((acc, b) => acc + (b.odenen_tutar || 0), 0);
-            
-            // Bakiyeyi HER ZAMAN ana mizan tablosundan (companies.balance) alıyoruz.
-            // Bu sayede Dashboard rakamı ile PDF rakamı asla karışmaz.
-            const kalanBorc: number = (firma.balance !== undefined && firma.balance !== null) ? firma.balance : 0;
+            const toplamOdenen = fEntries
+                .filter((e: any) => e.order_type === 'MANUAL_PAYMENT')
+                .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
 
-            // Ekstre numarası oluştur (EKS-YIL-AY-RANDOM)
+            const toplamYemekSayisi = mOrders.length;
+
+            // Güncel bakiye her zaman companies.balance'dan
+            const kalanBorc: number = firma.balance ?? 0;
+
+            // Ekstre no
             const now = new Date();
             const ekstreNo = `EKS-${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+            // adisyonlar: PDF'de geriye uyumluluk için eski alan
+            const adisyonlar = [...fEntries, ...mOrders].sort(
+                (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            );
+
             return {
                 firma,
-                yemekler: yemekListe,
-                borclar: borcListe,
-                adisyonlar: adisyonListe,
+                adisyonlar,
+                mealOrders: mOrders,
+                financialEntries: fEntries,
                 donem: { baslangic: baslangicTarihi, bitis: bitisTarihi },
                 ekstreNo,
                 toplamYemekSayisi,
-                yemekGenelToplam,
+                yemekGenelToplam: toplamBorc,   // eski alan adı, geriye uyumluluk
                 toplamBorc,
                 toplamOdenen,
-                kalanBorc
+                kalanBorc,
             };
         } catch (error) {
             console.error("getEkstreVerisi hatası:", error);
