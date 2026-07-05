@@ -30,13 +30,14 @@ export const ekstreService = {
             }
 
             // 3. MANUAL_DEBT / MANUAL_PAYMENT — firma sahibinin user_id'si ile kaydedilir
+            // +03:00 ekliyoruz: Türkiye UTC+3, gece yarısı oluşturulan kayıtlar UTC'de önceki güne kayar
             const { data: financialEntries } = await supabase
                 .from('adisyon')
                 .select('id, created_at, total_amount, order_type, note, user_id, status')
                 .eq('user_id', companyUserId)
                 .in('order_type', ['MANUAL_DEBT', 'MANUAL_PAYMENT'])
-                .gte('created_at', `${baslangicTarihi}T00:00:00`)
-                .lte('created_at', `${bitisTarihi}T23:59:59`)
+                .gte('created_at', `${baslangicTarihi}T00:00:00+03:00`)
+                .lte('created_at', `${bitisTarihi}T23:59:59+03:00`)
                 .order('created_at', { ascending: true });
 
             // 4. Yemek siparişleri — tüm çalışanların adisyonları
@@ -53,8 +54,8 @@ export const ekstreService = {
                 `)
                 .in('user_id', employeeIds)
                 .in('order_type', ['Şimdi Ye', 'Sipariş Ver'])
-                .gte('created_at', `${baslangicTarihi}T00:00:00`)
-                .lte('created_at', `${bitisTarihi}T23:59:59`)
+                .gte('created_at', `${baslangicTarihi}T00:00:00+03:00`)
+                .lte('created_at', `${bitisTarihi}T23:59:59+03:00`)
                 .order('created_at', { ascending: true });
 
             // 5. Finansal özet (adisyon tablosundan)
@@ -71,8 +72,24 @@ export const ekstreService = {
 
             const toplamYemekSayisi = mOrders.length;
 
-            // Güncel bakiye her zaman companies.balance'dan
-            const kalanBorc: number = firma.balance ?? 0;
+            // Dönem sonu bakiye: şu anki bakiyeden, dönem SONRASI girilen borç/ödemeleri çıkar/ekle
+            // Bu sayede geçmiş ay PDFi "o anki bakiye"yi değil "dönem sonu bakiyesi"ni gösterir
+            const { data: postPeriodEntries } = await supabase
+                .from('adisyon')
+                .select('total_amount, order_type')
+                .eq('user_id', companyUserId)
+                .in('order_type', ['MANUAL_DEBT', 'MANUAL_PAYMENT'])
+                .gt('created_at', `${bitisTarihi}T23:59:59+03:00`);
+
+            const postDebt = (postPeriodEntries || [])
+                .filter((e: any) => e.order_type === 'MANUAL_DEBT')
+                .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+            const postPayment = (postPeriodEntries || [])
+                .filter((e: any) => e.order_type === 'MANUAL_PAYMENT')
+                .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+
+            // Dönem sonu bakiye = güncel bakiye - dönem sonrası borçlar + dönem sonrası ödemeler
+            const kalanBorc: number = (firma.balance ?? 0) - postDebt + postPayment;
 
             // Ekstre no
             const now = new Date();

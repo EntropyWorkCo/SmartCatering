@@ -283,16 +283,23 @@ export default function CorporateInfoScreen() {
                 const diff = day === 0 ? -6 : 1 - day;
                 const startOfWeek = new Date(now);
                 startOfWeek.setDate(now.getDate() + diff);
-                startOfWeek.setHours(0, 0, 0, 0);
-                firstDay = startOfWeek.toISOString().split('T')[0];
-                lastDay = now.toISOString().split('T')[0];
+                // toISOString() UTC'ye çevirir, timezone'a göre gün kayar — local string kullan
+                const pad = (n: number) => String(n).padStart(2, '0');
+                firstDay = `${startOfWeek.getFullYear()}-${pad(startOfWeek.getMonth()+1)}-${pad(startOfWeek.getDate())}`;
+                lastDay = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
             } else if (selectedMonth) {
-                firstDay = new Date(selectedMonth.year, selectedMonth.month - 1, 1).toISOString().split('T')[0];
-                lastDay = new Date(selectedMonth.year, selectedMonth.month, 0).toISOString().split('T')[0];
+                // toISOString() UTC'ye çevirir, Türkiye UTC+3 olduğu için gün kayar — direkt string yaz
+                const pad = (n: number) => String(n).padStart(2, '0');
+                const lastDateOfMonth = new Date(selectedMonth.year, selectedMonth.month, 0).getDate();
+                firstDay = `${selectedMonth.year}-${pad(selectedMonth.month)}-01`;
+                lastDay = `${selectedMonth.year}-${pad(selectedMonth.month)}-${pad(lastDateOfMonth)}`;
             } else {
                 const now = new Date();
-                firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-                lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+                const pad = (n: number) => String(n).padStart(2, '0');
+                const m = now.getMonth() + 1;
+                const lastDateOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                firstDay = `${now.getFullYear()}-${pad(m)}-01`;
+                lastDay = `${now.getFullYear()}-${pad(m)}-${pad(lastDateOfMonth)}`;
             }
             
             const data = await ekstreService.getEkstreVerisi(actualCompanyId, firstDay, lastDay);
@@ -489,7 +496,7 @@ export default function CorporateInfoScreen() {
             const isPaid =
                 (lastClosing !== null && mealDate < lastClosing) ||
                 (lastPayment !== null && mealDate < lastPayment) ||
-                ['PAID','ÖDENDİ','COMPLETED','TAMAMLANDI'].includes((o.status||'').toUpperCase());
+                ['PAID','ÖDENDİ'].includes((o.status||'').toUpperCase()); // COMPLETED/TAMAMLANDI teslimat durumu, ödeme değil
             return { ...o, isPaid };
         });
 
@@ -506,10 +513,75 @@ export default function CorporateInfoScreen() {
         });
         const days = Object.values(byDay).sort((a,b) => b.date.getTime()-a.date.getTime());
 
-        const filteredFinancial = statusFilter === 'OPEN' ? [] : financial;
+        // Seçili döneme ait finansal kayıtlar
+        let financialForPeriod: typeof financial;
+        if (statusFilter === 'OPEN') {
+            financialForPeriod = [];
+        } else if (weekFilter) {
+            // Bu haftanın başını hesapla (Pazartesi)
+            const nowW = new Date();
+            const dayW = nowW.getDay();
+            const diffW = dayW === 0 ? -6 : 1 - dayW;
+            const startOfWeek = new Date(nowW);
+            startOfWeek.setDate(nowW.getDate() + diffW);
+            startOfWeek.setHours(0, 0, 0, 0);
+            const weekEntries = financial.filter((e: any) => new Date(e.created_at) >= startOfWeek);
+            // Bu haftanın net borcu
+            const weekDebt = weekEntries.filter((e: any) => e.order_type === 'MANUAL_DEBT')
+                .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+            const weekPaid = weekEntries.filter((e: any) => e.order_type === 'MANUAL_PAYMENT')
+                .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+            const weekPrevBalance = Math.round(adminDebt - (weekDebt - weekPaid));
+            if (weekPrevBalance > 0) {
+                const carryEntry = {
+                    id: '__carryover__',
+                    order_type: 'MANUAL_DEBT',
+                    created_at: startOfWeek.toISOString(),
+                    total_amount: weekPrevBalance,
+                    note: 'Önceki dönemlerden devir borcu',
+                };
+                financialForPeriod = [...weekEntries, carryEntry]
+                    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            } else {
+                financialForPeriod = weekEntries;
+            }
+        } else if (selectedMonth) {
+            // Seçili aya ait kayıtlar
+            const monthEntries = financial.filter((e: any) => {
+                const d = new Date(e.created_at);
+                return d.getMonth() + 1 === selectedMonth.month && d.getFullYear() === selectedMonth.year;
+            });
+            // Bu ayın net borcu (MANUAL_DEBT - MANUAL_PAYMENT)
+            const currentMonthDebt = monthEntries
+                .filter((e: any) => e.order_type === 'MANUAL_DEBT')
+                .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+            const currentMonthPaid = monthEntries
+                .filter((e: any) => e.order_type === 'MANUAL_PAYMENT')
+                .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+            // Önceki dönemlerden devir = Gerçek güncel bakiye - Bu ayın net borcu
+            // adminDebt DB'den gelen kesin bakiye, ham entry toplamından çok daha güvenilir
+            const prevBalance = Math.round(adminDebt - (currentMonthDebt - currentMonthPaid));
+            if (prevBalance > 0) {
+                // Önceki dönemden ödenmemiş bakiye var — sentetik devir satırı ekle
+                const carryEntry = {
+                    id: '__carryover__',
+                    order_type: 'MANUAL_DEBT',
+                    created_at: new Date(selectedMonth.year, selectedMonth.month - 1, 1).toISOString(),
+                    total_amount: prevBalance,
+                    note: 'Önceki dönemlerden devir borcu',
+                };
+                financialForPeriod = [...monthEntries, carryEntry]
+                    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            } else {
+                financialForPeriod = monthEntries;
+            }
+        } else {
+            financialForPeriod = financial;
+        }
+        const filteredFinancial = financialForPeriod;
 
         return { mealOrdersFiltered: finalMeals, financialEntriesFiltered: filteredFinancial, mealDays: days, lastClosingDate: lastClosing };
-    }, [filteredOrders, orders, statusFilter]);
+    }, [filteredOrders, orders, statusFilter, weekFilter, selectedMonth, adminDebt]);
 
     const totalDebt = adminDebt;
 
@@ -810,9 +882,8 @@ export default function CorporateInfoScreen() {
                                                 </View>
                                                 {mealOrders.map((order: any) => {
                                                     const items = order.adisyon_items || [];
-                                                    const tabldotItem = items.find((i: any) => Array.isArray(i.selections) && i.selections.length > 0);
-                                                    const selectionCount = tabldotItem?.selections?.length || 0;
-                                                    const mealContents: string[] = tabldotItem?.selections?.map((s: any) => s.item_name).filter(Boolean) || [];
+                                                    // Tüm tabldot itemleri (birden fazla olabilir)
+                                                    const tabldotItems = items.filter((i: any) => Array.isArray(i.selections) && i.selections.length > 0);
                                                     const otherItems = items.filter((i: any) => !Array.isArray(i.selections) || i.selections.length === 0);
                                                     const initials = (order.userName || 'M').split(' ').map((w: string) => w[0]).slice(0,2).join('').toUpperCase();
                                                     return (
@@ -822,19 +893,22 @@ export default function CorporateInfoScreen() {
                                                             </View>
                                                             <View style={{ flex: 1 }}>
                                                                 <Text style={styles.personName}>{order.userName || 'Müşteri'}</Text>
-                                                                {selectionCount > 0 ? (
-                                                                    <>
-                                                                        <View style={styles.tabldotTag}>
-                                                                            <Text style={styles.tabldotTagText}>{selectionCount}'lü Tabldot</Text>
+                                                                {tabldotItems.length > 0 ? (
+                                                                    // Her tabldot itemini ayrı ayrı göster
+                                                                    tabldotItems.map((tabItem: any, idx: number) => (
+                                                                        <View key={idx} style={idx > 0 ? { marginTop: 6 } : {}}>
+                                                                            <View style={styles.tabldotTag}>
+                                                                                <Text style={styles.tabldotTagText}>{tabItem.selections.length}'lü Tabldot</Text>
+                                                                            </View>
+                                                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                                                                                {tabItem.selections.map((s: any, i: number) => (
+                                                                                    <View key={i} style={styles.mealChip}>
+                                                                                        <Text style={styles.mealChipText}>{s.item_name}</Text>
+                                                                                    </View>
+                                                                                ))}
+                                                                            </View>
                                                                         </View>
-                                                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                                                                            {mealContents.map((name, i) => (
-                                                                                <View key={i} style={styles.mealChip}>
-                                                                                    <Text style={styles.mealChipText}>{name}</Text>
-                                                                                </View>
-                                                                            ))}
-                                                                        </View>
-                                                                    </>
+                                                                    ))
                                                                 ) : otherItems.length > 0 ? (
                                                                     otherItems.map((item: any, i: number) => (
                                                                         <Text key={i} style={styles.otherItemText}>
@@ -893,7 +967,13 @@ export default function CorporateInfoScreen() {
                                 {mealDays.length === 0 && financialEntriesFiltered.length === 0 && (
                                     <View style={{ alignItems: 'center', paddingVertical: 48, gap: 12 }}>
                                         <MaterialIcons name="receipt-long" size={48} color={colors.surfaceBorder} />
-                                        <Text style={{ color: colors.muted, fontWeight: '600' }}>Bu dönem için kayıt bulunamadı.</Text>
+                                        <Text style={{ color: colors.muted, fontWeight: '600', textAlign: 'center' }}>
+                                            {statusFilter === 'PAID'
+                                                ? 'Bu dönem için henüz ödeme yapılmadı.'
+                                                : statusFilter === 'OPEN'
+                                                ? 'Bu dönem için açık kayıt bulunmuyor.'
+                                                : 'Bu dönem için kayıt bulunamadı.'}
+                                        </Text>
                                     </View>
                                 )}
                             </>

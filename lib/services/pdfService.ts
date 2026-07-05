@@ -119,6 +119,49 @@ export const pdfService = {
             a.order_type === 'MANUAL_DEBT' || a.order_type === 'MANUAL_PAYMENT'
         );
 
+        // Ay Kapanışı marker'larının tarihleri (total_amount=0 olan MANUAL_DEBT kayıtları)
+        const ayKapanisDateSet = new Set<string>(
+            financial
+                .filter((e: any) => e.order_type === 'MANUAL_DEBT' && !(e.total_amount > 0))
+                .map((e: any) => new Date(e.created_at).toLocaleDateString('tr-TR'))
+        );
+
+        // Devir girişi: Ay Kapanışı günü girilen, 0 TL olmayan MANUAL_DEBT kayıtları
+        const isCarryOver = (e: any): boolean =>
+            e.order_type === 'MANUAL_DEBT' &&
+            (e.total_amount > 0) &&
+            ayKapanisDateSet.has(new Date(e.created_at).toLocaleDateString('tr-TR'));
+
+        const carryOverTotal = financial
+            .filter(isCarryOver)
+            .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+
+        // Tabldot türü dağılımı (pricingService ile tutarlı mantık)
+        const tabldotMap: Record<number, number> = { 2: 0, 3: 0, 4: 0 };
+        meals.forEach((m: any) => {
+            (m.adisyon_items || []).forEach((i: any) => {
+                if (Array.isArray(i.selections) && i.selections.length >= 2) {
+                    const sc = Math.min(i.selections.length, 4);
+                    tabldotMap[sc] += (i.quantity || 1);
+                    return;
+                }
+                const cat: string = i.menu_items?.category || '';
+                const nm: string = i.menu_items?.name || '';
+                if (cat === 'TABLDOT' || nm.toUpperCase().includes('TABLDOT') || nm.toUpperCase().includes('PAKET')) {
+                    let sc = 4;
+                    if (nm.includes('2') || nm.toUpperCase().includes('2 ÇEŞİT') || nm.toUpperCase().includes('İKİ') || nm.toUpperCase().includes('IKI')) sc = 2;
+                    else if (nm.includes('3') || nm.toUpperCase().includes('3 ÇEŞİT') || nm.toUpperCase().includes('ÜÇ') || nm.toUpperCase().includes('UC')) sc = 3;
+                    tabldotMap[sc] += (i.quantity || 1);
+                }
+            });
+        });
+        const dotColors: Record<number, string> = { 4: '#185FA5', 3: '#1D9E75', 2: '#BA7517' };
+        const tabldotOzetRows = ([4, 3, 2] as const)
+            .filter(sc => tabldotMap[sc] > 0)
+            .map(sc => `<tr><td style="padding:8px 14px;font-size:12px;color:#1e293b;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dotColors[sc]};margin-right:8px;vertical-align:middle;"></span>${sc}'lü Tabldot</td><td style="padding:8px 14px;font-size:12px;font-weight:700;text-align:right;color:#1a2e4a;">${tabldotMap[sc]} adet</td></tr>`)
+            .join('');
+        const totalTabldot = tabldotMap[2] + tabldotMap[3] + tabldotMap[4];
+
         const tuketimRows = meals.map((m: any, i: number) => {
             const bg = i % 2 === 1 ? '#f8fafc' : '#fff';
             const ds = new Date(m.created_at).toLocaleDateString('tr-TR');
@@ -134,22 +177,37 @@ export const pdfService = {
 
         const finRows = financial.map((f: any, i: number) => {
             const isDebt = f.order_type === 'MANUAL_DEBT';
-            const bg = i % 2 === 1 ? '#f8fafc' : '#fff';
+            const carryOver = isCarryOver(f);
+            const isMarker = isDebt && !(f.total_amount > 0); // Ay Kapanışı 0-TL marker
+            // Devir satırları sarı, kapanış marker'ları yeşil tonda, diğerleri zebra
+            const bg = carryOver ? '#fefce8' : isMarker ? '#f0fdf4' : (i % 2 === 1 ? '#f8fafc' : '#fff');
             const ds = new Date(f.created_at).toLocaleDateString('tr-TR');
             const note = f.note || '';
-            const lbl = !isDebt ? ('Odeme Alindi' + (note ? ' - ' + note : ''))
-                : note.includes('Ay Kapanis') ? ('Ay Kapalisi - ' + note)
+            const lbl = !isDebt
+                ? ('Odeme Alindi' + (note ? ' - ' + note : ''))
+                : isMarker
+                ? ('Ay Kapanis' + (note ? ': ' + note.replace(/✅\s*/, '') : ''))
+                : carryOver
+                ? ('Onceki Donem Devri' + (note ? ' - ' + note : ''))
                 : ('Donem Borcu' + (note ? ' - ' + note : ''));
             const amt = f.total_amount || 0;
             const col = isDebt ? '#dc2626' : '#16a34a';
             const sign = isDebt ? '+' : '-';
             runBal += isDebt ? amt : -amt;
-            const balCol = runBal > 0 ? '#dc2626' : '#16a34a';
+            const balCol = runBal > 0 ? '#dc2626' : runBal < 0 ? '#16a34a' : '#1e293b';
             return `<tr style="background:${bg};"><td style="padding:8px 12px;font-size:11px;color:#64748b;">${ds}</td><td style="padding:8px 12px;font-size:12px;color:${col};font-weight:600;">${lbl}</td><td style="padding:8px 12px;font-size:13px;color:${col};font-weight:700;text-align:right;">${sign}${formatCurrency(amt)}</td><td style="padding:8px 12px;font-size:13px;color:${balCol};font-weight:800;text-align:right;">${formatCurrency(runBal)}</td></tr>`;
         }).join('');
 
         const totalDebt = financial.filter((e: any) => e.order_type === 'MANUAL_DEBT').reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
         const totalPaid = financial.filter((e: any) => e.order_type === 'MANUAL_PAYMENT').reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+
+        // Ay Kapanışı devir satırı: kalanBorc sıfırlanarak temizlenen tutarı gösterir
+        const devirRow = carryOverTotal > 0
+            ? `<div class="s-row" style="color:#92400e;font-style:italic;">
+                <span>Ay Kapanis Tahsilati:</span>
+                <span>-${formatCurrency(carryOverTotal)}</span>
+               </div>`
+            : '';
 
         return `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><style>${BASE_CSS}
             .summary-box{display:flex;justify-content:flex-end;}
@@ -170,6 +228,13 @@ export const pdfService = {
             <thead><tr><th style="width:100px;">Tarih</th><th style="width:60px;">Saat</th><th style="width:150px;">Personel</th><th>Siparis Detayi</th></tr></thead>
             <tbody>${tuketimRows || '<tr><td colspan="4" style="padding:16px;text-align:center;color:#94a3b8;">Bu donemde tuketim kaydi bulunmamaktadir.</td></tr>'}</tbody>
         </table>
+        ${totalTabldot > 0 ? `
+        <div class="section-title">TABLDOT OZETI</div>
+        <table style="width:280px;">
+            <thead><tr><th>Tabldot Turu</th><th style="text-align:right;width:90px;">Adet</th></tr></thead>
+            <tbody>${tabldotOzetRows}</tbody>
+            <tfoot><tr style="background:#f8fafc;"><td style="padding:9px 14px;font-size:13px;font-weight:900;color:#1a2e4a;">TOPLAM</td><td style="padding:9px 14px;font-size:13px;font-weight:900;text-align:right;color:#185FA5;">${totalTabldot} adet</td></tr></tfoot>
+        </table>` : ''}
         <div class="page-break"></div>
         <div class="section-title">FINANSAL HAREKETLER</div>
         <table>
@@ -179,7 +244,8 @@ export const pdfService = {
         <div class="summary-box"><div class="summary-table">
             <div class="s-row"><span>Donem Borc Toplami:</span><span style="color:#dc2626;">${formatCurrency(totalDebt)}</span></div>
             <div class="s-row"><span>Donem Odeme Toplami:</span><span style="color:#16a34a;">${formatCurrency(totalPaid)}</span></div>
-            <div class="s-row total"><span>GUNCEL TOPLAM BORC:</span><span style="color:#dc2626;">${formatCurrency(kalanBorc || 0)}</span></div>
+            ${devirRow}
+            <div class="s-row total"><span>DONEM SONU BAKIYE:</span><span style="color:${(kalanBorc || 0) > 0 ? '#dc2626' : '#16a34a'};">${formatCurrency(kalanBorc || 0)}</span></div>
         </div></div>
         <div class="footer">Bu doküm Meydan Lokanta Akilli Catering Sistemi tarafindan otomatik olusturulmustur. Ekstre No: ${ekstreNo}</div>
         </body></html>`;

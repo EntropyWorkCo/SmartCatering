@@ -4,13 +4,14 @@ import { Text, TouchableOpacity, View } from "react-native";
 
 interface Props {
   previewData: any;
+  tabldotOzet?: { rows: { sc: number; count: number }[]; total: number; monthLabel: string } | null;
   colors: any;
   styles: any;
 }
 
 type SectionTab = 'OPEN' | 'PAID' | 'FINANCIAL';
 
-export default function PreviewModalBody({ previewData, colors, styles }: Props) {
+export default function PreviewModalBody({ previewData, tabldotOzet, colors, styles }: Props) {
   const [sectionTab, setSectionTab] = useState<SectionTab>('OPEN');
   const [showBreakdown, setShowBreakdown] = useState(false);
 
@@ -137,17 +138,23 @@ export default function PreviewModalBody({ previewData, colors, styles }: Props)
                     <View style={{ flex: 1 }}>
                       <Text style={styles.previewPersonName}>{order.userName || 'Musteri'}</Text>
                       {order.hasSelections ? (
-                        <View style={{ gap: 4 }}>
-                          <View style={styles.previewTabldotTag}>
-                            <Text style={styles.previewTabldotTagText}>{order.tabldotQuantity > 1 ? `${order.tabldotQuantity}x ` : ''}{order.tabldotLabel}</Text>
-                          </View>
-                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-                            {order.mealContents.map((mc: string, mi: number) => (
-                              <View key={mi} style={styles.previewMealChip}>
-                                <Text style={styles.previewMealChipText}>{mc}</Text>
+                        <View style={{ gap: 6 }}>
+                          {(order.allTabldotItems as any[]).map((t: any, ti: number) => (
+                            <View key={ti} style={{ gap: 4 }}>
+                              <View style={styles.previewTabldotTag}>
+                                <Text style={styles.previewTabldotTagText}>{t.quantity > 1 ? `${t.quantity}x ` : ''}{t.label}</Text>
                               </View>
-                            ))}
-                          </View>
+                              {t.mealContents.length > 0 && (
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                                  {(t.mealContents as string[]).map((mc: string, mi: number) => (
+                                    <View key={mi} style={styles.previewMealChip}>
+                                      <Text style={styles.previewMealChipText}>{mc}</Text>
+                                    </View>
+                                  ))}
+                                </View>
+                              )}
+                            </View>
+                          ))}
                         </View>
                       ) : (
                         <Text style={styles.previewOtherItem}>Yemek siparisi</Text>
@@ -187,8 +194,12 @@ export default function PreviewModalBody({ previewData, colors, styles }: Props)
                   <View style={{ flex: 1 }}>
                     <Text style={styles.previewPersonName}>{order.userName || 'Musteri'}</Text>
                     {order.hasSelections ? (
-                      <View style={styles.previewTabldotTag}>
-                        <Text style={styles.previewTabldotTagText}>{order.tabldotQuantity > 1 ? `${order.tabldotQuantity}x ` : ''}{order.tabldotLabel}</Text>
+                      <View style={{ gap: 4 }}>
+                        {(order.allTabldotItems as any[]).map((t: any, ti: number) => (
+                          <View key={ti} style={styles.previewTabldotTag}>
+                            <Text style={styles.previewTabldotTagText}>{t.quantity > 1 ? `${t.quantity}x ` : ''}{t.label}</Text>
+                          </View>
+                        ))}
                       </View>
                     ) : (
                       <Text style={styles.previewOtherItem}>Yemek siparisi</Text>
@@ -235,6 +246,41 @@ export default function PreviewModalBody({ previewData, colors, styles }: Props)
               <Text style={{ color: colors.muted, fontWeight: '600' }}>Henuz hesap hareketi yok.</Text>
             </View>
           )}
+        </View>
+      )}
+
+      {/* TABLDOT OZETI — seçili aya göre */}
+      {tabldotOzet && tabldotOzet.rows.length > 0 && (
+        <View style={{ marginTop: 20 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Tabldot Ozeti
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.muted }}>{tabldotOzet.monthLabel}</Text>
+          </View>
+          <View style={[styles.previewFinanceCard]}>
+            {tabldotOzet.rows.map((row, idx) => (
+              <View
+                key={row.sc}
+                style={[
+                  styles.previewFinanceRow,
+                  idx < tabldotOzet.rows.length - 1 && { borderBottomWidth: 0.5, borderColor: colors.surfaceBorder },
+                ]}
+              >
+                <View style={{
+                  width: 8, height: 8, borderRadius: 4,
+                  backgroundColor: row.sc === 4 ? '#185FA5' : row.sc === 3 ? '#1D9E75' : '#BA7517',
+                  marginRight: 8,
+                }} />
+                <Text style={{ flex: 1, fontSize: 13, color: colors.text }}>{row.sc}'lü Tabldot</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>{row.count} adet</Text>
+              </View>
+            ))}
+            <View style={[styles.previewFinanceRow, { backgroundColor: colors.surfaceAlt || colors.surface }]}>
+              <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: colors.text }}>Toplam</Text>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#185FA5' }}>{tabldotOzet.total} adet</Text>
+            </View>
+          </View>
         </View>
       )}
     </View>

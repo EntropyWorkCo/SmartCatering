@@ -367,7 +367,7 @@ export const adisyonService = {
         .select(`
           *,
           users (*, companies!users_company_id_fkey(*)),
-          adisyon_items (*, selections, menu_items(name))
+          adisyon_items (*, selections, menu_items(id, name, category))
         `)
         .in("user_id", userIds)
         .order("created_at", { ascending: false });

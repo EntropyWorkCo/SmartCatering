@@ -110,36 +110,29 @@ export const pricingService = {
       (o: any) => o.order_type === "Şimdi Ye" || o.order_type === "Sipariş Ver"
     );
 
-    // Tabldot türüne göre say
+    // Tabldot türüne göre say — her siparişin TÜM kalemlerini tara
     const countMap: Record<number, number> = { 2: 0, 3: 0, 4: 0 };
     mealOrders.forEach((order: any) => {
       const items: any[] = order.adisyon_items || [];
 
-      // Önce selections'dan bak (menu ekranından verilen siparişler)
-      const tabldotItem = items.find(
-        (i: any) => Array.isArray(i.selections) && i.selections.length >= 2
-      );
+      items.forEach((i: any) => {
+        // 1. Selections-based (menu ekranı) — selections dizisinin uzunluğu tabldot türünü verir
+        if (Array.isArray(i.selections) && i.selections.length >= 2) {
+          const sc = i.selections.length <= 4 ? i.selections.length : 4;
+          countMap[sc] += (i.quantity || 1);
+          return;
+        }
 
-      if (tabldotItem) {
-        const sc = tabldotItem.selections.length;
-        const key = sc >= 2 && sc <= 4 ? sc : 4;
-        countMap[key]++;
-      } else {
-        // selections null → home ekranından verilmiş olabilir
-        // menu_items.name içindeki sayıdan tabldot türünü çıkar (home.tsx ile aynı mantık)
-        const packageItem = items.find((i: any) => {
-          const cat: string = i.menu_items?.category || '';
-          const nm: string = i.menu_items?.name || '';
-          return cat === 'TABLDOT' || nm.includes('TABLDOT') || nm.includes('PAKET');
-        });
-        if (packageItem) {
-          const nm: string = packageItem.menu_items?.name || '';
+        // 2. Name/category-based (home ekranı veya manuel) — TABLDOT içeren isimden türü çıkar
+        const cat: string = i.menu_items?.category || '';
+        const nm: string = i.menu_items?.name || '';
+        if (cat === 'TABLDOT' || nm.includes('TABLDOT') || nm.includes('PAKET')) {
           let sc = 4;
           if (nm.includes('2') || nm.toUpperCase().includes('2 ÇEŞİT') || nm.toUpperCase().includes('IKI') || nm.toUpperCase().includes('İKİ')) sc = 2;
           else if (nm.includes('3') || nm.toUpperCase().includes('3 ÇEŞİT') || nm.toUpperCase().includes('ÜÇ') || nm.toUpperCase().includes('UC')) sc = 3;
-          countMap[sc]++;
+          countMap[sc] += (i.quantity || 1);
         }
-      }
+      });
     });
 
     const breakdown = ([2, 3, 4] as const).map((sc) => ({

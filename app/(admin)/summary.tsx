@@ -115,21 +115,34 @@ export default function SummaryScreen() {
   const [mainTab, setMainTab] = useState<"BIREYSEL" | "KURUMSAL">("KURUMSAL");
   const [previewAccount, setPreviewAccount] = useState<any | null>(null);
   const [previewSelectedMonth, setPreviewSelectedMonth] = useState<{ year: number; month: number } | null>(null);
+  // Döküm için getCompanyOrders ile çekilen taze siparişler (getAllOrders limitini aşar)
+  const [previewCompanyOrders, setPreviewCompanyOrders] = useState<any[] | null>(null);
 
-  // previewAccount degisince secili ayi cari aya resetle
+  // previewAccount değişince: ay resetle + şirkete özel siparişleri direkt çek
   useEffect(() => {
-    if (previewAccount) {
-      const now = new Date();
-      setPreviewSelectedMonth({ year: now.getFullYear(), month: now.getMonth() });
+    if (!previewAccount?.companyId) {
+      setPreviewCompanyOrders(null);
+      return;
     }
-  }, [previewAccount?.id]);
+    const now = new Date();
+    setPreviewSelectedMonth({ year: now.getFullYear(), month: now.getMonth() });
+    setPreviewCompanyOrders(null); // temizle (loading)
+    adisyonService.getCompanyOrders(previewAccount.companyId)
+      .then((orders) => setPreviewCompanyOrders(orders))
+      .catch((err) => console.error('previewCompanyOrders error:', err));
+  }, [previewAccount?.companyId]);
 
   // Firma siparislerindeki tum gecmis aylari bul (yeniden eskiye sirali)
   const previewAvailableMonths = useMemo(() => {
-    if (!previewAccount?.orders?.length) return [];
+    // Önce taze getCompanyOrders verisini kullan; yoksa groupedAccounts'a bak
+    const ordersToUse: any[] = previewCompanyOrders
+      ?? (previewAccount
+          ? (groupedAccounts?.find((a) => a.companyId === previewAccount.companyId) ?? previewAccount)?.orders ?? []
+          : []);
+    if (!ordersToUse.length) return [];
     const seen = new Set<string>();
     const months: { year: number; month: number; label: string }[] = [];
-    (previewAccount.orders as any[]).forEach((o: any) => {
+    ordersToUse.forEach((o: any) => {
       const d = new Date(o.created_at);
       const y = d.getFullYear();
       const m = d.getMonth();
@@ -141,13 +154,16 @@ export default function SummaryScreen() {
     });
     months.sort((a, b) => b.year - a.year || b.month - a.month);
     return months;
-  }, [previewAccount]);
+  }, [previewAccount, previewCompanyOrders, groupedAccounts]);
 
   // PreviewAccount için türetilmiş veriler
   const previewData = useMemo(() => {
     if (!previewAccount) return null;
-    const allOrders: any[] = previewAccount.orders || [];
-    
+    // Önce taze getCompanyOrders verisini kullan; yoksa groupedAccounts'a bak
+    const allOrders: any[] = previewCompanyOrders
+      ?? (groupedAccounts?.find((a) => a.companyId === previewAccount.companyId) ?? previewAccount).orders
+      ?? [];
+
     // Seçili aya göre filtrele
     const filteredOrders = allOrders.filter((o: any) => {
       if (!previewSelectedMonth) return true;
@@ -176,16 +192,15 @@ export default function SummaryScreen() {
       if (!byDay[key]) byDay[key] = { dateKey: key, date: d, dayOrders: [] };
       const dTime = d.getTime();
 
-      // isPaid öncelik sırası — her zaman explicit ödeme/kapanış kanıtı aranır:
-      // 1. Ay kapanışı kaydı varsa → kapanış tarihinden önceki siparişler ödendi
-      // 2. Ödeme (MANUAL_PAYMENT) kaydı varsa → son ödeme tarihinden önceki siparişler ödendi
-      // 3. Siparişin kendi status alanı (legacy)
-      // NOT: Bakiye=0 tek başına "ödendi" saymaz — ödeme kaydı olmadan yeni siparişler hâlâ açık kalır
-      const isPaid = lastClosingTime !== null
-        ? dTime < lastClosingTime
-        : lastPaymentTime !== null
-          ? dTime < lastPaymentTime
-          : ['PAID', 'ÖDENDİ', 'COMPLETED', 'TAMAMLANDI'].includes((o.status || '').toUpperCase());
+      // isPaid — tüm koşullar OR ile değerlendiriliyor (corporate-info.tsx ile tutarlı):
+      // 1. Ay kapanışı tarihinden önce → ödendi
+      // 2. Son ödeme tarihinden önce → ödendi
+      // 3. Siparişin status'u PAID/ÖDENDİ → ödendi
+      // NOT: COMPLETED/TAMAMLANDI teslimat durumu, ödeme değil — dahil edilmez
+      const isPaid =
+        (lastClosingTime !== null && dTime < lastClosingTime) ||
+        (lastPaymentTime !== null && dTime < lastPaymentTime) ||
+        ['PAID', 'ÖDENDİ'].includes((o.status || '').toUpperCase());
 
       byDay[key].dayOrders.push({ ...o, isPaid });
     });
@@ -250,42 +265,39 @@ export default function SummaryScreen() {
       return { ...entry, label, badgeKey, badgeLabel, badgeColor, amountColor, amountStr, hasAmount, notLast };
     });
 
-    // Yemek günleri için hazırlanmış veri
+    // Yemek günleri için hazırlanmış veri — pricingService ile tutarlı, TÜM tabldot kalemleri
     const mealDaysEnriched = mealDays.map((dayObj: any) => ({
       ...dayObj,
       dayOrdersEnriched: (dayObj.dayOrders as any[]).map((order: any) => {
         const items: any[] = order.adisyon_items || [];
-
-        // 1. selections dolu olan tabldot kalemi (menu ekranı)
-        const tabldotItem = items.find((i: any) => Array.isArray(i.selections) && i.selections.length);
-
-        // 2. Fallback: selections null ama menu_items.name'den TABLDOT anlaşılan (home ekranı)
-        const packageFallback = !tabldotItem
-          ? items.find((i: any) => {
-              const cat: string = i.menu_items?.category || '';
-              const nm: string = i.menu_items?.name || '';
-              return cat === 'TABLDOT' || nm.toUpperCase().includes('TABLDOT') || nm.toUpperCase().includes('PAKET');
-            })
-          : null;
-
-        let selectionCount: number = tabldotItem?.selections?.length || 0;
-        const mealContents: string[] = tabldotItem?.selections?.map((s: any) => s.item_name).filter(Boolean) || [];
-
-        if (selectionCount === 0 && packageFallback) {
-          const nm: string = packageFallback.menu_items?.name || '';
-          if (nm.includes('2') || nm.toUpperCase().includes('2 ÇEŞİT')) selectionCount = 2;
-          else if (nm.includes('3') || nm.toUpperCase().includes('3 ÇEŞİT')) selectionCount = 3;
-          else selectionCount = 4;
-        }
-
-        const hasSelections = selectionCount !== 0;
-        const activeTabldotItem = tabldotItem || packageFallback;
-        const tabldotQuantity: number = activeTabldotItem?.quantity || 1;
-        const otherItems = items.filter((i: any) => i !== activeTabldotItem);
-        const hasOtherItems = otherItems.length !== 0;
         const initials = (order.userName || 'M').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
-        const tabldotLabel = `${selectionCount}'lü Tabldot`;
-        return { ...order, selectionCount, hasSelections, mealContents, otherItems, hasOtherItems, initials, tabldotLabel, tabldotQuantity };
+
+        // Tüm tabldot kalemlerini bul (tek bir siparişte birden fazla olabilir)
+        const allTabldotItems: { label: string; quantity: number; mealContents: string[] }[] = [];
+        items.forEach((i: any) => {
+          // 1. selections-based (menu ekranı)
+          if (Array.isArray(i.selections) && i.selections.length >= 2) {
+            const sc = Math.min(i.selections.length, 4);
+            allTabldotItems.push({
+              label: `${sc}'lü Tabldot`,
+              quantity: i.quantity || 1,
+              mealContents: (i.selections as any[]).map((s: any) => s.item_name).filter(Boolean),
+            });
+            return;
+          }
+          // 2. name/category-based (home ekranı veya manuel)
+          const cat: string = i.menu_items?.category || '';
+          const nm: string = i.menu_items?.name || '';
+          if (cat === 'TABLDOT' || nm.toUpperCase().includes('TABLDOT') || nm.toUpperCase().includes('PAKET')) {
+            let sc = 4;
+            if (nm.includes('2') || nm.toUpperCase().includes('2 ÇEŞİT') || nm.toUpperCase().includes('İKİ') || nm.toUpperCase().includes('IKI')) sc = 2;
+            else if (nm.includes('3') || nm.toUpperCase().includes('3 ÇEŞİT') || nm.toUpperCase().includes('ÜÇ') || nm.toUpperCase().includes('UC')) sc = 3;
+            allTabldotItems.push({ label: `${sc}'lü Tabldot`, quantity: i.quantity || 1, mealContents: [] });
+          }
+        });
+
+        const hasSelections = allTabldotItems.length > 0;
+        return { ...order, allTabldotItems, hasSelections, initials };
       }),
     }));
 
@@ -294,7 +306,42 @@ export default function SummaryScreen() {
       isEmpty, totalPlates, debtColor, debtLabel, financialRows, mealDaysEnriched,
       tabldot2Count, tabldot3Count, tabldot4Count
     };
-  }, [previewAccount, previewSelectedMonth]);
+  }, [previewAccount, previewSelectedMonth, previewCompanyOrders, groupedAccounts]);
+
+  // Seçili aya göre tabldot türü dağılımı (Döküm modalı alt özet kartı için)
+  const previewTabldotOzet = useMemo(() => {
+    if (!previewCompanyOrders || !previewSelectedMonth) return null;
+    const { year, month } = previewSelectedMonth;
+    const monthOrders = previewCompanyOrders.filter((o: any) => {
+      if (o.order_type !== 'Şimdi Ye' && o.order_type !== 'Sipariş Ver') return false;
+      const d = new Date(o.created_at);
+      return d.getFullYear() === year && d.getMonth() === month;
+    });
+    const countMap: Record<number, number> = { 2: 0, 3: 0, 4: 0 };
+    monthOrders.forEach((order: any) => {
+      (order.adisyon_items || []).forEach((i: any) => {
+        if (Array.isArray(i.selections) && i.selections.length >= 2) {
+          const sc = Math.min(i.selections.length, 4);
+          countMap[sc] += (i.quantity || 1);
+          return;
+        }
+        const cat: string = i.menu_items?.category || '';
+        const nm: string = i.menu_items?.name || '';
+        if (cat === 'TABLDOT' || nm.toUpperCase().includes('TABLDOT') || nm.toUpperCase().includes('PAKET')) {
+          let sc = 4;
+          if (nm.includes('2') || nm.toUpperCase().includes('2 ÇEŞİT') || nm.toUpperCase().includes('İKİ') || nm.toUpperCase().includes('IKI')) sc = 2;
+          else if (nm.includes('3') || nm.toUpperCase().includes('3 ÇEŞİT') || nm.toUpperCase().includes('ÜÇ') || nm.toUpperCase().includes('UC')) sc = 3;
+          countMap[sc] += (i.quantity || 1);
+        }
+      });
+    });
+    const rows = ([4, 3, 2] as const)
+      .map(sc => ({ sc, count: countMap[sc] }))
+      .filter(r => r.count > 0);
+    const total = rows.reduce((s, r) => s + r.count, 0);
+    const monthLabel = new Date(year, month, 1).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
+    return { rows, total, monthLabel };
+  }, [previewCompanyOrders, previewSelectedMonth]);
 
   const groupedAccounts = useMemo(() => {
     try {
@@ -577,7 +624,7 @@ export default function SummaryScreen() {
       // selections explicit seçiliyor — account.orders'a güvenmiyoruz
       const { data: monthOrders, error } = await supabase
         .from('adisyon')
-        .select('id, order_type, created_at, adisyon_items(id, selections, menu_items(id, name, category))')
+        .select('id, order_type, created_at, adisyon_items(id, quantity, selections, menu_items(id, name, category))')
         .in('user_id', userIds)
         .in('order_type', ['Şimdi Ye', 'Sipariş Ver'])
         .gte('created_at', monthStart.toISOString());
@@ -938,7 +985,7 @@ export default function SummaryScreen() {
               <MaterialIcons name="picture-as-pdf" size={20} color="#fff" />
               <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>PDF Ekstre İndir</Text>
             </TouchableOpacity>
-            <PreviewModalBody previewData={previewData} colors={colors} styles={styles} />
+            <PreviewModalBody previewData={previewData} tabldotOzet={previewTabldotOzet} colors={colors} styles={styles} />
           </ScrollView>
         </View>
       </Modal>
