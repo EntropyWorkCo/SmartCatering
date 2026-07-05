@@ -147,8 +147,9 @@ export default function EkstreListScreen() {
         try {
             // Ayın başından bugüne kadar olan dönemi varsayılan olarak seçiyoruz
             const now = new Date();
-            const bitis = now.toISOString().split('T')[0];
-            const baslangic = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+            const pad = (n: number) => String(n).padStart(2, '0');
+            const baslangic = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+            const bitis = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
             
             const data = await ekstreService.getEkstreVerisi(firma.id, baslangic, bitis);
             const html = pdfService.generateHesapEkstresi(data);
