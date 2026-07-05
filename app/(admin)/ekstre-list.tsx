@@ -76,21 +76,31 @@ export default function EkstreListScreen() {
     const handleCloseMonthPreview = async () => {
         setCloseLoading(true);
         try {
-            // Özet için sadece summary kısmını çalıştır (güncelleme yapmadan)
-            const startDate = new Date(closeYear, closeMonth - 1, 1).toISOString();
             const endDate   = new Date(closeYear, closeMonth, 0, 23, 59, 59, 999).toISOString();
             const CLOSED = '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal","COMPLETED","Tamamlandı")';
             const EXCL   = '("MANUAL_PAYMENT","MANUAL_DEBT")';
 
-            const { data: summary } = await supabase
-                .from('adisyon')
-                .select('id, total_amount, user_id')
-                .gte('created_at', startDate)
-                .lte('created_at', endDate)
-                .not('status', 'in', CLOSED)
-                .not('order_type', 'in', EXCL);
+            // Kurumsal kullanıcıları bul
+            const [ownerRes, empRes] = await Promise.all([
+                supabase.from("companies").select("user_id").not("user_id", "is", null),
+                supabase.from("users").select("id").not("company_id", "is", null),
+            ]);
+            const corporateUserIds = [
+                ...(ownerRes.data || []).map((c) => c.user_id),
+                ...(empRes.data  || []).map((u) => u.id),
+            ].filter(Boolean);
 
-            const affectedOrders = summary?.length ?? 0;
+            let affectedOrders = 0;
+            if (corporateUserIds.length > 0) {
+                const { data: summary } = await supabase
+                    .from('adisyon')
+                    .select('id, total_amount, user_id')
+                    .lte('created_at', endDate)
+                    .in('user_id', corporateUserIds)
+                    .not('status', 'in', CLOSED)
+                    .not('order_type', 'in', EXCL);
+                affectedOrders = summary?.length ?? 0;
+            }
 
             // companies.balance üzerinden hesapla — adisyon toplamı admin RLS'i yüzünden eksik gelebilir
             const { data: compsWithDebt } = await supabase

@@ -42,13 +42,11 @@ const EXCLUDED_TYPES  = '("MANUAL_PAYMENT","MANUAL_DEBT")';
 
 // ── Yardımcı: Önizleme sorgula ──────────────────────────────────────────────
 async function fetchPreview(year: number, month: number, companyId?: string) {
-    const startDate = new Date(year, month - 1, 1).toISOString();
     const endDate   = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
 
     let q = supabase
         .from("adisyon")
         .select("id, total_amount, user_id")
-        .gte("created_at", startDate)
         .lte("created_at", endDate)
         .not("status", "in", CLOSED_STATUSES)
         .not("order_type", "in", EXCLUDED_TYPES);
@@ -58,7 +56,27 @@ async function fetchPreview(year: number, month: number, companyId?: string) {
         const { data: empRows } = await supabase.from("users").select("id").eq("company_id", companyId);
         const { data: ownerRow } = await supabase.from("companies").select("user_id").eq("id", companyId).maybeSingle();
         ids = [...(empRows || []).map((e: any) => e.id), ownerRow?.user_id].filter(Boolean);
-        if (ids.length > 0) q = q.in("user_id", ids);
+        if (ids.length > 0) {
+            q = q.in("user_id", ids);
+        } else {
+            return { affectedOrders: 0, totalAmount: 0, affectedFirms: 0 };
+        }
+    } else {
+        // Toplu modda sadece kurumsal kullanıcılar
+        const [ownerRes, empRes] = await Promise.all([
+            supabase.from("companies").select("user_id").not("user_id", "is", null),
+            supabase.from("users").select("id").not("company_id", "is", null),
+        ]);
+        const corporateUserIds = [
+            ...(ownerRes.data || []).map((c: any) => c.user_id),
+            ...(empRes.data  || []).map((u: any) => u.id),
+        ].filter(Boolean);
+        
+        if (corporateUserIds.length > 0) {
+            q = q.in("user_id", corporateUserIds);
+        } else {
+            return { affectedOrders: 0, totalAmount: 0, affectedFirms: 0 };
+        }
     }
 
     const { data: summary } = await q;
@@ -78,13 +96,13 @@ async function fetchPreview(year: number, month: number, companyId?: string) {
         if ((summary || []).length > 0) {
             const uniqueUserIds = [...new Set((summary || []).map((o: any) => o.user_id))];
             if (uniqueUserIds.length > 0) {
-                const [ownerRes, empRes] = await Promise.all([
+                const [ownerResFiltered, empResFiltered] = await Promise.all([
                     supabase.from("companies").select("id, balance").in("user_id", uniqueUserIds),
                     supabase.from("users").select("company_id").in("id", uniqueUserIds).not("company_id", "is", null),
                 ]);
                 const extraIds = new Set([
-                    ...(ownerRes.data || []).map((c: any) => c.id),
-                    ...(empRes.data || []).filter((u: any) => u.company_id).map((u: any) => u.company_id),
+                    ...(ownerResFiltered.data || []).map((c: any) => c.id),
+                    ...(empResFiltered.data || []).filter((u: any) => u.company_id).map((u: any) => u.company_id),
                 ]);
                 // Zaten sayılmayan firmaları ekle
                 const existingComps = new Set((compsWithDebt || []).map((c: any) => c.id));
@@ -103,21 +121,20 @@ async function fetchPreview(year: number, month: number, companyId?: string) {
 
 // ── Yardımcı: Tekil firma kapat ─────────────────────────────────────────────
 async function closeSingleFirm(year: number, month: number, companyId: string) {
-    const startDate = new Date(year, month - 1, 1).toISOString();
     const endDate   = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
 
     const { data: empRows } = await supabase.from("users").select("id").eq("company_id", companyId);
     const { data: ownerRow } = await supabase.from("companies").select("user_id, balance").eq("id", companyId).maybeSingle();
     const ids = [...(empRows || []).map((e: any) => e.id), ownerRow?.user_id].filter(Boolean);
 
-    // Gerçek balance (MANUAL_DEBT dahil herş eyi kapsar)
+    // Gerçek balance (MANUAL_DEBT dahil herşeyi kapsar)
     const actualBalance = ownerRow?.balance || 0;
 
     let affectedOrders = 0;
     if (ids.length > 0) {
         const { data: summary } = await supabase
             .from("adisyon").select("id, total_amount")
-            .gte("created_at", startDate).lte("created_at", endDate)
+            .lte("created_at", endDate)
             .in("user_id", ids)
             .not("status", "in", CLOSED_STATUSES).not("order_type", "in", EXCLUDED_TYPES);
         affectedOrders = summary?.length ?? 0;
@@ -125,7 +142,7 @@ async function closeSingleFirm(year: number, month: number, companyId: string) {
         if (affectedOrders > 0) {
             await supabase.from("adisyon")
                 .update({ status: "PAID", paid_at: new Date().toISOString() })
-                .gte("created_at", startDate).lte("created_at", endDate)
+                .lte("created_at", endDate)
                 .in("user_id", ids)
                 .not("status", "in", CLOSED_STATUSES).not("order_type", "in", EXCLUDED_TYPES);
         }

@@ -12,6 +12,7 @@ type SectionTab = 'OPEN' | 'PAID' | 'FINANCIAL';
 
 export default function PreviewModalBody({ previewData, colors, styles }: Props) {
   const [sectionTab, setSectionTab] = useState<SectionTab>('OPEN');
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   if (!previewData) return null;
 
@@ -36,11 +37,48 @@ export default function PreviewModalBody({ previewData, colors, styles }: Props)
           <Text style={[styles.previewStatLabel, { color: previewData.debtPositive ? colors.danger : colors.muted }]}>GUNCEL BORC</Text>
           <Text style={[styles.previewStatValue, { color: previewData.debtColor }]}>{previewData.debtLabel}</Text>
         </View>
-        <View style={[styles.previewStatCard, { backgroundColor: colors.surface, borderColor: colors.surfaceBorder }]}>
-          <Text style={[styles.previewStatLabel, { color: colors.muted }]}>TOPLAM TABAK</Text>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => setShowBreakdown(!showBreakdown)}
+          style={[styles.previewStatCard, { backgroundColor: colors.surface, borderColor: colors.surfaceBorder }]}
+        >
+          <Text style={[styles.previewStatLabel, { color: colors.muted }]}>TOPLAM TABAK ▾</Text>
           <Text style={[styles.previewStatValue, { color: colors.text }]}>{previewData.totalPlates}</Text>
-        </View>
+        </TouchableOpacity>
       </View>
+
+      {/* Tabldot Dağılım Detayı */}
+      {showBreakdown && (
+        <View style={{ 
+          backgroundColor: colors.surface, 
+          borderColor: colors.surfaceBorder, 
+          borderWidth: 1, 
+          borderRadius: 12, 
+          padding: 14, 
+          marginBottom: 16,
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+            <MaterialIcons name="restaurant" size={16} color={colors.primary} />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>Tabldot Dağılım Detayı</Text>
+          </View>
+          <View style={{ gap: 8 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ color: colors.muted, fontSize: 13 }}>2'li Tabldot (2 Kurs)</Text>
+              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>{previewData.tabldot2Count || 0} adet</Text>
+            </View>
+            <View style={{ height: 0.5, backgroundColor: colors.surfaceBorder }} />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ color: colors.muted, fontSize: 13 }}>3'lü Tabldot (3 Kurs)</Text>
+              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>{previewData.tabldot3Count || 0} adet</Text>
+            </View>
+            <View style={{ height: 0.5, backgroundColor: colors.surfaceBorder }} />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ color: colors.muted, fontSize: 13 }}>4'lü Tabldot (4 Kurs)</Text>
+              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>{previewData.tabldot4Count || 0} adet</Text>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Sekme Butonları */}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>

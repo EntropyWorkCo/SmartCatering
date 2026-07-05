@@ -147,10 +147,18 @@ export default function SummaryScreen() {
   const previewData = useMemo(() => {
     if (!previewAccount) return null;
     const allOrders: any[] = previewAccount.orders || [];
-    const mealOrders = allOrders.filter((o: any) =>
+    
+    // Seçili aya göre filtrele
+    const filteredOrders = allOrders.filter((o: any) => {
+      if (!previewSelectedMonth) return true;
+      const d = new Date(o.created_at);
+      return d.getFullYear() === previewSelectedMonth.year && d.getMonth() === previewSelectedMonth.month;
+    });
+
+    const mealOrders = filteredOrders.filter((o: any) =>
       o.order_type === 'Şimdi Ye' || o.order_type === 'Sipariş Ver'
     );
-    const financialEntries = allOrders
+    const financialEntries = filteredOrders
       .filter((o: any) => o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT')
       .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
@@ -188,7 +196,41 @@ export default function SummaryScreen() {
     const hasMeals = mealDays.length !== 0;
     const hasFinancial = financialEntries.length !== 0;
     const isEmpty = !hasMeals && !hasFinancial;
-    const totalPlates = mealDays.reduce((s: number, d: any) => s + (d.dayOrders as any[]).length, 0);
+    
+    // Tabldot kırılım hesaplamaları (2'li, 3'lü, 4'lü)
+    let tabldot2Count = 0;
+    let tabldot3Count = 0;
+    let tabldot4Count = 0;
+
+    mealOrders.forEach((o: any) => {
+      const items: any[] = o.adisyon_items || [];
+      items.forEach((item: any) => {
+        let selCount: number | null = null;
+        
+        // 1. selections dizisinden tabldot türünü belirle
+        if (Array.isArray(item.selections) && item.selections.length >= 2) {
+          const sc = item.selections.length;
+          selCount = sc >= 2 && sc <= 4 ? sc : 4;
+        }
+        // 2. İsimden tabldot türünü belirle (home ekranı TABLDOT paketi)
+        else {
+          const cat = item.menu_items?.category || '';
+          const nm = (item.menu_items?.name || '').toUpperCase();
+          if (cat === 'TABLDOT' || nm.includes('TABLDOT') || nm.includes('PAKET')) {
+            if (nm.includes('2') || nm.toUpperCase().includes('2 ÇEŞİT') || nm.includes('İKİ') || nm.includes('IKI')) selCount = 2;
+            else if (nm.includes('3') || nm.toUpperCase().includes('3 ÇEŞİT') || nm.includes('ÜÇ') || nm.includes('UC')) selCount = 3;
+            else selCount = 4;
+          }
+        }
+
+        const qty = item.quantity || 1;
+        if (selCount === 2) tabldot2Count += qty;
+        else if (selCount === 3) tabldot3Count += qty;
+        else if (selCount === 4) tabldot4Count += qty;
+      });
+    });
+
+    const totalPlates = tabldot2Count + tabldot3Count + tabldot4Count;
     const debtColor = debtPositive ? '#ef4444' : '#16a34a';
     const debtLabel = debtPositive ? `₺${debtAmount.toLocaleString('tr-TR')}` : 'Temiz';
 
@@ -250,8 +292,9 @@ export default function SummaryScreen() {
     return {
       mealDays, financialEntries, debtAmount, hasDebt, debtPositive, hasMeals, hasFinancial,
       isEmpty, totalPlates, debtColor, debtLabel, financialRows, mealDaysEnriched,
+      tabldot2Count, tabldot3Count, tabldot4Count
     };
-  }, [previewAccount]);
+  }, [previewAccount, previewSelectedMonth]);
 
   const groupedAccounts = useMemo(() => {
     try {

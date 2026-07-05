@@ -197,21 +197,36 @@ export const billingService = {
     year: number,
     month: number
   ): Promise<{ affectedOrders: number; totalAmount: number; affectedFirms: number }> {
-    // Ayın başı ve sonu (UTC)
-    const startDate = new Date(year, month - 1, 1).toISOString();
     const endDate   = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
 
     const CLOSED_STATUSES = '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal","COMPLETED","Tamamlandı")';
     const EXCLUDED_TYPES  = '("MANUAL_PAYMENT","MANUAL_DEBT")';
 
+    // Kurumsal kullanıcıları bul (sahip + çalışanlar)
+    const [ownerRes, empRes] = await Promise.all([
+      supabase.from("companies").select("user_id").not("user_id", "is", null),
+      supabase.from("users").select("id").not("company_id", "is", null),
+    ]);
+    const corporateUserIds = [
+      ...(ownerRes.data || []).map((c) => c.user_id),
+      ...(empRes.data  || []).map((u) => u.id),
+    ].filter(Boolean);
+
     // 1. Özet — kaç sipariş, ne kadar tutar
-    const { data: summary, error: summaryErr } = await supabase
+    let q = supabase
       .from("adisyon")
       .select("id, total_amount, user_id")
-      .gte("created_at", startDate)
       .lte("created_at", endDate)
       .not("status", "in", CLOSED_STATUSES)
       .not("order_type", "in", EXCLUDED_TYPES);
+
+    if (corporateUserIds.length > 0) {
+      q = q.in("user_id", corporateUserIds);
+    } else {
+      q = q.in("user_id", ["non-existent-user-id"]);
+    }
+
+    const { data: summary, error: summaryErr } = await q;
 
     if (summaryErr) throw summaryErr;
 
@@ -221,12 +236,12 @@ export const billingService = {
     const uniqueUserIds = [...new Set((summary || []).map((o) => o.user_id))];
     let companyIdSet = new Set<string>();
     if (uniqueUserIds.length > 0) {
-      const [ownerRes, empRes] = await Promise.all([
+      const [ownerResFiltered, empResFiltered] = await Promise.all([
         supabase.from("companies").select("id").in("user_id", uniqueUserIds),
         supabase.from("users").select("company_id").in("id", uniqueUserIds).not("company_id", "is", null),
       ]);
-      (ownerRes.data || []).forEach((c) => companyIdSet.add(c.id));
-      (empRes.data  || []).forEach((u) => { if (u.company_id) companyIdSet.add(u.company_id); });
+      (ownerResFiltered.data || []).forEach((c) => companyIdSet.add(c.id));
+      (empResFiltered.data  || []).forEach((u) => { if (u.company_id) companyIdSet.add(u.company_id); });
     }
 
     // Her zaman tüm borçlu firmaları kapat (adisyon kaydı olmasa bile)
@@ -244,13 +259,20 @@ export const billingService = {
     }
 
     // 3. Güncelle — PAID yap
-    const { error: updateErr } = await supabase
+    let updateQ = supabase
       .from("adisyon")
       .update({ status: "PAID", paid_at: new Date().toISOString() })
-      .gte("created_at", startDate)
       .lte("created_at", endDate)
       .not("status", "in", CLOSED_STATUSES)
       .not("order_type", "in", EXCLUDED_TYPES);
+
+    if (corporateUserIds.length > 0) {
+      updateQ = updateQ.in("user_id", corporateUserIds);
+    } else {
+      updateQ = updateQ.in("user_id", ["non-existent-user-id"]);
+    }
+
+    const { error: updateErr } = await updateQ;
 
     if (updateErr) throw updateErr;
 
