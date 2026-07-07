@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { 
-  Settings as SettingsIcon, 
-  User, 
+import {
+  User,
   Shield, 
   Bell, 
   Save,

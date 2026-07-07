@@ -404,3 +404,12 @@ entrypoint = "./functions/verify-otp/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/verify-otp/*.html" ]
+
+# Otomatik yemek hatırlatma / günlük özet. pg_cron tarafından çağrılır
+# (bkz. migration 20260706000000). Fonksiyon canlıda verify_jwt=false olarak
+# deploy edilmiş; güvenlik istenirse CRON_SECRET secret'ı + x-cron-secret header
+# ile korunmalı (fonksiyon bu kontrolü zaten destekliyor).
+[functions.scheduled-meal-reminder]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/scheduled-meal-reminder/index.ts"
