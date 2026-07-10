@@ -153,6 +153,16 @@ export const billingService = {
 
     if (updateError) throw updateError;
 
+    // 1.5. Bekleyen MANUAL_DEBT kayıtlarını da PAID yap.
+    // Ay kapanışı yapıldığında eski/test borç kayıtları temizlenmeli;
+    // aksi hâlde sonraki ay Hareketler'de ve PDF'te çakışan kayıt görünür.
+    await supabase
+      .from("adisyon")
+      .update({ status: "PAID", paid_at: now.toISOString() })
+      .in("user_id", allUserIds)
+      .eq("order_type", "MANUAL_DEBT")
+      .not("status", "in", '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal")');
+
     // 2. Şirket bakiyesini sıfırla
     await supabase
       .from("companies")

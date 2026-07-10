@@ -2,7 +2,7 @@
   "expo": {
     "name": "Meydan Lokanta Ankara",
     "slug": "smartcatering",
-    "version": "1.0.2",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mobileapp",
@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.entropywork.smartcatering",
-      "buildNumber": "7",
+      "buildNumber": "8",
       "googleServicesFile": "./GoogleService-Info.plist",
       "entitlements": {
         "aps-environment": "production"
@@ -23,7 +23,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.entropywork.smartcatering",
-      "versionCode": 6
+      "versionCode": 8
     },
     "web": {
       "bundler": "metro",

@@ -27,7 +27,7 @@ export default function PreviewModalBody({ previewData, tabldotOzet, colors, sty
     (d.dayOrdersEnriched as any[]).some((o: any) => !o.isPaid)
   );
   const paidMealDays = previewData.mealDaysEnriched.filter((d: any) =>
-    (d.dayOrdersEnriched as any[]).every((o: any) => o.isPaid)
+    (d.dayOrdersEnriched as any[]).some((o: any) => o.isPaid)
   );
 
   return (
@@ -155,6 +155,24 @@ export default function PreviewModalBody({ previewData, tabldotOzet, colors, sty
                               )}
                             </View>
                           ))}
+                          {/* Tabldotla birlikte gelen ek ürünler (Cacık vb.) */}
+                          {order.allRegularItems?.length > 0 && (
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                              {(order.allRegularItems as string[]).map((name: string, ri: number) => (
+                                <View key={ri} style={styles.previewMealChip}>
+                                  <Text style={styles.previewMealChipText}>{name}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                      ) : order.allRegularItems?.length > 0 ? (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                          {(order.allRegularItems as string[]).map((name: string, ri: number) => (
+                            <View key={ri} style={styles.previewMealChip}>
+                              <Text style={styles.previewMealChipText}>{name}</Text>
+                            </View>
+                          ))}
                         </View>
                       ) : (
                         <Text style={styles.previewOtherItem}>Yemek siparisi</Text>
@@ -176,7 +194,10 @@ export default function PreviewModalBody({ previewData, tabldotOzet, colors, sty
               <MaterialIcons name="hourglass-empty" size={40} color={colors.muted} />
               <Text style={{ color: colors.muted, fontWeight: '600' }}>Henuz odenen yemek yok.</Text>
             </View>
-          ) : paidMealDays.map(({ dateKey, date, dayOrdersEnriched }: any) => (
+          ) : paidMealDays.map(({ dateKey, date, dayOrdersEnriched }: any) => {
+            const paidOrders = (dayOrdersEnriched as any[]).filter((o: any) => o.isPaid);
+            if (paidOrders.length === 0) return null;
+            return (
             <View key={dateKey} style={[styles.previewDayBlock, { opacity: 0.7 }]}>
               <View style={styles.previewDayHeader}>
                 <Text style={styles.previewDayDate}>
@@ -186,7 +207,7 @@ export default function PreviewModalBody({ previewData, tabldotOzet, colors, sty
                   <Text style={[styles.previewBadgeText, { color: '#3B6D11' }]}>Odendi</Text>
                 </View>
               </View>
-              {dayOrdersEnriched.map((order: any) => (
+              {paidOrders.map((order: any) => (
                 <View key={order.id} style={styles.previewPersonRow}>
                   <View style={styles.previewAvatar}>
                     <Text style={styles.previewAvatarText}>{order.initials}</Text>
@@ -200,6 +221,24 @@ export default function PreviewModalBody({ previewData, tabldotOzet, colors, sty
                             <Text style={styles.previewTabldotTagText}>{t.quantity > 1 ? `${t.quantity}x ` : ''}{t.label}</Text>
                           </View>
                         ))}
+                        {/* Tabldotla birlikte gelen ek ürünler (Cacık vb.) */}
+                        {order.allRegularItems?.length > 0 && (
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                            {(order.allRegularItems as string[]).map((name: string, ri: number) => (
+                              <View key={ri} style={styles.previewMealChip}>
+                                <Text style={styles.previewMealChipText}>{name}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    ) : order.allRegularItems?.length > 0 ? (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                        {(order.allRegularItems as string[]).map((name: string, ri: number) => (
+                          <View key={ri} style={styles.previewMealChip}>
+                            <Text style={styles.previewMealChipText}>{name}</Text>
+                          </View>
+                        ))}
                       </View>
                     ) : (
                       <Text style={styles.previewOtherItem}>Yemek siparisi</Text>
@@ -208,7 +247,8 @@ export default function PreviewModalBody({ previewData, tabldotOzet, colors, sty
                 </View>
               ))}
             </View>
-          ))}
+            );
+          })}
         </View>
       )}
 

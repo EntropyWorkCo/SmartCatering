@@ -118,19 +118,23 @@ export default function SummaryScreen() {
   // Döküm için getCompanyOrders ile çekilen taze siparişler (getAllOrders limitini aşar)
   const [previewCompanyOrders, setPreviewCompanyOrders] = useState<any[] | null>(null);
 
-  // previewAccount değişince: ay resetle + şirkete özel siparişleri direkt çek
+  // previewAccount değişince: ay resetle + siparişleri direkt çek
   useEffect(() => {
-    if (!previewAccount?.companyId) {
-      setPreviewCompanyOrders(null);
-      return;
-    }
+    if (!previewAccount) return;
     const now = new Date();
     setPreviewSelectedMonth({ year: now.getFullYear(), month: now.getMonth() });
     setPreviewCompanyOrders(null); // temizle (loading)
-    adisyonService.getCompanyOrders(previewAccount.companyId)
-      .then((orders) => setPreviewCompanyOrders(orders))
-      .catch((err) => console.error('previewCompanyOrders error:', err));
-  }, [previewAccount?.companyId]);
+    if (previewAccount.companyId) {
+      adisyonService.getCompanyOrders(previewAccount.companyId)
+        .then((orders) => setPreviewCompanyOrders(orders))
+        .catch((err) => console.error('previewCompanyOrders error:', err));
+    } else if (previewAccount.userId) {
+      // Bireysel müşteri: getUserOrders ile taze veri çek
+      adisyonService.getUserOrders(previewAccount.userId)
+        .then((orders) => setPreviewCompanyOrders(orders))
+        .catch((err) => console.error('previewCompanyOrders (bireysel) error:', err));
+    }
+  }, [previewAccount?.companyId, previewAccount?.userId]);
 
   // Firma siparislerindeki tum gecmis aylari bul (yeniden eskiye sirali)
   const previewAvailableMonths = useMemo(() => {
@@ -174,32 +178,112 @@ export default function SummaryScreen() {
     const mealOrders = filteredOrders.filter((o: any) =>
       o.order_type === 'Şimdi Ye' || o.order_type === 'Sipariş Ver'
     );
-    const financialEntries = filteredOrders
+    const rawFinancialEntries = filteredOrders
       .filter((o: any) => o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT')
       .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-    const closings = financialEntries.filter((e: any) => (e.note || '').includes('Ay Kapanışı'));
-    const lastClosingTime: number | null = closings.length ? new Date(closings[0].created_at).getTime() : null;
+    const isBireysel = !previewAccount?.companyId;
+    let financialEntries: any[];
+    if (isBireysel) {
+      // Bireysel: tüm MANUAL_PAYMENT DB kayıtlarını göster (PDF ile tutarlı)
+      financialEntries = rawFinancialEntries
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    } else {
+      financialEntries = rawFinancialEntries
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
 
-    // Son ödeme zamanı (en yeni MANUAL_PAYMENT)
-    const lastPaymentEntry = financialEntries.find((e: any) => e.order_type === 'MANUAL_PAYMENT');
+    // isPaid tespiti için tüm tarihlerdeki finansal kayıtlara bak (sadece seçili ay değil).
+    // Ödeme/kapanış bir sonraki ayda yapılmış olabilir; seçili ayı filtrelemek onu kaçırır.
+    const allFinancialOrders = allOrders
+      .filter((o: any) => o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT')
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const allClosings = allFinancialOrders.filter((e: any) => (e.note || '').includes('Ay Kapanışı'));
+    const lastClosingTime: number | null = allClosings.length ? new Date(allClosings[0].created_at).getTime() : null;
+
+    const lastPaymentEntry = allFinancialOrders.find((e: any) => e.order_type === 'MANUAL_PAYMENT');
     const lastPaymentTime: number | null = lastPaymentEntry ? new Date(lastPaymentEntry.created_at).getTime() : null;
+
+    // Bireysel: sadece TAM ödeme (Borç Ödemesi) işaretler.
+    // Kurumsal: FIFO — toplam ödeme o ayın sonuna kadar birikmiş borcu geçtiyse ay kapanmış sayılır.
+    const lastBorcOdemeEntry = allFinancialOrders.find((e: any) =>
+      e.order_type === 'MANUAL_PAYMENT' && (e.note || '').includes('Borç Ödemesi')
+    );
+    const lastBorcOdemeTime: number | null = lastBorcOdemeEntry
+      ? new Date(lastBorcOdemeEntry.created_at).getTime()
+      : null;
+
+    // Kurumsal FIFO için: tüm zamanlardaki toplam ödeme
+    const totalAllPayments = isBireysel ? 0 : allFinancialOrders
+      .filter((e: any) => e.order_type === 'MANUAL_PAYMENT')
+      .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+
+    // MANUAL_DEBT'in gerçek dönemini belirler.
+    // Manuel borç notu "DD.MM.YYYY - ..." formatındaysa başlangıç tarihinin ayı kullanılır.
+    // "Aylık Tabldot Hesabı" gibi sabit notlarda created_at ayı kullanılır (o ay için çalıştırılır).
+    const getDebtEffectiveDate = (e: any): Date => {
+      const match = (e.note || '').match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+      if (match) return new Date(parseInt(match[3]), parseInt(match[2]) - 1, parseInt(match[1]));
+      return new Date(e.created_at);
+    };
 
     const byDay: Record<string, { dateKey: string; date: Date; dayOrders: any[] }> = {};
     mealOrders.forEach((o: any) => {
       const d = new Date(o.created_at);
-      const key = d.toISOString().split('T')[0];
-      if (!byDay[key]) byDay[key] = { dateKey: key, date: d, dayOrders: [] };
+      // Yerel saate göre gruplama — UTC yerine yerel yıl/ay/gün kullan (Türkiye UTC+3).
+      // toISOString() UTC tarihini verir; gece yarısına yakın siparişler yanlış güne düşer.
+      const localY = d.getFullYear();
+      const localM = d.getMonth();
+      const localD = d.getDate();
+      const key = `${localY}-${String(localM + 1).padStart(2, '0')}-${String(localD).padStart(2, '0')}`;
+      if (!byDay[key]) byDay[key] = {
+        dateKey: key,
+        date: new Date(localY, localM, localD), // yerel gece yarısı — doğru görüntüleme için
+        dayOrders: [],
+      };
       const dTime = d.getTime();
 
-      // isPaid — tüm koşullar OR ile değerlendiriliyor (corporate-info.tsx ile tutarlı):
-      // 1. Ay kapanışı tarihinden önce → ödendi
-      // 2. Son ödeme tarihinden önce → ödendi
-      // 3. Siparişin status'u PAID/ÖDENDİ → ödendi
-      // NOT: COMPLETED/TAMAMLANDI teslimat durumu, ödeme değil — dahil edilmez
+      // Kurumsal FIFO: toplam ödeme >= o aya kadar birikmiş borç → ay kapandı
+      // Yalnızca o ay için gerçekten MANUAL_DEBT girilmişse geçerli.
+      // Borç notu veya created_at'tan çıkarılan "efektif ay" kullanılır — bu sayede
+      // Temmuz'da geriye dönük Haziran borcu girilse bile Temmuz siparişleri etkilenmez.
+      let paidByFifo = false;
+      if (!isBireysel) {
+        const orderMonthEnd = new Date(localY, localM + 1, 0, 23, 59, 59);
+
+        const SETTLED = ['PAID', 'ÖDENDİ', 'ODENDI', 'CANCELLED', 'İPTAL', 'IPTAL'];
+        const isActiveDebt = (e: any) =>
+          e.order_type === 'MANUAL_DEBT' &&
+          !SETTLED.includes((e.status || '').toUpperCase());
+
+        // Bu sipariş bir borç girişiyle kapsanıyor mu?
+        // Kapsanma: aynı ay için aktif MANUAL_DEBT bu siparişten SONRA oluşturulmuş
+        const isCoveredByDebt = allFinancialOrders.some((e: any) => {
+          if (!isActiveDebt(e)) return false;
+          const ed = getDebtEffectiveDate(e);
+          if (ed.getFullYear() !== localY || ed.getMonth() !== localM) return false;
+          return new Date(e.created_at).getTime() >= dTime;
+        });
+
+        if (isCoveredByDebt) {
+          const companyBalance = previewAccount?.manualDebt ?? 0;
+          if (companyBalance <= 0) {
+            // Bakiye 0 → bu siparişi kapsayan borç tamamen ödenmiş
+            paidByFifo = true;
+          } else {
+            const cumulativeDebt = allFinancialOrders
+              .filter((e: any) => isActiveDebt(e) && getDebtEffectiveDate(e) <= orderMonthEnd)
+              .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+            paidByFifo = cumulativeDebt > 0 && totalAllPayments >= cumulativeDebt;
+          }
+        }
+      }
+
       const isPaid =
         (lastClosingTime !== null && dTime < lastClosingTime) ||
-        (lastPaymentTime !== null && dTime < lastPaymentTime) ||
+        paidByFifo ||
+        (isBireysel && lastBorcOdemeTime !== null && dTime < lastBorcOdemeTime) ||
         ['PAID', 'ÖDENDİ'].includes((o.status || '').toUpperCase());
 
       byDay[key].dayOrders.push({ ...o, isPaid });
@@ -253,10 +337,18 @@ export default function SummaryScreen() {
     const financialRows = financialEntries.map((entry: any, idx: number) => {
       const isPayment = entry.order_type === 'MANUAL_PAYMENT';
       const isClosing = (entry.note || '').includes('Ay Kapanışı');
-      const label = isPayment ? 'Kısmi Ödeme' : isClosing ? 'Ay Kapanışı' : 'Borç Girişi';
-      const badgeKey = isPayment ? 'payment' : isClosing ? 'closing' : 'open';
-      const badgeLabel = isPayment ? 'İşlendi' : isClosing ? 'Kapandı' : 'Açık';
-      const badgeColor = isPayment ? '#3B6D11' : isClosing ? '#185FA5' : '#854F0B';
+      const isFullClear = isPayment && ['Borç Ödemesi', 'Sipariş Ödemesi'].includes(entry.note || '');
+      // MANUAL_DEBT kapatılmışsa (Ay Kapanışı ile PAID yapıldıysa) bağımsız "Kapatıldı" badge göster
+      const isDebtSettled = !isPayment && !isClosing &&
+        ['PAID', 'ÖDENDİ', 'ODENDI'].includes((entry.status || '').toUpperCase());
+      const label = isPayment
+        ? (isFullClear ? 'Ödeme Alındı' : 'Kısmi Ödeme')
+        : isClosing ? 'Ay Kapanışı'
+        : isDebtSettled ? 'Borç (Kapatıldı)'
+        : 'Borç Girişi';
+      const badgeKey = isPayment ? 'payment' : (isClosing || isDebtSettled) ? 'closing' : 'open';
+      const badgeLabel = isPayment ? 'İşlendi' : (isClosing || isDebtSettled) ? 'Kapandı' : 'Açık';
+      const badgeColor = isPayment ? '#3B6D11' : (isClosing || isDebtSettled) ? '#185FA5' : '#854F0B';
       const amountColor = isPayment ? '#16a34a' : '#111827';
       const amountSign = isPayment ? '-' : '+';
       const hasAmount = entry.total_amount > 0;
@@ -270,7 +362,10 @@ export default function SummaryScreen() {
       ...dayObj,
       dayOrdersEnriched: (dayObj.dayOrders as any[]).map((order: any) => {
         const items: any[] = order.adisyon_items || [];
-        const initials = (order.userName || 'M').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+        // getUserOrders ham veri döndüğünde userName yoktur; users join'inden veya previewAccount.name'den çek
+        const resolvedUser = order.users?.[0] || order.users;
+        const userName = order.userName || resolvedUser?.full_name || previewAccount?.name || 'Müşteri';
+        const initials = userName.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
 
         // Tüm tabldot kalemlerini bul (tek bir siparişte birden fazla olabilir)
         const allTabldotItems: { label: string; quantity: number; mealContents: string[] }[] = [];
@@ -297,7 +392,24 @@ export default function SummaryScreen() {
         });
 
         const hasSelections = allTabldotItems.length > 0;
-        return { ...order, allTabldotItems, hasSelections, initials };
+        // Tabldot OLMAYAN kalemleri topla (tabldot + cacık gibi ek ürünlerin birlikte gelmesi desteklensin)
+        const allRegularItems: string[] = items
+          .filter((i: any) => {
+            if (!i.menu_items?.name) return false;
+            // selections-based tabldot zaten allTabldotItems'a alındı
+            if (Array.isArray(i.selections) && i.selections.length >= 2) return false;
+            // category/name-based tabldot da alındı
+            const cat: string = i.menu_items?.category || '';
+            const nm: string = (i.menu_items?.name || '').toUpperCase();
+            if (cat === 'TABLDOT' || nm.includes('TABLDOT') || nm.includes('PAKET')) return false;
+            return true;
+          })
+          .map((i: any) => {
+            const name = i.menu_items.name;
+            const qty = i.quantity || 1;
+            return qty > 1 ? `${qty}x ${name}` : name;
+          });
+        return { ...order, userName, allTabldotItems, allRegularItems, hasSelections, initials };
       }),
     }));
 
@@ -620,14 +732,30 @@ export default function SummaryScreen() {
         ...((employees || []).map((u: any) => u.id)),
       ].filter((id, idx, arr) => !!id && arr.indexOf(id) === idx);
 
-      // Bu ay bu kullanıcıların yemek siparişlerini DB'den direkt çek
-      // selections explicit seçiliyor — account.orders'a güvenmiyoruz
+      // Son "Aylık Tabldot Hesabı" girişini bul (artımlı faturalama için başlangıç noktası)
+      // Bu sayede önceki dönem zaten ödenmişse yalnızca yeni siparişler hesaba katılır.
+      const { data: lastBillingRows } = await supabase
+        .from('adisyon')
+        .select('created_at')
+        .eq('user_id', account.userId)
+        .eq('order_type', 'MANUAL_DEBT')
+        .eq('note', 'Aylık Tabldot Hesabı')
+        .gte('created_at', monthStart.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const billingFrom: Date = lastBillingRows?.[0]?.created_at
+        ? new Date(lastBillingRows[0].created_at)
+        : monthStart;
+
+      // Artımlı: son borç girişinden sonraki PENDING siparişleri say
       const { data: monthOrders, error } = await supabase
         .from('adisyon')
         .select('id, order_type, created_at, adisyon_items(id, quantity, selections, menu_items(id, name, category))')
         .in('user_id', userIds)
         .in('order_type', ['Şimdi Ye', 'Sipariş Ver'])
-        .gte('created_at', monthStart.toISOString());
+        .not('status', 'in', '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal")')
+        .gte('created_at', billingFrom.toISOString());
 
       if (error) throw error;
 
@@ -648,6 +776,33 @@ export default function SummaryScreen() {
     if (!calcAccount || !calcResult) return;
     setConfirmingCalc(true);
     try {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+      // Sadece BU AYA ait PENDING 'Aylık Tabldot Hesabı' kayıtlarını çek.
+      // monthStart filtresi önemli: önceki aylarda Ay Kapanışı yapılmış kayıtlara dokunmayalım.
+      // PAID olanlar da dahil etme — Ay Kapanışı ile kapatılmış geçmiş kayıtlar korunsun.
+      const { data: existingDebts } = await supabase
+        .from('adisyon')
+        .select('id, total_amount')
+        .eq('user_id', calcAccount.userId)
+        .eq('order_type', 'MANUAL_DEBT')
+        .eq('note', 'Aylık Tabldot Hesabı')
+        .gte('created_at', monthStart)
+        .not('status', 'in', '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal")');
+
+      const existingTotal = (existingDebts || []).reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+      const existingIds = (existingDebts || []).map((e: any) => e.id);
+
+      // Eski kayıtları SİLME — CANCELLED yap (finansal tarihçede görünsün, borca katılmasın)
+      if (existingIds.length > 0) {
+        await supabase
+          .from('adisyon')
+          .update({ status: 'CANCELLED' })
+          .in('id', existingIds);
+      }
+
+      // Yeni tek kayıt ekle
       const todayStr = new Date().toLocaleDateString('tr-TR');
       await billingService.addManualEntry(
         calcAccount.userId,
@@ -657,12 +812,19 @@ export default function SummaryScreen() {
         'DEBT',
         'Aylık Tabldot Hesabı'
       );
-      const updatedBalance = (calcAccount.manualDebt || 0) + calcResult.total;
+
+      // Bakiye: eski borç ödenmişse (existingTotal > currentBalance) sadece yeni borcu ekle;
+      // ödenmemişse standart formül: mevcut - eski + yeni
+      const currentBalance = companies.find((c: any) => c.id === calcAccount.companyId)?.balance ?? calcAccount.manualDebt ?? 0;
+      const updatedBalance = existingTotal > currentBalance
+        ? currentBalance + calcResult.total
+        : Math.max(0, currentBalance - existingTotal + calcResult.total);
       await billingService.updateCompanyBalance(calcAccount.companyId, updatedBalance);
       setCompanies((prev) => prev.map((c) =>
         c.id === calcAccount.companyId ? { ...c, balance: updatedBalance } : c
       ));
-      Alert.alert('Başarılı', `₺${calcResult.total.toLocaleString('tr-TR')} borç olarak eklendi.`);
+
+      Alert.alert('Başarılı', `₺${calcResult.total.toLocaleString('tr-TR')} borç eklendi.`);
       setCalcModalVisible(false);
       setCalcResult(null);
     } catch {
@@ -716,8 +878,6 @@ export default function SummaryScreen() {
 
   const handleExportPDF = async (account: any) => {
     try {
-      const firmaId = account?.companyId;
-      if (!firmaId) return;
       const sel = previewSelectedMonth ?? { year: new Date().getFullYear(), month: new Date().getMonth() };
       const y = sel.year;
       const m = sel.month;
@@ -726,7 +886,18 @@ export default function SummaryScreen() {
       const lastDayDate = new Date(y, m + 1, 0);
       const lastDay = y + '-' + pad(m + 1) + '-' + pad(lastDayDate.getDate());
 
-      const data = await ekstreService.getEkstreVerisi(firmaId, firstDay, lastDay);
+      let data;
+      if (account?.companyId) {
+        // Kurumsal müşteri
+        data = await ekstreService.getEkstreVerisi(account.companyId, firstDay, lastDay);
+      } else if (account?.userId) {
+        // Bireysel müşteri
+        // kalanBorcOverride = güncel borç (account.total), toplamBorcOverride = undefined (dönem sipariş toplamından otomatik hesaplansın)
+        data = await ekstreService.getEkstreVerisiForUser(account.userId, firstDay, lastDay, account.total ?? 0, undefined);
+      } else {
+        return;
+      }
+
       const html = await pdfService.generateHesapEkstresi(data);
       const { uri } = await Print.printToFileAsync({ html });
       await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });

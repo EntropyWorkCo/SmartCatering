@@ -198,8 +198,12 @@ export const pdfService = {
             return `<tr style="background:${bg};"><td style="padding:8px 12px;font-size:11px;color:#64748b;">${ds}</td><td style="padding:8px 12px;font-size:12px;color:${col};font-weight:600;">${lbl}</td><td style="padding:8px 12px;font-size:13px;color:${col};font-weight:700;text-align:right;">${sign}${formatCurrency(amt)}</td><td style="padding:8px 12px;font-size:13px;color:${balCol};font-weight:800;text-align:right;">${formatCurrency(runBal)}</td></tr>`;
         }).join('');
 
-        const totalDebt = financial.filter((e: any) => e.order_type === 'MANUAL_DEBT').reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
-        const totalPaid = financial.filter((e: any) => e.order_type === 'MANUAL_PAYMENT').reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+        const manualDebt = financial.filter((e: any) => e.order_type === 'MANUAL_DEBT').reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+        const totalDebt = data.toplamBorc !== undefined ? data.toplamBorc : manualDebt;
+        // toplamOdenen: ekstreService'den gelen gerçek PAID sipariş toplamı kullan (MANUAL_PAYMENT kayıtları yanlış olabilir)
+        const totalPaid = data.toplamOdenen !== undefined
+            ? data.toplamOdenen
+            : financial.filter((e: any) => e.order_type === 'MANUAL_PAYMENT').reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
 
         // Ay Kapanışı devir satırı: kalanBorc sıfırlanarak temizlenen tutarı gösterir
         const devirRow = carryOverTotal > 0

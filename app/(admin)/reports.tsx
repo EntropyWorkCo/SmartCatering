@@ -234,7 +234,8 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                 }
                 return acc;
             }
-            // Bireysel ise her şey cirodur
+            // Bireysel ise MANUAL_PAYMENT/DEBT hariç her şey cirodur
+            if (curr.order_type === 'MANUAL_PAYMENT' || curr.order_type === 'MANUAL_DEBT') return acc;
             return acc + (curr.total_amount || 0);
         }, 0);
 
@@ -253,7 +254,7 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
     }, []);
 
     const groupedOrders = useMemo(() => {
-        if (mainTab !== "KURUMSAL") return { "Bireysel": stats.orders };
+        if (mainTab !== "KURUMSAL") return { "Bireysel": stats.orders.filter((o: any) => o.order_type !== 'MANUAL_PAYMENT' && o.order_type !== 'MANUAL_DEBT') };
 
         const groups: { [key: string]: any[] } = {};
         stats.orders.forEach((o: any) => {
@@ -506,7 +507,9 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                         const companyDebt = items[0]?.companyBalance || 0;
                         
                         const compMeals = items.reduce((acc: number, o: any) => acc + (o.adisyon_items?.reduce((iq: number, i: any) => iq + (i.quantity || 0), 0) || 0), 0);
-                        const compTotal = items.reduce((acc: number, o: any) => acc + (o.total_amount || 0), 0);
+                        const compTotal = items
+                            .filter((o: any) => o.order_type !== 'MANUAL_PAYMENT' && o.order_type !== 'MANUAL_DEBT')
+                            .reduce((acc: number, o: any) => acc + (o.total_amount || 0), 0);
 
                         return (
                             <View key={companyName} style={{ marginBottom: 12 }}>

@@ -211,7 +211,8 @@ export default function CorporateInfoScreen() {
         }
     };
 
-    /** Seçili kişilere (veya tüm yapmayanlara) manuel bildirim */
+    /** Seçili kişilere (veya tüm yapmayanlara) manuel bildirim — çalışan başına günde maks. 2 kez */
+    const MAX_REMINDER_PER_EMPLOYEE = 2;
     const sendManualReminder = async (targetIds?: string[]) => {
         const notDone = attendanceData.filter(a => !a.hasMeal);
         const ids = targetIds ?? notDone.map(a => a.userId).filter(id => id !== user?.id);
@@ -219,10 +220,37 @@ export default function CorporateInfoScreen() {
             Alert.alert('Bilgi', 'Bildirim gönderilecek kişi bulunamadı.');
             return;
         }
+
+        // Çalışan başına günlük sınır kontrolü
+        const todayKey = new Date().toISOString().split('T')[0];
+        const sendableIds: string[] = [];
+        for (const id of ids) {
+            const key = `manual_reminder_count_${todayKey}_${id}`;
+            const countStr = await AsyncStorage.getItem(key);
+            const count = parseInt(countStr || '0', 10);
+            if (count < MAX_REMINDER_PER_EMPLOYEE) sendableIds.push(id);
+        }
+
+        if (sendableIds.length === 0) {
+            Alert.alert('Limit Aşıldı', 'Seçili tüm kişilere bugün zaten bildirim gönderildi (kişi başı maks. 2).');
+            return;
+        }
+
         setSendingReminder(true);
         try {
-            await mealAttendanceService.sendReminderToUsers(ids);
-            Alert.alert('✅ Gönderildi', `${ids.length} kişiye yemek hatırlatması gönderildi.`);
+            await mealAttendanceService.sendReminderToUsers(sendableIds);
+
+            // Her gönderilen kişinin sayacını artır
+            for (const id of sendableIds) {
+                const key = `manual_reminder_count_${todayKey}_${id}`;
+                const countStr = await AsyncStorage.getItem(key);
+                const count = parseInt(countStr || '0', 10);
+                await AsyncStorage.setItem(key, String(count + 1));
+            }
+
+            const skipped = ids.length - sendableIds.length;
+            const skippedMsg = skipped > 0 ? ` (${skipped} kişi limite ulaşmıştı, atlandı)` : '';
+            Alert.alert('✅ Gönderildi', `${sendableIds.length} kişiye bildirim gönderildi.${skippedMsg}`);
         } catch (e: any) {
             Alert.alert('Hata', 'Bildirim gönderilemedi: ' + (e.message || 'Bilinmeyen hata'));
         } finally {
@@ -488,15 +516,63 @@ export default function CorporateInfoScreen() {
         const closings = financial.filter((e: any) => (e.note || '').includes('Ay Kapanışı'));
         const lastClosing: Date | null = closings.length > 0 ? new Date(closings[0].created_at) : null;
 
-        const paymentEntries = financial.filter((e: any) => e.order_type === 'MANUAL_PAYMENT');
-        const lastPayment: Date | null = paymentEntries.length > 0 ? new Date(paymentEntries[0].created_at) : null;
+        // FIFO: toplam ödeme o ayın sonuna kadar birikmiş borcu geçtiyse ay kapandı
+        const totalAllPayments = financial
+            .filter((e: any) => e.order_type === 'MANUAL_PAYMENT')
+            .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+
+
+        // MANUAL_DEBT'in gerçek dönemini belirler.
+        // Manuel borç notu "DD.MM.YYYY - ..." formatındaysa başlangıç tarihinin ayı kullanılır.
+        // "Aylık Tabldot Hesabı" gibi sabit notlarda created_at ayı kullanılır.
+        const getDebtEffectiveDate = (e: any): Date => {
+            const match = (e.note || '').match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+            if (match) return new Date(parseInt(match[3]), parseInt(match[2]) - 1, parseInt(match[1]));
+            return new Date(e.created_at);
+        };
 
         const mealsWithStatus = meals.map((o: any) => {
             const mealDate = new Date(o.created_at);
+            const localY = mealDate.getFullYear();
+            const localM = mealDate.getMonth();
+            const orderMonthEnd = new Date(localY, localM + 1, 0, 23, 59, 59);
+
+            // FIFO yalnızca o ay için gerçekten MANUAL_DEBT girilmişse devreye girer.
+            // Borç notu veya created_at'tan çıkarılan "efektif ay" kullanılır.
+            const SETTLED = ['PAID', 'ÖDENDİ', 'ODENDI', 'CANCELLED', 'İPTAL', 'IPTAL'];
+            const isActiveDebt = (e: any) =>
+                e.order_type === 'MANUAL_DEBT' &&
+                !SETTLED.includes((e.status || '').toUpperCase());
+
+            const mealTime = mealDate.getTime();
+
+            // Bu sipariş bir borç girişiyle kapsanıyor mu?
+            // Kapsanma koşulu: aynı ay için aktif MANUAL_DEBT girişi bu siparişten SONRA oluşturulmuş
+            // (admin borcu hesaplarken bu siparişi dahil etmiş demektir)
+            const isCoveredByDebt = financial.some((e: any) => {
+                if (!isActiveDebt(e)) return false;
+                const ed = getDebtEffectiveDate(e);
+                if (ed.getFullYear() !== localY || ed.getMonth() !== localM) return false;
+                return new Date(e.created_at).getTime() >= mealTime;
+            });
+
+            let paidByFifo = false;
+            if (isCoveredByDebt) {
+                if (adminDebt <= 0) {
+                    // Bakiye 0 → bu siparişi kapsayan borç tamamen ödenmiş
+                    paidByFifo = true;
+                } else {
+                    // Kısmi ödeme: geleneksel FIFO toplamı
+                    const cumulativeDebt = financial
+                        .filter((e: any) => isActiveDebt(e) && getDebtEffectiveDate(e) <= orderMonthEnd)
+                        .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+                    paidByFifo = cumulativeDebt > 0 && totalAllPayments >= cumulativeDebt;
+                }
+            }
             const isPaid =
                 (lastClosing !== null && mealDate < lastClosing) ||
-                (lastPayment !== null && mealDate < lastPayment) ||
-                ['PAID','ÖDENDİ'].includes((o.status||'').toUpperCase()); // COMPLETED/TAMAMLANDI teslimat durumu, ödeme değil
+                paidByFifo ||
+                ['PAID','ÖDENDİ'].includes((o.status||'').toUpperCase());
             return { ...o, isPaid };
         });
 
@@ -507,8 +583,12 @@ export default function CorporateInfoScreen() {
         const byDay: Record<string, {dateKey:string;date:Date;mealOrders:any[]}> = {};
         finalMeals.forEach((o: any) => {
             const d = new Date(o.created_at);
-            const key = d.toISOString().split('T')[0];
-            if (!byDay[key]) byDay[key] = { dateKey: key, date: d, mealOrders: [] };
+            // Yerel tarihe göre gruplama (toISOString() UTC kullanır, Türkiye UTC+3'te gün kayar)
+            const localY = d.getFullYear();
+            const localM = d.getMonth();
+            const localD = d.getDate();
+            const key = `${localY}-${String(localM + 1).padStart(2, '0')}-${String(localD).padStart(2, '0')}`;
+            if (!byDay[key]) byDay[key] = { dateKey: key, date: new Date(localY, localM, localD), mealOrders: [] };
             byDay[key].mealOrders.push(o);
         });
         const days = Object.values(byDay).sort((a,b) => b.date.getTime()-a.date.getTime());
