@@ -176,22 +176,16 @@ export const userService = {
   },
 
   async updatePushToken(userId: string, token: string) {
-    // 1. GHOST TOKEN FIX: Bu token'ı (bu telefonu) daha önce kullanmış olan başka hesaplar varsa onlardan siliyoruz!
-    // Böylece eski hesaplara giden bildirimler bu cihaza düşmeyecek.
-    await supabase
-      .from("users")
-      .update({ push_token: null })
-      .eq("push_token", token)
-      .neq("id", userId);
-
-    // 2. Token'ı sadece şu anki kullanıcıya ata
-    const { error } = await supabase
-      .from("users")
-      .update({ push_token: token })
-      .eq("id", userId);
+    // claim_push_token RPC'si (security definer):
+    // 1. Token'ı daha önce kullanmış diğer hesaplardan siler (RLS'e takılmaz —
+    //    eski istemci tarafı "ghost token fix" RLS yüzünden sessizce çalışmıyordu)
+    // 2. Token'ı auth.uid() (şu anki kullanıcı) hesabına atar
+    const { error } = await supabase.rpc("claim_push_token", {
+      p_token: token,
+    });
 
     if (error) {
-      console.error("Error updating push token:", error);
+      console.error("Error updating push token (claim_push_token):", error);
       throw error;
     }
   },

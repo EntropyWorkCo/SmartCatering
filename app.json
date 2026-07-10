@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.entropywork.smartcatering",
-      "buildNumber": "8",
+      "buildNumber": "9",
       "googleServicesFile": "./GoogleService-Info.plist",
       "entitlements": {
         "aps-environment": "production"
@@ -23,7 +23,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.entropywork.smartcatering",
-      "versionCode": 8
+      "versionCode": 9
     },
     "web": {
       "bundler": "metro",
