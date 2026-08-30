@@ -20,7 +20,6 @@ import { useAuthStore } from "../../lib/store/authStore";
 import { userService } from "../../lib/services/userService";
 import { supabase } from "../../lib/supabase";
 
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 
@@ -45,7 +44,7 @@ export default function AdminLoginScreen() {
       console.log("LOG: Giriş denemesi başlatıldı...", email);
 
       const MAGIC_CODE_ACCOUNTS = ["admin@meydan.com"];
-      const MAGIC_CODES = ["992288"];
+      const MAGIC_CODES = ["123456", "992288"];
       const isAppleTest = MAGIC_CODE_ACCOUNTS.includes(email) && MAGIC_CODES.includes(code);
 
       if (isAppleTest) {
@@ -72,22 +71,29 @@ export default function AdminLoginScreen() {
 
       } else {
         // Normal Admin girişi
+        // Admin işaretini ÖNCE koy — SIGNED_IN event'i anında tetikleneceği için
+        // resolveRoleData o an AsyncStorage'ı okur, 'bireysel' yazmasını önler.
+        await AsyncStorage.setItem("isAdmin", "true");
+        await AsyncStorage.setItem("userRole", "admin");
+        useAuthStore.getState().setRole('admin');
+
         const { error: authError } = await supabase.auth.signInWithPassword({
           email: email,
           password: code,
         });
 
-        if (authError) throw authError;
+        if (authError) {
+          // Giriş başarısız — admin işaretlerini geri al
+          await AsyncStorage.multiRemove(["isAdmin", "userRole"]);
+          useAuthStore.getState().setRole(null);
+          throw authError;
+        }
 
-        // Rol kontrolü yapalım
+        // Gerçekten admin mi doğrula
         const isAdminCheck = await userService.checkIsAdmin();
-        if (isAdminCheck) {
-          await AsyncStorage.setItem("isAdmin", "true");
-          await AsyncStorage.setItem("userRole", "admin");
-          // Re-trigger auth store for normal login to ensure isAdmin is picked up
-          useAuthStore.getState().setRole('admin');
-          await useAuthStore.getState().initialize(true);
-        } else {
+        if (!isAdminCheck) {
+          await AsyncStorage.multiRemove(["isAdmin", "userRole"]);
+          useAuthStore.getState().setRole(null);
           await supabase.auth.signOut();
           throw new Error("Yönetici yetkiniz bulunmuyor.");
         }
@@ -118,7 +124,6 @@ export default function AdminLoginScreen() {
             <MaterialIcons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
 
-          <ThemeSwitcher />
         </View>
 
         <View style={styles.content}>

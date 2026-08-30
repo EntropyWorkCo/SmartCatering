@@ -1,8 +1,11 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { adisyonService } from "@/lib/services/adisyonService";
 import { billingService } from "@/lib/services/billingService";
+import { pricingService } from "@/lib/services/pricingService";
+import { ekstreService } from "@/lib/services/ekstreService";
+import { pdfService } from "@/lib/services/pdfService";
+import { userService } from "@/lib/services/userService";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { supabase } from "@/lib/supabase";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -10,7 +13,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -26,6 +29,8 @@ import {
     RefreshControl
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import PreviewModalBody from './PreviewModalBody';
 
 export default function SummaryScreen() {
   const { orders, loading, updateOrderStatus, fetchOrders } = useAdisyon();
@@ -57,6 +62,20 @@ export default function SummaryScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Fiyat Ayarlama Modalı State
+  const [priceModalVisible, setPriceModalVisible] = useState(false);
+  const [priceCompany, setPriceCompany] = useState<any | null>(null);
+  const [priceInputs, setPriceInputs] = useState<{ two: string; three: string; four: string }>({ two: '', three: '', four: '' });
+  const [loadingPrices, setLoadingPrices] = useState(false);
+  const [savingPrices, setSavingPrices] = useState(false);
+
+  // Bu Ayı Hesapla Modalı State
+  const [calcModalVisible, setCalcModalVisible] = useState(false);
+  const [calcAccount, setCalcAccount] = useState<any | null>(null);
+  const [calcResult, setCalcResult] = useState<{ total: number; breakdown: { selectionCount: number; count: number; unitPrice: number; subtotal: number }[] } | null>(null);
+  const [calculatingMonth, setCalculatingMonth] = useState(false);
+  const [confirmingCalc, setConfirmingCalc] = useState(false);
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
@@ -95,6 +114,346 @@ export default function SummaryScreen() {
 
   const [mainTab, setMainTab] = useState<"BIREYSEL" | "KURUMSAL">("KURUMSAL");
   const [previewAccount, setPreviewAccount] = useState<any | null>(null);
+  const [previewSelectedMonth, setPreviewSelectedMonth] = useState<{ year: number; month: number } | null>(null);
+  // Döküm için getCompanyOrders ile çekilen taze siparişler (getAllOrders limitini aşar)
+  const [previewCompanyOrders, setPreviewCompanyOrders] = useState<any[] | null>(null);
+
+  // previewAccount değişince: ay resetle + siparişleri direkt çek
+  useEffect(() => {
+    if (!previewAccount) return;
+    const now = new Date();
+    setPreviewSelectedMonth({ year: now.getFullYear(), month: now.getMonth() });
+    setPreviewCompanyOrders(null); // temizle (loading)
+    if (previewAccount.companyId) {
+      adisyonService.getCompanyOrders(previewAccount.companyId)
+        .then((orders) => setPreviewCompanyOrders(orders))
+        .catch((err) => console.error('previewCompanyOrders error:', err));
+    } else if (previewAccount.userId) {
+      // Bireysel müşteri: getUserOrders ile taze veri çek
+      adisyonService.getUserOrders(previewAccount.userId)
+        .then((orders) => setPreviewCompanyOrders(orders))
+        .catch((err) => console.error('previewCompanyOrders (bireysel) error:', err));
+    }
+  }, [previewAccount?.companyId, previewAccount?.userId]);
+
+  // Firma siparislerindeki tum gecmis aylari bul (yeniden eskiye sirali)
+  const previewAvailableMonths = useMemo(() => {
+    // Önce taze getCompanyOrders verisini kullan; yoksa groupedAccounts'a bak
+    const ordersToUse: any[] = previewCompanyOrders
+      ?? (previewAccount
+          ? (groupedAccounts?.find((a) => a.companyId === previewAccount.companyId) ?? previewAccount)?.orders ?? []
+          : []);
+    if (!ordersToUse.length) return [];
+    const seen = new Set<string>();
+    const months: { year: number; month: number; label: string }[] = [];
+    ordersToUse.forEach((o: any) => {
+      const d = new Date(o.created_at);
+      const y = d.getFullYear();
+      const m = d.getMonth();
+      const key = y + '-' + m;
+      if (!seen.has(key)) {
+        seen.add(key);
+        months.push({ year: y, month: m, label: new Date(y, m, 1).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' }) });
+      }
+    });
+    months.sort((a, b) => b.year - a.year || b.month - a.month);
+    return months;
+  }, [previewAccount, previewCompanyOrders, groupedAccounts]);
+
+  // PreviewAccount için türetilmiş veriler
+  const previewData = useMemo(() => {
+    if (!previewAccount) return null;
+    // Önce taze getCompanyOrders verisini kullan; yoksa groupedAccounts'a bak
+    const allOrders: any[] = previewCompanyOrders
+      ?? (groupedAccounts?.find((a) => a.companyId === previewAccount.companyId) ?? previewAccount).orders
+      ?? [];
+
+    // Seçili aya göre filtrele
+    const filteredOrders = allOrders.filter((o: any) => {
+      if (!previewSelectedMonth) return true;
+      const d = new Date(o.created_at);
+      return d.getFullYear() === previewSelectedMonth.year && d.getMonth() === previewSelectedMonth.month;
+    });
+
+    const mealOrders = filteredOrders.filter((o: any) =>
+      o.order_type === 'Şimdi Ye' || o.order_type === 'Sipariş Ver'
+    );
+    const rawFinancialEntries = filteredOrders
+      .filter((o: any) => o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT')
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const isBireysel = !previewAccount?.companyId;
+    let financialEntries: any[];
+    if (isBireysel) {
+      // Bireysel: tüm MANUAL_PAYMENT DB kayıtlarını göster (PDF ile tutarlı)
+      financialEntries = rawFinancialEntries
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    } else {
+      financialEntries = rawFinancialEntries
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+
+    // isPaid tespiti için tüm tarihlerdeki finansal kayıtlara bak (sadece seçili ay değil).
+    // Ödeme/kapanış bir sonraki ayda yapılmış olabilir; seçili ayı filtrelemek onu kaçırır.
+    const allFinancialOrders = allOrders
+      .filter((o: any) => o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT')
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const allClosings = allFinancialOrders.filter((e: any) => (e.note || '').includes('Ay Kapanışı'));
+    const lastClosingTime: number | null = allClosings.length ? new Date(allClosings[0].created_at).getTime() : null;
+
+    const lastPaymentEntry = allFinancialOrders.find((e: any) => e.order_type === 'MANUAL_PAYMENT');
+    const lastPaymentTime: number | null = lastPaymentEntry ? new Date(lastPaymentEntry.created_at).getTime() : null;
+
+    // Bireysel: sadece TAM ödeme (Borç Ödemesi) işaretler.
+    // Kurumsal: FIFO — toplam ödeme o ayın sonuna kadar birikmiş borcu geçtiyse ay kapanmış sayılır.
+    const lastBorcOdemeEntry = allFinancialOrders.find((e: any) =>
+      e.order_type === 'MANUAL_PAYMENT' && (e.note || '').includes('Borç Ödemesi')
+    );
+    const lastBorcOdemeTime: number | null = lastBorcOdemeEntry
+      ? new Date(lastBorcOdemeEntry.created_at).getTime()
+      : null;
+
+    // Kurumsal FIFO için: tüm zamanlardaki toplam ödeme
+    const totalAllPayments = isBireysel ? 0 : allFinancialOrders
+      .filter((e: any) => e.order_type === 'MANUAL_PAYMENT')
+      .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+
+    // MANUAL_DEBT'in gerçek dönemini belirler.
+    // Manuel borç notu "DD.MM.YYYY - ..." formatındaysa başlangıç tarihinin ayı kullanılır.
+    // "Aylık Tabldot Hesabı" gibi sabit notlarda created_at ayı kullanılır (o ay için çalıştırılır).
+    const getDebtEffectiveDate = (e: any): Date => {
+      const match = (e.note || '').match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+      if (match) return new Date(parseInt(match[3]), parseInt(match[2]) - 1, parseInt(match[1]));
+      return new Date(e.created_at);
+    };
+
+    const byDay: Record<string, { dateKey: string; date: Date; dayOrders: any[] }> = {};
+    mealOrders.forEach((o: any) => {
+      const d = new Date(o.created_at);
+      // Yerel saate göre gruplama — UTC yerine yerel yıl/ay/gün kullan (Türkiye UTC+3).
+      // toISOString() UTC tarihini verir; gece yarısına yakın siparişler yanlış güne düşer.
+      const localY = d.getFullYear();
+      const localM = d.getMonth();
+      const localD = d.getDate();
+      const key = `${localY}-${String(localM + 1).padStart(2, '0')}-${String(localD).padStart(2, '0')}`;
+      if (!byDay[key]) byDay[key] = {
+        dateKey: key,
+        date: new Date(localY, localM, localD), // yerel gece yarısı — doğru görüntüleme için
+        dayOrders: [],
+      };
+      const dTime = d.getTime();
+
+      // Kurumsal FIFO: toplam ödeme >= o aya kadar birikmiş borç → ay kapandı
+      // Yalnızca o ay için gerçekten MANUAL_DEBT girilmişse geçerli.
+      // Borç notu veya created_at'tan çıkarılan "efektif ay" kullanılır — bu sayede
+      // Temmuz'da geriye dönük Haziran borcu girilse bile Temmuz siparişleri etkilenmez.
+      let paidByFifo = false;
+      if (!isBireysel) {
+        const orderMonthEnd = new Date(localY, localM + 1, 0, 23, 59, 59);
+
+        const SETTLED = ['PAID', 'ÖDENDİ', 'ODENDI', 'CANCELLED', 'İPTAL', 'IPTAL'];
+        const isActiveDebt = (e: any) =>
+          e.order_type === 'MANUAL_DEBT' &&
+          !SETTLED.includes((e.status || '').toUpperCase());
+
+        // Bu sipariş bir borç girişiyle kapsanıyor mu?
+        // Kapsanma: aynı ay için aktif MANUAL_DEBT bu siparişten SONRA oluşturulmuş
+        const isCoveredByDebt = allFinancialOrders.some((e: any) => {
+          if (!isActiveDebt(e)) return false;
+          const ed = getDebtEffectiveDate(e);
+          if (ed.getFullYear() !== localY || ed.getMonth() !== localM) return false;
+          return new Date(e.created_at).getTime() >= dTime;
+        });
+
+        if (isCoveredByDebt) {
+          const companyBalance = previewAccount?.manualDebt ?? 0;
+          if (companyBalance <= 0) {
+            // Bakiye 0 → bu siparişi kapsayan borç tamamen ödenmiş
+            paidByFifo = true;
+          } else {
+            const cumulativeDebt = allFinancialOrders
+              .filter((e: any) => isActiveDebt(e) && getDebtEffectiveDate(e) <= orderMonthEnd)
+              .reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+            paidByFifo = cumulativeDebt > 0 && totalAllPayments >= cumulativeDebt;
+          }
+        }
+      }
+
+      const isPaid =
+        (lastClosingTime !== null && dTime < lastClosingTime) ||
+        paidByFifo ||
+        (isBireysel && lastBorcOdemeTime !== null && dTime < lastBorcOdemeTime) ||
+        ['PAID', 'ÖDENDİ'].includes((o.status || '').toUpperCase());
+
+      byDay[key].dayOrders.push({ ...o, isPaid });
+    });
+    const mealDays = Object.values(byDay).sort((a, b) => b.date.getTime() - a.date.getTime());
+    const debtAmount: number = previewAccount.isCorporate ? previewAccount.manualDebt : previewAccount.total;
+    const hasDebt = debtAmount !== 0;
+    const debtPositive = debtAmount > 0;
+    const hasMeals = mealDays.length !== 0;
+    const hasFinancial = financialEntries.length !== 0;
+    const isEmpty = !hasMeals && !hasFinancial;
+    
+    // Tabldot kırılım hesaplamaları (2'li, 3'lü, 4'lü)
+    let tabldot2Count = 0;
+    let tabldot3Count = 0;
+    let tabldot4Count = 0;
+
+    mealOrders.forEach((o: any) => {
+      const items: any[] = o.adisyon_items || [];
+      items.forEach((item: any) => {
+        let selCount: number | null = null;
+        
+        // 1. selections dizisinden tabldot türünü belirle
+        if (Array.isArray(item.selections) && item.selections.length >= 2) {
+          const sc = item.selections.length;
+          selCount = sc >= 2 && sc <= 4 ? sc : 4;
+        }
+        // 2. İsimden tabldot türünü belirle (home ekranı TABLDOT paketi)
+        else {
+          const cat = item.menu_items?.category || '';
+          const nm = (item.menu_items?.name || '').toUpperCase();
+          if (cat === 'TABLDOT' || nm.includes('TABLDOT') || nm.includes('PAKET')) {
+            if (nm.includes('2') || nm.toUpperCase().includes('2 ÇEŞİT') || nm.includes('İKİ') || nm.includes('IKI')) selCount = 2;
+            else if (nm.includes('3') || nm.toUpperCase().includes('3 ÇEŞİT') || nm.includes('ÜÇ') || nm.includes('UC')) selCount = 3;
+            else selCount = 4;
+          }
+        }
+
+        const qty = item.quantity || 1;
+        if (selCount === 2) tabldot2Count += qty;
+        else if (selCount === 3) tabldot3Count += qty;
+        else if (selCount === 4) tabldot4Count += qty;
+      });
+    });
+
+    const totalPlates = tabldot2Count + tabldot3Count + tabldot4Count;
+    const debtColor = debtPositive ? '#ef4444' : '#16a34a';
+    const debtLabel = debtPositive ? `₺${debtAmount.toLocaleString('tr-TR')}` : 'Temiz';
+
+    // Finansal satırlar için hazırlanmış veri
+    const financialRows = financialEntries.map((entry: any, idx: number) => {
+      const isPayment = entry.order_type === 'MANUAL_PAYMENT';
+      const isClosing = (entry.note || '').includes('Ay Kapanışı');
+      const isFullClear = isPayment && ['Borç Ödemesi', 'Sipariş Ödemesi'].includes(entry.note || '');
+      // MANUAL_DEBT kapatılmışsa (Ay Kapanışı ile PAID yapıldıysa) bağımsız "Kapatıldı" badge göster
+      const isDebtSettled = !isPayment && !isClosing &&
+        ['PAID', 'ÖDENDİ', 'ODENDI'].includes((entry.status || '').toUpperCase());
+      const label = isPayment
+        ? (isFullClear ? 'Ödeme Alındı' : 'Kısmi Ödeme')
+        : isClosing ? 'Ay Kapanışı'
+        : isDebtSettled ? 'Borç (Kapatıldı)'
+        : 'Borç Girişi';
+      const badgeKey = isPayment ? 'payment' : (isClosing || isDebtSettled) ? 'closing' : 'open';
+      const badgeLabel = isPayment ? 'İşlendi' : (isClosing || isDebtSettled) ? 'Kapandı' : 'Açık';
+      const badgeColor = isPayment ? '#3B6D11' : (isClosing || isDebtSettled) ? '#185FA5' : '#854F0B';
+      const amountColor = isPayment ? '#16a34a' : '#111827';
+      const amountSign = isPayment ? '-' : '+';
+      const hasAmount = entry.total_amount > 0;
+      const amountStr = hasAmount ? `${amountSign}₺${entry.total_amount.toLocaleString('tr-TR')}` : '';
+      const notLast = idx !== financialEntries.length - 1;
+      return { ...entry, label, badgeKey, badgeLabel, badgeColor, amountColor, amountStr, hasAmount, notLast };
+    });
+
+    // Yemek günleri için hazırlanmış veri — pricingService ile tutarlı, TÜM tabldot kalemleri
+    const mealDaysEnriched = mealDays.map((dayObj: any) => ({
+      ...dayObj,
+      dayOrdersEnriched: (dayObj.dayOrders as any[]).map((order: any) => {
+        const items: any[] = order.adisyon_items || [];
+        // getUserOrders ham veri döndüğünde userName yoktur; users join'inden veya previewAccount.name'den çek
+        const resolvedUser = order.users?.[0] || order.users;
+        const userName = order.userName || resolvedUser?.full_name || previewAccount?.name || 'Müşteri';
+        const initials = userName.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+
+        // Tüm tabldot kalemlerini bul (tek bir siparişte birden fazla olabilir)
+        const allTabldotItems: { label: string; quantity: number; mealContents: string[] }[] = [];
+        items.forEach((i: any) => {
+          // 1. selections-based (menu ekranı)
+          if (Array.isArray(i.selections) && i.selections.length >= 2) {
+            const sc = Math.min(i.selections.length, 4);
+            allTabldotItems.push({
+              label: `${sc}'lü Tabldot`,
+              quantity: i.quantity || 1,
+              mealContents: (i.selections as any[]).map((s: any) => s.item_name).filter(Boolean),
+            });
+            return;
+          }
+          // 2. name/category-based (home ekranı veya manuel)
+          const cat: string = i.menu_items?.category || '';
+          const nm: string = i.menu_items?.name || '';
+          if (cat === 'TABLDOT' || nm.toUpperCase().includes('TABLDOT') || nm.toUpperCase().includes('PAKET')) {
+            let sc = 4;
+            if (nm.includes('2') || nm.toUpperCase().includes('2 ÇEŞİT') || nm.toUpperCase().includes('İKİ') || nm.toUpperCase().includes('IKI')) sc = 2;
+            else if (nm.includes('3') || nm.toUpperCase().includes('3 ÇEŞİT') || nm.toUpperCase().includes('ÜÇ') || nm.toUpperCase().includes('UC')) sc = 3;
+            allTabldotItems.push({ label: `${sc}'lü Tabldot`, quantity: i.quantity || 1, mealContents: [] });
+          }
+        });
+
+        const hasSelections = allTabldotItems.length > 0;
+        // Tabldot OLMAYAN kalemleri topla (tabldot + cacık gibi ek ürünlerin birlikte gelmesi desteklensin)
+        const allRegularItems: string[] = items
+          .filter((i: any) => {
+            if (!i.menu_items?.name) return false;
+            // selections-based tabldot zaten allTabldotItems'a alındı
+            if (Array.isArray(i.selections) && i.selections.length >= 2) return false;
+            // category/name-based tabldot da alındı
+            const cat: string = i.menu_items?.category || '';
+            const nm: string = (i.menu_items?.name || '').toUpperCase();
+            if (cat === 'TABLDOT' || nm.includes('TABLDOT') || nm.includes('PAKET')) return false;
+            return true;
+          })
+          .map((i: any) => {
+            const name = i.menu_items.name;
+            const qty = i.quantity || 1;
+            return qty > 1 ? `${qty}x ${name}` : name;
+          });
+        return { ...order, userName, allTabldotItems, allRegularItems, hasSelections, initials };
+      }),
+    }));
+
+    return {
+      mealDays, financialEntries, debtAmount, hasDebt, debtPositive, hasMeals, hasFinancial,
+      isEmpty, totalPlates, debtColor, debtLabel, financialRows, mealDaysEnriched,
+      tabldot2Count, tabldot3Count, tabldot4Count
+    };
+  }, [previewAccount, previewSelectedMonth, previewCompanyOrders, groupedAccounts]);
+
+  // Seçili aya göre tabldot türü dağılımı (Döküm modalı alt özet kartı için)
+  const previewTabldotOzet = useMemo(() => {
+    if (!previewCompanyOrders || !previewSelectedMonth) return null;
+    const { year, month } = previewSelectedMonth;
+    const monthOrders = previewCompanyOrders.filter((o: any) => {
+      if (o.order_type !== 'Şimdi Ye' && o.order_type !== 'Sipariş Ver') return false;
+      const d = new Date(o.created_at);
+      return d.getFullYear() === year && d.getMonth() === month;
+    });
+    const countMap: Record<number, number> = { 2: 0, 3: 0, 4: 0 };
+    monthOrders.forEach((order: any) => {
+      (order.adisyon_items || []).forEach((i: any) => {
+        if (Array.isArray(i.selections) && i.selections.length >= 2) {
+          const sc = Math.min(i.selections.length, 4);
+          countMap[sc] += (i.quantity || 1);
+          return;
+        }
+        const cat: string = i.menu_items?.category || '';
+        const nm: string = i.menu_items?.name || '';
+        if (cat === 'TABLDOT' || nm.toUpperCase().includes('TABLDOT') || nm.toUpperCase().includes('PAKET')) {
+          let sc = 4;
+          if (nm.includes('2') || nm.toUpperCase().includes('2 ÇEŞİT') || nm.toUpperCase().includes('İKİ') || nm.toUpperCase().includes('IKI')) sc = 2;
+          else if (nm.includes('3') || nm.toUpperCase().includes('3 ÇEŞİT') || nm.toUpperCase().includes('ÜÇ') || nm.toUpperCase().includes('UC')) sc = 3;
+          countMap[sc] += (i.quantity || 1);
+        }
+      });
+    });
+    const rows = ([4, 3, 2] as const)
+      .map(sc => ({ sc, count: countMap[sc] }))
+      .filter(r => r.count > 0);
+    const total = rows.reduce((s, r) => s + r.count, 0);
+    const monthLabel = new Date(year, month, 1).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
+    return { rows, total, monthLabel };
+  }, [previewCompanyOrders, previewSelectedMonth]);
 
   const groupedAccounts = useMemo(() => {
     try {
@@ -147,7 +506,7 @@ export default function SummaryScreen() {
             finalManualDebt = ownedCompany.balance || 0;
         }
 
-        const isActuallyCorporate = !!finalCompanyName;
+        const isActuallyCorporate = !!finalCompanyName || order.isCorporate === true;
 
         const match =
           (mainTab === "KURUMSAL" && isActuallyCorporate) ||
@@ -200,6 +559,44 @@ export default function SummaryScreen() {
     () => groupedAccounts.reduce((acc, curr) => acc + (curr.isCorporate ? curr.manualDebt : curr.total), 0),
     [groupedAccounts]
   );
+
+  // ── Ay Kapanışı (Admin) ─────────────────────────────────────
+  const [closingMonth, setClosingMonth] = useState(false);
+
+  const handleCloseMonthAdmin = async (account: any) => {
+    if (!account.companyId) {
+      Alert.alert('Hata', 'Bu hesap için firma ID bulunamadı.');
+      return;
+    }
+    const now = new Date();
+    const monthName = now.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
+
+    Alert.alert(
+      'Ay Kapanışını Onayla',
+      `${account.displayName} — ${monthName}\n\nBu işlem:\n• Tüm ödenmemiş siparişleri "Ödendi" işaretler\n• Şirket bakiyesini sıfırlar\n• Geri alınamaz`,
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Onayla',
+          style: 'destructive',
+          onPress: async () => {
+            setClosingMonth(true);
+            try {
+              const empList = await userService.getCompanyEmployees(account.companyId);
+              const empIds = empList.map((e: any) => e.id).filter(Boolean);
+              await billingService.closeMonth(account.companyId, account.userId, empIds);
+              if (fetchOrders) await fetchOrders();
+              Alert.alert('✅ Tamamlandı', `${account.displayName} — ${monthName} ay kapanışı tamamlandı.`);
+            } catch (err: any) {
+              Alert.alert('Hata', 'Ay kapanışı yapılamadı: ' + (err.message || 'Bilinmeyen hata'));
+            } finally {
+              setClosingMonth(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const handleUpdateDebt = async () => {
     if (!selectedCompanyId || !newDebtAmount) return;
@@ -311,201 +708,197 @@ export default function SummaryScreen() {
     );
   };
 
+  const handleCalculateMonth = async (account: any) => {
+    if (!account.companyId) {
+      Alert.alert('Hata', 'Bu hesap için firma ID bulunamadı.');
+      return;
+    }
+    setCalcAccount(account);
+    setCalcResult(null);
+    setCalcModalVisible(true);
+    setCalculatingMonth(true);
+    try {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      // Firma sahibi + çalışanların user_id'lerini bul
+      const { data: employees } = await supabase
+        .from('users')
+        .select('id')
+        .eq('company_id', account.companyId);
+
+      const userIds = [
+        account.userId,
+        ...((employees || []).map((u: any) => u.id)),
+      ].filter((id, idx, arr) => !!id && arr.indexOf(id) === idx);
+
+      // Son "Aylık Tabldot Hesabı" girişini bul (artımlı faturalama için başlangıç noktası)
+      // Bu sayede önceki dönem zaten ödenmişse yalnızca yeni siparişler hesaba katılır.
+      const { data: lastBillingRows } = await supabase
+        .from('adisyon')
+        .select('created_at')
+        .eq('user_id', account.userId)
+        .eq('order_type', 'MANUAL_DEBT')
+        .eq('note', 'Aylık Tabldot Hesabı')
+        .gte('created_at', monthStart.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const billingFrom: Date = lastBillingRows?.[0]?.created_at
+        ? new Date(lastBillingRows[0].created_at)
+        : monthStart;
+
+      // Artımlı: son borç girişinden sonraki PENDING siparişleri say
+      const { data: monthOrders, error } = await supabase
+        .from('adisyon')
+        .select('id, order_type, created_at, adisyon_items(id, quantity, selections, menu_items(id, name, category))')
+        .in('user_id', userIds)
+        .in('order_type', ['Şimdi Ye', 'Sipariş Ver'])
+        .not('status', 'in', '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal")')
+        .gte('created_at', billingFrom.toISOString());
+
+      if (error) throw error;
+
+      const result = await pricingService.calculateMonthlyTotal(
+        account.companyId,
+        monthOrders || []
+      );
+      setCalcResult(result);
+    } catch {
+      Alert.alert('Hata', 'Hesaplama yapılırken hata oluştu.');
+      setCalcModalVisible(false);
+    } finally {
+      setCalculatingMonth(false);
+    }
+  };
+
+  const handleConfirmCalc = async () => {
+    if (!calcAccount || !calcResult) return;
+    setConfirmingCalc(true);
+    try {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+      // Sadece BU AYA ait PENDING 'Aylık Tabldot Hesabı' kayıtlarını çek.
+      // monthStart filtresi önemli: önceki aylarda Ay Kapanışı yapılmış kayıtlara dokunmayalım.
+      // PAID olanlar da dahil etme — Ay Kapanışı ile kapatılmış geçmiş kayıtlar korunsun.
+      const { data: existingDebts } = await supabase
+        .from('adisyon')
+        .select('id, total_amount')
+        .eq('user_id', calcAccount.userId)
+        .eq('order_type', 'MANUAL_DEBT')
+        .eq('note', 'Aylık Tabldot Hesabı')
+        .gte('created_at', monthStart)
+        .not('status', 'in', '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal")');
+
+      const existingTotal = (existingDebts || []).reduce((s: number, e: any) => s + (e.total_amount || 0), 0);
+      const existingIds = (existingDebts || []).map((e: any) => e.id);
+
+      // Eski kayıtları SİLME — CANCELLED yap (finansal tarihçede görünsün, borca katılmasın)
+      if (existingIds.length > 0) {
+        await supabase
+          .from('adisyon')
+          .update({ status: 'CANCELLED' })
+          .in('id', existingIds);
+      }
+
+      // Yeni tek kayıt ekle
+      const todayStr = new Date().toLocaleDateString('tr-TR');
+      await billingService.addManualEntry(
+        calcAccount.userId,
+        calcResult.total,
+        todayStr,
+        todayStr,
+        'DEBT',
+        'Aylık Tabldot Hesabı'
+      );
+
+      // Bakiye: eski borç ödenmişse (existingTotal > currentBalance) sadece yeni borcu ekle;
+      // ödenmemişse standart formül: mevcut - eski + yeni
+      const currentBalance = companies.find((c: any) => c.id === calcAccount.companyId)?.balance ?? calcAccount.manualDebt ?? 0;
+      const updatedBalance = existingTotal > currentBalance
+        ? currentBalance + calcResult.total
+        : Math.max(0, currentBalance - existingTotal + calcResult.total);
+      await billingService.updateCompanyBalance(calcAccount.companyId, updatedBalance);
+      setCompanies((prev) => prev.map((c) =>
+        c.id === calcAccount.companyId ? { ...c, balance: updatedBalance } : c
+      ));
+
+      Alert.alert('Başarılı', `₺${calcResult.total.toLocaleString('tr-TR')} borç eklendi.`);
+      setCalcModalVisible(false);
+      setCalcResult(null);
+    } catch {
+      Alert.alert('Hata', 'Borç kaydedilirken hata oluştu.');
+    } finally {
+      setConfirmingCalc(false);
+    }
+  };
+
+  const handleOpenPriceModal = async (account: any) => {
+    if (!account.companyId) {
+      Alert.alert('Hata', 'Bu hesap için firma ID bulunamadı.');
+      return;
+    }
+    setPriceCompany(account);
+    setPriceModalVisible(true);
+    setLoadingPrices(true);
+    try {
+      const prices = await pricingService.getCompanyPrices(account.companyId);
+      const map: Record<number, string> = {};
+      prices.forEach((p) => { map[p.selection_count] = p.unit_price.toString(); });
+      setPriceInputs({
+        two: map[2] || '',
+        three: map[3] || '',
+        four: map[4] || '',
+      });
+    } catch {
+      Alert.alert('Hata', 'Fiyatlar yüklenirken hata oluştu.');
+    } finally {
+      setLoadingPrices(false);
+    }
+  };
+
+  const handleSavePrices = async () => {
+    if (!priceCompany) return;
+    setSavingPrices(true);
+    try {
+      await pricingService.setPrices(priceCompany.companyId, [
+        { selectionCount: 2, unitPrice: parseFloat(priceInputs.two) || 0 },
+        { selectionCount: 3, unitPrice: parseFloat(priceInputs.three) || 0 },
+        { selectionCount: 4, unitPrice: parseFloat(priceInputs.four) || 0 },
+      ]);
+      Alert.alert('Başarılı', 'Fiyatlar kaydedildi.');
+      setPriceModalVisible(false);
+    } catch {
+      Alert.alert('Hata', 'Fiyatlar kaydedilirken hata oluştu.');
+    } finally {
+      setSavingPrices(false);
+    }
+  };
+
   const handleExportPDF = async (account: any) => {
     try {
-      const dateStr = new Date().toLocaleDateString('tr-TR');
-      const html = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <style>
-              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
-              .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; }
-              .brand { color: ${colors.primary}; margin: 0; font-size: 24px; font-weight: 900; letter-spacing: -1px; }
-              .report-type { margin: 5px 0 0 0; color: #64748b; font-size: 14px; font-weight: bold; }
-              .meta-right { text-align: right; }
-              .meta-text { font-size: 12px; color: #64748b; }
-              .meta-text strong { color: #1e293b; }
-              .account-info { background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 30px; border: 1px solid #e2e8f0; }
-              .info-label { font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold; margin-bottom: 5px; }
-              .info-value { font-size: 18px; font-weight: bold; color: #1e293b; }
-              .section-title { font-size: 12px; font-weight: 900; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin: 30px 0 15px 0; }
-              table { width: 100%; border-collapse: collapse; }
-              th { text-align: left; font-size: 10px; color: #64748b; padding: 12px 10px; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; }
-              td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
-              .total-box { margin-top: 40px; padding: 25px; border-radius: 16px; background: ${colors.primary}08; border: 1px solid ${colors.primary}15; display: flex; justify-content: space-between; align-items: center; }
-              .total-label { font-size: 14px; font-weight: bold; color: #1e293b; }
-              .total-value { font-size: 28px; font-weight: 900; color: ${colors.primary}; }
-              .manual-note { margin-top: 5px; font-size: 12px; color: #ef4444; font-weight: bold; }
-              .footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid #f1f5f9; text-align: center; color: #94a3b8; font-size: 10px; }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <div>
-                <div style="background: ${colors.primary}; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 900; font-style: italic; display: inline-block; font-size: 20px; margin-bottom: 8px;">MEYDAN LOKANTA</div>
-                <p class="report-type">Hizmet Detay & Borç Ekstresi</p>
-              </div>
-              <div class="meta-right">
-                <div class="meta-text">Tarih: <strong>${dateStr}</strong></div>
-              </div>
-            </div>
+      const sel = previewSelectedMonth ?? { year: new Date().getFullYear(), month: new Date().getMonth() };
+      const y = sel.year;
+      const m = sel.month;
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const firstDay = y + '-' + pad(m + 1) + '-01';
+      const lastDayDate = new Date(y, m + 1, 0);
+      const lastDay = y + '-' + pad(m + 1) + '-' + pad(lastDayDate.getDate());
 
-            <div class="account-info">
-              <div class="info-label">Müşteri / Firma Bilgisi</div>
-              <div class="info-value">${account.displayName}</div>
-            </div>
+      let data;
+      if (account?.companyId) {
+        // Kurumsal müşteri
+        data = await ekstreService.getEkstreVerisi(account.companyId, firstDay, lastDay);
+      } else if (account?.userId) {
+        // Bireysel müşteri
+        // kalanBorcOverride = güncel borç (account.total), toplamBorcOverride = undefined (dönem sipariş toplamından otomatik hesaplansın)
+        data = await ekstreService.getEkstreVerisiForUser(account.userId, firstDay, lastDay, account.total ?? 0, undefined);
+      } else {
+        return;
+      }
 
-            <h2 class="section-title">Hizmet ve İşlem Detayları</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th style="width: 100px;">Tarih</th>
-                  <th>Hizmet / Sipariş Detayı</th>
-                  <th style="width: 120px; text-align: center;">Durum</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${(() => {
-                  // 1. Manuel borç/ödeme kayıtlarını ve personelin yediği tüm siparişleri kapsa
-                  const filteredOrders = account.orders.filter((o: any) => {
-                    const note = (o.note || "").toUpperCase();
-                    return !note.includes("BORCA AKTARILDI");
-                  });
-
-                  // 2. Birleştirilmiş Row Listesi (Tarih bazlı sıralama için)
-                  const unifiedEntries: any[] = [];
-                  const groupedMap: { [key: string]: any } = {};
-
-                  filteredOrders.forEach((o: any) => {
-                    const isManual = o.order_type === 'MANUAL_DEBT' || o.order_type === 'MANUAL_PAYMENT';
-                    
-                    if (isManual) {
-                        unifiedEntries.push({
-                            type: 'manual',
-                            date: new Date(o.created_at),
-                            order: o
-                        });
-                        return;
-                    }
-
-                    const dateKey = new Date(o.created_at).toLocaleDateString('tr-TR');
-                    const userKey = o.userName || 'Personel';
-                    const key = `${dateKey}_${userKey}`;
-
-                    if (!groupedMap[key]) {
-                      groupedMap[key] = { ...o, count: 1, items: [...(o.adisyon_items || [])] };
-                    } else {
-                      groupedMap[key].count += 1;
-                      if (o.adisyon_items) groupedMap[key].items.push(...o.adisyon_items);
-                    }
-                  });
-
-                  // Gruplanmış siparişleri listeye ekle
-                  Object.values(groupedMap).forEach((o: any) => {
-                    unifiedEntries.push({
-                        type: 'order',
-                        date: new Date(o.created_at),
-                        order: o
-                    });
-                  });
-
-                  // 3. TARİH SIRASINA GÖRE DİZ (Yeniden Eskiye)
-                  unifiedEntries.sort((a, b) => b.date.getTime() - a.date.getTime());
-
-                  // 4. AKILLI BAKİYE TAKİBİ (Waterfall Logic)
-                  let remainingBalance = account.isCorporate ? account.manualDebt : account.total;
-
-                  // 5. HTML Satırlarını Oluştur
-                  return unifiedEntries.map((entry) => {
-                    const { type, order: o } = entry;
-                    const dateStr = entry.date.toLocaleDateString('tr-TR');
-
-                    if (type === 'manual') {
-                        const isDebt = o.order_type === 'MANUAL_DEBT';
-                        
-                        // Eğer bu bir borç girişiyse ve hala bir bakiye varsa "AÇIK", bakiye bitmişse "KAPALI"
-                        let statusColor = '#22c55e'; // Varsayılan: Ödendi (Yeşil)
-                        let statusLabel = 'ÖDENDİ / KAPALI';
-                        let labelColor = '#64748b';
-
-                        if (isDebt) {
-                            if (remainingBalance > 0) {
-                                statusColor = '#f97316'; // Borç (Turuncu)
-                                statusLabel = 'BORÇ / AÇIK';
-                                labelColor = '#f97316';
-                                remainingBalance -= (o.total_amount || 0); // Bakiyeden düş
-                            } else {
-                                // Borç kaydı ama kümülatif bakiye zaten dolmuş (yani ödenmiş)
-                                statusColor = '#10b981';
-                                statusLabel = 'ÖDENDİ / KAPALI';
-                                labelColor = '#64748b';
-                            }
-                        } else {
-                            // Ödeme Kaydı
-                            statusColor = '#10b981';
-                            statusLabel = 'ÖDEME İŞLENDİ';
-                            labelColor = '#22c55e';
-                        }
-
-                        const labelText = isDebt ? `BORÇ GİRİŞİ: ${o.note || '-'}` : `ÖDEME ALINDI: ${o.note || '-'}`;
-
-                        return `
-                          <tr>
-                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size:11px;">${dateStr}</td>
-                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size:11px;">
-                                <strong style="color: ${labelColor};">${labelText}</strong><br/>
-                                <small style="color:#64748b;">Kayıt Tutarı: ₺${o.total_amount?.toLocaleString('tr-TR')}</small>
-                            </td>
-                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; text-align: center; color: ${statusColor}; font-weight: bold; font-size:10px;">${statusLabel}</td>
-                          </tr>
-                        `;
-                    } else {
-                        const statusUpper = (o.status || "").toUpperCase();
-                        const isCancelled = ["CANCELLED", "İPTAL"].includes(statusUpper);
-                        
-                        const adisyonDetay = (o.items || []).map((i: any) => {
-                            const name = i.menu_items?.name || i.menu_item?.name || 'Ürün';
-                            return `${i.quantity}x ${name}`;
-                        }).filter(Boolean).join(', ');
-
-                        return `
-                          <tr>
-                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size:11px;">${dateStr}</td>
-                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size:11px;">
-                                <strong>${o.userName || 'Personel'}</strong> ${o.count > 1 ? `<span style="color:${colors.primary}; font-weight:bold;">(x${o.count})</span>` : ''}<br/>
-                                <small style="color:#64748b;">${adisyonDetay || 'Yemek Siparişi'}</small>
-                            </td>
-                            <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; text-align: center; color: ${isCancelled ? '#ef4444' : '#64748b'}; font-weight: bold; font-size:10px;">
-                              ${isCancelled ? "İPTAL" : "TAMAMLANDI"}
-                            </td>
-                          </tr>
-                        `;
-                    }
-                  }).join('');
-                })()}
-              </tbody>
-            </table>
-
-            <div class="total-box">
-              <div class="total-label">GÜNCEL TOPLAM BORÇ</div>
-              <div class="total-value">
-                ${(account.isCorporate ? account.manualDebt : account.total) <= 0 
-                  ? '<span style="color: #10b981;">ÖDENDİ</span>' 
-                  : `₺${(account.isCorporate ? account.manualDebt : account.total).toLocaleString('tr-TR')}`
-                }
-              </div>
-            </div>
-
-            <div class="footer">
-              <p>Bu belge bilgilendirme amaçlı otomatik olarak oluşturulmuştur.</p>
-              &copy; ${new Date().getFullYear()} Meydan Lokanta | Yönetim Paneli
-            </div>
-          </body>
-        </html>
-      `;
-
+      const html = await pdfService.generateHesapEkstresi(data);
       const { uri } = await Print.printToFileAsync({ html });
       await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
     } catch (error) {
@@ -531,7 +924,6 @@ export default function SummaryScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Özet & Borçlar</Text>
         </View>
-        <ThemeSwitcher />
       </View>
 
       <View style={styles.tabContainer}>
@@ -559,7 +951,7 @@ export default function SummaryScreen() {
           <Text style={styles.totalAmount}>₺{totalDebt.toLocaleString("tr-TR")}</Text>
         </View>
 
-        <Text style={{ fontSize: 10, fontWeight: '900', color: colors.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginTop: 24, marginBottom: 12 }}>FİRMA & BORÇ LİSTESİ</Text>
+        <Text style={{ fontSize: 10, fontWeight: '900', color: colors.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginTop: 24, marginBottom: 12 }}>{mainTab === 'KURUMSAL' ? 'FİRMA & BORÇ LİSTESİ' : 'MÜŞTERİ & BORÇ LİSTESİ'}</Text>
 
         {loading ? (
           <View style={{ alignItems: 'center', paddingVertical: 40 }}>
@@ -588,64 +980,58 @@ export default function SummaryScreen() {
             </View>
 
             <View style={styles.accountActions}>
-              <TouchableOpacity style={styles.outlineBtn} onPress={() => setPreviewAccount(account)}>
-                <Text style={styles.outlineBtnText}>Döküm İncele</Text>
-              </TouchableOpacity>
-
               {account.isCorporate ? (
-                <>
-                  <TouchableOpacity 
-                     style={[styles.primaryBtn, { backgroundColor: "#2196F3", marginLeft: 8 }]} 
-                     onPress={() => {
-                       setSelectedCompanyId(account.companyId || "");
-                       setNewDebtAmount((account.manualDebt || 0).toString());
-                       setDebtModalVisible(true);
-                     }}
-                  >
-                    <Text style={styles.primaryBtnText}>Borç Gir</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  <TouchableOpacity style={styles.sqBtn} onPress={() => setPreviewAccount(account)}>
+                    <MaterialIcons name="receipt-long" size={18} color="#fff" />
+                    <Text style={styles.sqBtnText}>Döküm</Text>
                   </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                     style={[styles.primaryBtn, { backgroundColor: "#FF9800", marginLeft: 8 }]} 
-                     onPress={() => {
-                       setSelectedAccountForPayment(account);
-                       setPaymentAmount("");
-                       setPartialModalVisible(true);
-                     }}
-                  >
-                    <Text style={styles.primaryBtnText}>Kısmi Ödeme</Text>
+                  <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#2196F3' }]} onPress={() => { setSelectedCompanyId(account.companyId || ''); setNewDebtAmount(''); setDebtModalVisible(true); }}>
+                    <MaterialIcons name="add-circle-outline" size={18} color="#fff" />
+                    <Text style={styles.sqBtnText}>Borç Gir</Text>
                   </TouchableOpacity>
-
-                  {(account.manualDebt > 0) && (
-                    <TouchableOpacity 
-                       style={[styles.primaryBtn, { backgroundColor: "#4CAF50", marginLeft: 8 }]} 
-                       onPress={() => handleClearDebt(account)}
-                    >
-                      <Text style={styles.primaryBtnText}>Borç Ödendi</Text>
+                  <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#FF9800' }]} onPress={() => { setSelectedAccountForPayment(account); setPaymentAmount(''); setPartialModalVisible(true); }}>
+                    <MaterialIcons name="payments" size={18} color="#fff" />
+                    <Text style={styles.sqBtnText}>Ödeme</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#6366f1' }]} onPress={() => handleCloseMonthAdmin(account)} disabled={closingMonth}>
+                    {closingMonth ? <ActivityIndicator color="#fff" size="small" /> : <MaterialIcons name="event-available" size={18} color="#fff" />}
+                    <Text style={styles.sqBtnText}>Ay Kapat</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#f59e0b' }]} onPress={() => handleCalculateMonth(account)}>
+                    <MaterialIcons name="calculate" size={18} color="#fff" />
+                    <Text style={styles.sqBtnText}>Hesapla</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#0ea5e9' }]} onPress={() => handleOpenPriceModal(account)}>
+                    <MaterialIcons name="attach-money" size={18} color="#fff" />
+                    <Text style={styles.sqBtnText}>Fiyat</Text>
+                  </TouchableOpacity>
+                  {account.manualDebt > 0 && (
+                    <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#4CAF50' }]} onPress={() => handleClearDebt(account)}>
+                      <MaterialIcons name="check-circle-outline" size={18} color="#fff" />
+                      <Text style={styles.sqBtnText}>Ödendi</Text>
                     </TouchableOpacity>
                   )}
-                </>
+                </View>
               ) : (
-                  account.total > 0 ? (
-                    <View style={{ flexDirection: 'row', flex: 2 }}>
-                      <TouchableOpacity 
-                        style={[styles.primaryBtn, { backgroundColor: "#FF9800", marginLeft: 8 }]} 
-                        onPress={() => {
-                          setSelectedAccountForPayment(account);
-                          setPaymentAmount("");
-                          setPartialModalVisible(true);
-                        }}
-                      >
-                        <Text style={styles.primaryBtnText}>Kısmi Ödeme</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  <TouchableOpacity style={styles.sqBtn} onPress={() => setPreviewAccount(account)}>
+                    <MaterialIcons name="receipt-long" size={18} color="#fff" />
+                    <Text style={styles.sqBtnText}>Döküm</Text>
+                  </TouchableOpacity>
+                  {account.total > 0 && (
+                    <>
+                      <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#FF9800' }]} onPress={() => { setSelectedAccountForPayment(account); setPaymentAmount(''); setPartialModalVisible(true); }}>
+                        <MaterialIcons name="payments" size={18} color="#fff" />
+                        <Text style={styles.sqBtnText}>Ödeme</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity 
-                         style={[styles.primaryBtn, { backgroundColor: "#4CAF50", marginLeft: 8 }]} 
-                         onPress={() => handleClearDebt(account)}
-                      >
-                        <Text style={styles.primaryBtnText}>Borç Ödendi</Text>
+                      <TouchableOpacity style={[styles.sqBtn, { backgroundColor: '#4CAF50' }]} onPress={() => handleClearDebt(account)}>
+                        <MaterialIcons name="check-circle-outline" size={18} color="#fff" />
+                        <Text style={styles.sqBtnText}>Ödendi</Text>
                       </TouchableOpacity>
-                    </View>
-                  ) : null
+                    </>
+                  )}
+                </View>
               )}
             </View>
           </View>
@@ -706,7 +1092,6 @@ export default function SummaryScreen() {
                 }}
               />
             )}
-
             {showEndPicker && (
               <DateTimePicker
                 value={endDate}
@@ -718,6 +1103,7 @@ export default function SummaryScreen() {
                 }}
               />
             )}
+
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setDebtModalVisible(false)}>
                 <Text style={{ color: colors.muted }}>İptal</Text>
@@ -732,50 +1118,48 @@ export default function SummaryScreen() {
     </Modal>
 
       {/* Önizleme Modalı */}
-      {previewAccount && (
-        <Modal visible={!!previewAccount} transparent={false} animationType="slide">
-          <View style={[styles.invoiceModalContainer, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-             <View style={styles.invoiceHeader}>
-               <Text style={[styles.invoiceTitle, { color: colors.text }]}>Sipariş Özeti</Text>
-               <TouchableOpacity onPress={() => setPreviewAccount(null)} style={styles.invoiceCloseBtn}>
-                 <Text style={{ color: colors.primary, fontSize: 16, fontWeight: 'bold' }}>Kapat</Text>
-               </TouchableOpacity>
-             </View>
-             <ScrollView style={styles.modalBody}>
-               <View style={styles.invoiceMetaGroup}>
-                  <Text style={[styles.invoiceMetaLabel, { color: colors.muted }]}>MÜŞTERİ / FİRMA ÜNVANI</Text>
-                  <Text style={[styles.invoiceMetaValue, { color: colors.text }]}>{previewAccount.displayName}</Text>
-               </View>
-               <TouchableOpacity style={styles.pdfBtn} onPress={() => handleExportPDF(previewAccount)}>
-                 <MaterialIcons name="picture-as-pdf" size={20} color="#fff" />
-                 <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>PDF Olarak İndir</Text>
-               </TouchableOpacity>
-
-               <View style={styles.invoiceDivider} />
-               <Text style={[styles.modalSectionTitle, { color: colors.text }]}>HİZMET DÖKÜMÜ (LİSTE)</Text>
-               {previewAccount.orders.map((order: any) => (
-                 <View key={order.id} style={styles.simpleOrderRow}>
-                   <Text style={[styles.simpleOrderDate, { color: colors.text }]}>{new Date(order.created_at).toLocaleDateString("tr-TR")}</Text>
-                   {order.order_type === 'MANUAL_DEBT' ? (
-                     <Text style={{ color: colors.primary, fontSize: 13, fontWeight: 'bold' }}>• Dönem Borcu ({order.note}): ₺{order.total_amount?.toLocaleString("tr-TR")}</Text>
-                   ) : order.order_type === 'MANUAL_PAYMENT' ? (
-                     <Text style={{ color: "#4CAF50", fontSize: 13, fontWeight: 'bold' }}>• Ödeme Alındı ({order.note}): ₺{order.total_amount?.toLocaleString("tr-TR")}</Text>
-                   ) : (
-                     order.adisyon_items?.map((item: any) => (
-                       <Text key={item.id} style={{ color: colors.muted, fontSize: 12 }}>• {item.quantity}x {item.menu_items?.name}</Text>
-                     ))
-                   )}
-                 </View>
-               ))}
-               <View style={styles.invoiceDivider} />
-               <View style={styles.invoiceTotalBox}>
-                 <Text style={[styles.invoiceTotalLabel, { color: colors.text }]}>GÜNCEL BORÇ</Text>
-                 <Text style={[styles.invoiceTotalValue, { color: colors.primary }]}>₺{(previewAccount.isCorporate ? previewAccount.manualDebt : previewAccount.total).toLocaleString("tr-TR")}</Text>
-               </View>
-             </ScrollView>
+      <Modal visible={!!previewAccount} transparent={false} animationType="slide">
+        <View style={[styles.invoiceModalContainer, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+          <View style={styles.invoiceHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.invoiceMetaLabel, { color: colors.muted }]}>{previewAccount?.isCorporate ? 'FİRMA' : 'MÜŞTERİ'}</Text>
+              <Text style={[styles.invoiceTitle, { color: colors.text }]} numberOfLines={1}>{previewAccount?.displayName}</Text>
+            </View>
+            <TouchableOpacity onPress={() => setPreviewAccount(null)} style={styles.invoiceCloseBtn}>
+              <MaterialIcons name="close" size={24} color={colors.muted} />
+            </TouchableOpacity>
           </View>
-        </Modal>
-      )}
+          <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
+            {/* Ay Secici */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }} contentContainerStyle={{ paddingHorizontal: 0, gap: 8 }}>
+              {previewAvailableMonths.map((item) => {
+                const isSelected = previewSelectedMonth?.year === item.year && previewSelectedMonth?.month === item.month;
+                return (
+                  <TouchableOpacity
+                    key={item.year + '-' + item.month}
+                    onPress={() => setPreviewSelectedMonth({ year: item.year, month: item.month })}
+                    style={{
+                      paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                      backgroundColor: isSelected ? colors.primary : colors.surface,
+                      borderWidth: 1, borderColor: isSelected ? colors.primary : colors.surfaceBorder,
+                      marginRight: 6,
+                    }}
+                  >
+                    <Text style={{ color: isSelected ? '#fff' : colors.text, fontSize: 13, fontWeight: '600' }}>
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={styles.pdfBtn} onPress={() => handleExportPDF(previewAccount)}>
+              <MaterialIcons name="picture-as-pdf" size={20} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>PDF Ekstre İndir</Text>
+            </TouchableOpacity>
+            <PreviewModalBody previewData={previewData} tabldotOzet={previewTabldotOzet} colors={colors} styles={styles} />
+          </ScrollView>
+        </View>
+      </Modal>
 
       {/* Parçalı Ödeme Modalı */}
       <Modal visible={partialModalVisible} transparent animationType="fade">
@@ -793,15 +1177,120 @@ export default function SummaryScreen() {
                 placeholderTextColor={colors.muted}
                 autoFocus
               />
-              
-
-
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.modalCancel} onPress={() => setPartialModalVisible(false)}>
                   <Text style={{ color: colors.muted }}>İptal</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.modalConfirm} onPress={handlePartialPayment} disabled={updatingDebt}>
                   {updatingDebt ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold' }}>Ödemeyi Kaydet</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Bu Ayı Hesapla Modalı */}
+      <Modal visible={calcModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              {new Date().toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })} Hesabı
+            </Text>
+            {calcAccount ? (
+              <Text style={{ fontSize: 12, color: colors.muted, marginBottom: 16 }}>{calcAccount.displayName}</Text>
+            ) : null}
+
+            {calculatingMonth ? (
+              <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 32 }} />
+            ) : calcResult ? (
+              <View style={{ marginBottom: 20 }}>
+                {calcResult.breakdown.filter((b) => b.count !== 0).map((b) => (
+                  <View key={b.selectionCount} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderColor: colors.surfaceBorder }}>
+                    <Text style={{ color: colors.text, fontSize: 13 }}>{b.selectionCount}{"'"}lü Tabldot</Text>
+                    <Text style={{ color: colors.muted, fontSize: 12 }}>{b.count} tabak × ₺{b.unitPrice.toLocaleString('tr-TR')}</Text>
+                    <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>₺{b.subtotal.toLocaleString('tr-TR')}</Text>
+                  </View>
+                ))}
+                {calcResult.breakdown.every((b) => b.count === 0) ? (
+                  <Text style={{ color: colors.muted, textAlign: 'center', paddingVertical: 16 }}>Bu dönemde açık tabldot siparişi yok.</Text>
+                ) : (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12 }}>
+                    <Text style={{ color: colors.text, fontWeight: '900', fontSize: 15 }}>TOPLAM</Text>
+                    <Text style={{ color: colors.primary, fontWeight: '900', fontSize: 20 }}>₺{calcResult.total.toLocaleString('tr-TR')}</Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => { setCalcModalVisible(false); setCalcResult(null); }}>
+                <Text style={{ color: colors.muted }}>İptal</Text>
+              </TouchableOpacity>
+              {calcResult && calcResult.total !== 0 ? (
+                <TouchableOpacity style={styles.modalConfirm} onPress={handleConfirmCalc} disabled={confirmingCalc}>
+                  {confirmingCalc ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold' }}>Borç Olarak Ekle</Text>}
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Fiyat Ayarlama Modalı */}
+      <Modal visible={priceModalVisible} transparent animationType="fade">
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Tabldot Fiyatları</Text>
+              {priceCompany ? (
+                <Text style={{ fontSize: 12, color: colors.muted, marginBottom: 16 }}>{priceCompany.displayName}</Text>
+              ) : null}
+              {loadingPrices ? (
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 24 }} />
+              ) : (
+                <View style={{ gap: 12, marginBottom: 20 }}>
+                  <View>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, marginBottom: 6 }}>{"2'Lİ TABLDOT (₺/TABAK)"}</Text>
+                    <TextInput
+                      style={[styles.debtInput, { color: colors.text, borderColor: colors.surfaceBorder, marginBottom: 0 }]}
+                      keyboardType="numeric"
+                      value={priceInputs.two}
+                      onChangeText={(v) => setPriceInputs((prev) => ({ ...prev, two: v }))}
+                      placeholder="0"
+                      placeholderTextColor={colors.muted}
+                    />
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, marginBottom: 6 }}>{"3'LÜ TABLDOT (₺/TABAK)"}</Text>
+                    <TextInput
+                      style={[styles.debtInput, { color: colors.text, borderColor: colors.surfaceBorder, marginBottom: 0 }]}
+                      keyboardType="numeric"
+                      value={priceInputs.three}
+                      onChangeText={(v) => setPriceInputs((prev) => ({ ...prev, three: v }))}
+                      placeholder="0"
+                      placeholderTextColor={colors.muted}
+                    />
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted, marginBottom: 6 }}>{"4'LÜ TABLDOT (₺/TABAK)"}</Text>
+                    <TextInput
+                      style={[styles.debtInput, { color: colors.text, borderColor: colors.surfaceBorder, marginBottom: 0 }]}
+                      keyboardType="numeric"
+                      value={priceInputs.four}
+                      onChangeText={(v) => setPriceInputs((prev) => ({ ...prev, four: v }))}
+                      placeholder="0"
+                      placeholderTextColor={colors.muted}
+                    />
+                  </View>
+                </View>
+              )}
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalCancel} onPress={() => setPriceModalVisible(false)}>
+                  <Text style={{ color: colors.muted }}>İptal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalConfirm} onPress={handleSavePrices} disabled={savingPrices || loadingPrices}>
+                  {savingPrices ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold' }}>Kaydet</Text>}
                 </TouchableOpacity>
               </View>
             </View>
@@ -833,7 +1322,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   miniStatValue: { fontSize: 16, fontWeight: 'bold', color: colors.text },
   accountCard: { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.surfaceBorder },
   accountTop: { marginBottom: 12 },
-  accountTextCont: {  },
+  accountTextCont: {},
   accountName: { fontSize: 16, fontWeight: "bold", color: colors.text, marginBottom: 4 },
   accountBalance: { fontSize: 12, color: colors.muted },
   accountActions: { flexDirection: 'row', gap: 12 },
@@ -841,6 +1330,8 @@ const getStyles = (colors: any) => StyleSheet.create({
   outlineBtnText: { fontSize: 12, fontWeight: 'bold', color: colors.text },
   primaryBtn: { flex: 1, backgroundColor: colors.primary, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
   primaryBtnText: { fontSize: 12, fontWeight: 'bold', color: '#fff' },
+  sqBtn: { width: 64, height: 64, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  sqBtnText: { fontSize: 10, fontWeight: '700', color: '#fff', textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   modalContent: { width: '100%', padding: 24, borderRadius: 20 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
@@ -863,5 +1354,33 @@ const getStyles = (colors: any) => StyleSheet.create({
   simpleOrderDate: { fontSize: 13, fontWeight: 'bold', marginBottom: 4 },
   invoiceTotalBox: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16 },
   invoiceTotalLabel: { fontSize: 14, fontWeight: 'bold' },
-  invoiceTotalValue: { fontSize: 24, fontWeight: '900' }
+  invoiceTotalValue: { fontSize: 24, fontWeight: '900' },
+  previewStatCard: { flex: 1, padding: 16, borderRadius: 16, borderWidth: 1 },
+  previewStatLabel: { fontSize: 10, fontWeight: '700', color: '#6b7280', marginBottom: 4, letterSpacing: 0.5 },
+  previewStatValue: { fontSize: 20, fontWeight: '900', color: '#111827' },
+  previewSectionLabel: { fontSize: 10, fontWeight: '900', color: '#6b7280', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12, marginTop: 8 },
+  previewDayBlock: { marginBottom: 16, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb' },
+  previewDayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#f9fafb' },
+  previewDayDate: { fontSize: 13, fontWeight: '700', color: '#374151' },
+  previewPersonRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderColor: '#f3f4f6' },
+  previewAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#e0e7ff', alignItems: 'center', justifyContent: 'center' },
+  previewAvatarText: { fontSize: 12, fontWeight: '700', color: '#4f46e5' },
+  previewPersonName: { fontSize: 13, fontWeight: '600', color: '#111827', marginBottom: 4 },
+  previewTabldotTag: { alignSelf: 'flex-start', backgroundColor: '#f0fdf4', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#bbf7d0', marginBottom: 4 },
+  previewTabldotTagText: { fontSize: 11, fontWeight: '700', color: '#16a34a' },
+  previewMealChip: { backgroundColor: '#f3f4f6', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  previewMealChipText: { fontSize: 11, color: '#374151' },
+  previewOtherItem: { fontSize: 12, color: '#6b7280' },
+  previewBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
+  previewBadgeText: { fontSize: 10, fontWeight: '700' },
+  previewBadgeOpen: { backgroundColor: '#fef3c7', borderColor: '#fde68a' },
+  previewBadgePaid: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  previewBadgePayment: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  previewBadgeClosing: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' },
+  previewFinanceCard: { borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', overflow: 'hidden', marginBottom: 16 },
+  previewFinanceRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 8 },
+  previewFinanceDate: { fontSize: 11, color: '#6b7280', width: 60 },
+  previewFinanceLabel: { fontSize: 13, fontWeight: '600', color: '#111827' },
+  previewFinanceNote: { fontSize: 11, color: '#6b7280' },
+  previewFinanceAmount: { fontSize: 13, fontWeight: '700' },
 });

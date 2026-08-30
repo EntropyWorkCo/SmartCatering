@@ -28,10 +28,16 @@ export default function Messages() {
   useEffect(() => {
     fetchData();
 
-    // Subscribe to changes
+    // Sadece messages tablosunu dinle — adisyon değişikliklerinde mesaj sayfasının refresh yapmasına gerek yok
     const channel = supabase.channel('messages_changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'adisyon' }, () => fetchData())
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+          // Sadece yeni gelen mesajları local state'e ekle
+          const m = payload.new as any;
+          if (!m.is_from_admin) {
+            // Kullanıcı adını bilmiyoruz, fetch et
+            fetchData();
+          }
+        })
         .subscribe();
 
     return () => {
@@ -43,11 +49,12 @@ export default function Messages() {
     try {
       setLoading(true);
       
-      // 1. Fetch Private Messages
+      // 1. Fetch Private Messages — son 200 mesaj yeterli
       const { data: pData } = await supabase
           .from("messages")
           .select("*, users(id, full_name, companies!users_company_id_fkey(company_name))")
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false })
+          .limit(200);
 
       if (pData) {
           const formattedP = pData.map((m: any) => {
@@ -67,14 +74,18 @@ export default function Messages() {
           setPrivateMessages(formattedP);
       }
 
-      // 2. Fetch Order Messages
+      // 2. Fetch Order Messages — son 90 gün ve 200 kayıt
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
       const { data: oData } = await supabase
           .from("adisyon")
           .select("*, users(full_name, companies!users_company_id_fkey(company_name))")
           .not("note", "is", null)
           .not("note", "eq", "")
           .not("order_type", "eq", "MANUAL_DEBT")
-          .order("created_at", { ascending: false });
+          .gte("created_at", ninetyDaysAgo.toISOString())
+          .order("created_at", { ascending: false })
+          .limit(200);
 
       if (oData) {
           const formattedO = oData.map((o: any) => {
@@ -118,10 +129,21 @@ export default function Messages() {
 
         if (error) throw error;
 
+        // Cevabı local state'e ekle, DB'ye gitmeden
+        const sentMessage = {
+          id: Date.now().toString(),
+          userId: replyingTo.userId,
+          userName: "Admin",
+          companyName: null,
+          date: new Date(),
+          note: replyContent.trim(),
+          is_read: true,
+          is_from_admin: true
+        };
+        setPrivateMessages(prev => [sentMessage, ...prev]);
+
         setReplyingTo(null);
         setReplyContent("");
-        alert("Cevabınız gönderildi.");
-        fetchData();
     } catch (error: any) {
         alert("Hata: " + error.message);
     } finally {

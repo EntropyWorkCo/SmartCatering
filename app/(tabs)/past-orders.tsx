@@ -4,7 +4,6 @@ import React, { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -19,8 +18,8 @@ export default function PastOrdersScreen() {
     const styles = getStyles(colors);
 
     const { user, loading: authLoading } = useAuth();
-    const { profile } = useProfile(user?.id);
-    const isCompany = profile?.is_company || false;
+    const { profile, loading: profileLoading } = useProfile(user?.id);
+    const isCompany = !!(profile?.is_company || profile?.company_id);
 
     // EĞER KULLANICI HENÜZ YÜKLENMEDİYSE null GÖNDER Kİ ADMİN MODU TETİKLENMESİN
     // Supabase uuid beklediği için standart boş uuid gönderiyoruz
@@ -107,7 +106,6 @@ export default function PastOrdersScreen() {
                 <View style={{ flex: 1 }}>
                     <Text style={styles.title}>Geçmiş Siparişlerim</Text>
                 </View>
-                <ThemeSwitcher />
             </View>
 
             <View style={styles.filterContainer}>
@@ -142,6 +140,13 @@ export default function PastOrdersScreen() {
                         const date = new Date(order.created_at || order.date);
                         const isCompleted = true; // Show evaluate button for all past orders
 
+                        const orderTypeBadge = (() => {
+                            const ot = (order.order_type || "").toString();
+                            if (ot === "Şimdi Ye" || ot === "eat_now") return { label: "🍽️ Şimdi Ye", bg: "#f59e0b22", color: "#b45309", border: "#f59e0b55" };
+                            if (ot === "Sipariş Ver" || ot === "pre_order" || ot === "PAKET") return { label: "📦 Sipariş Ver", bg: "#10b98122", color: "#047857", border: "#10b98155" };
+                            return null;
+                        })();
+
                         return (
                             <View key={order.id || idx} style={styles.orderCard}>
                                 <View style={styles.orderHeader}>
@@ -155,16 +160,23 @@ export default function PastOrdersScreen() {
                                             Sipariş #{order.order_number || String(order.id).substring(0, 6).toUpperCase()}
                                         </Text>
                                     </View>
-                                    <Text style={styles.orderDate}>
-                                        {date.toLocaleDateString('tr-TR')} {date.getHours().toString().padStart(2, '0')}:{date.getMinutes().toString().padStart(2, '0')}
-                                    </Text>
+                                    <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                                        {orderTypeBadge && (
+                                            <View style={{ backgroundColor: orderTypeBadge.bg, borderWidth: 1, borderColor: orderTypeBadge.border, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+                                                <Text style={{ fontSize: 10, fontWeight: 'bold', color: orderTypeBadge.color }}>{orderTypeBadge.label}</Text>
+                                            </View>
+                                        )}
+                                        <Text style={styles.orderDate}>
+                                            {date.toLocaleDateString('tr-TR')} {date.getHours().toString().padStart(2, '0')}:{date.getMinutes().toString().padStart(2, '0')}
+                                        </Text>
+                                    </View>
                                 </View>
 
                                 <View style={styles.orderItems}>
                                     {order.adisyon_items && order.adisyon_items.length > 0 ? (
                                         order.adisyon_items.map((item: any) => (
                                             <Text key={item.id} style={styles.orderItemText}>
-                                                {item.quantity}x {item.menu_items?.name || 'Yemek'} {!isCompany && `- ₺${item.line_total}`}
+                                                {item.quantity}x {item.menu_items?.name || 'Yemek'} {!profileLoading && !isCompany && `- ₺${item.line_total}`}
                                             </Text>
                                         ))
                                     ) : (
@@ -178,7 +190,7 @@ export default function PastOrdersScreen() {
                                 <View style={styles.orderFooter}>
                                     <View style={styles.totalBox}>
                                         <Text style={styles.orderTotalLabel}>Toplam Tutar</Text>
-                                        <Text style={styles.orderTotalValue}>{isCompany ? "-" : `₺${order.total_amount || 0}`}</Text>
+                                        <Text style={styles.orderTotalValue}>{profileLoading || isCompany ? "-" : `₺${order.total_amount || 0}`}</Text>
                                     </View>
                                     {isCompleted && !ratedOrders.includes(order.id) && (
                                         <TouchableOpacity 

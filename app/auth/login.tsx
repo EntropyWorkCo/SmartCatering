@@ -1,5 +1,4 @@
 import Logo from "@/components/Logo";
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -117,7 +116,6 @@ export default function LoginTabsScreen() {
                         <TouchableOpacity onPress={() => { Keyboard.dismiss(); router.canGoBack() ? router.back() : router.replace("/welcome"); }} style={styles.backButton}>
                             <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                         </TouchableOpacity>
-                        <ThemeSwitcher />
                     </View>
 
                     <Logo size="medium" style={{ alignSelf: 'flex-start', marginBottom: 20 }} />

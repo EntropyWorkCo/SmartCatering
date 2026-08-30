@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useMenu } from "@/lib/hooks/useMenu";
 import { menuService } from "@/lib/services/menuService";
@@ -25,15 +24,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const CATEGORIES = [
     { id: "ANA YEMEK", label: "ANA YEMEK" },
     { id: "YARDIMCI", label: "YARDIMCI" },
-    { id: "ÇORBA", label: "ÇORBA ÇEŞİTLERİ" },
-    { id: "EKSTRA", label: "EKSTRA FARKLAR" },
-    { id: "İÇECEK", label: "İÇECEKLER" }
+    { id: "ÇORBA ÇEŞİTLERİ", label: "ÇORBA ÇEŞİTLERİ" },
+    { id: "TAMAMLAYICI", label: "TAMAMLAYICI" },
+    { id: "EKSTRA FARKLAR", label: "EKSTRA FARKLAR" },
+    { id: "İÇECEKLER", label: "İÇECEKLER" }
 ];
 
 const SYS_CATEGORIES = [
     { id: "TEK ÇEŞİT", label: "TEK ÇEŞİT" },
-    { id: "EKSTRA", label: "EKSTRA FARKLARI" },
-    { id: "İÇECEK", label: "İÇECEKLER" },
+    { id: "EKSTRA FARKLARI", label: "EKSTRA FARKLARI" },
+    { id: "TAMAMLAYICI", label: "TAMAMLAYICI" },
+    { id: "İÇECEKLER", label: "İÇECEKLER" },
     { id: "TABLDOT", label: "TABLDOT MENÜ" }
 ];
 
@@ -267,7 +268,6 @@ export default function AdminMenuAdd() {
                     <Text style={styles.title}>Menü Yönetimi</Text>
                     <Text style={styles.subtitle}>GÜNLÜK MENÜ & FİYAT TABELASI</Text>
                 </View>
-                <ThemeSwitcher />
             </View>
 
             <View style={{ marginBottom: 20 }}>
@@ -500,7 +500,7 @@ export default function AdminMenuAdd() {
                                             <MaterialIcons name={
                                                 cat.id === "TABLDOT" ? "restaurant-menu" :
                                                     cat.id === "TEK ÇEŞİT" ? "room-service" :
-                                                        cat.id === "İÇECEK" ? "local-drink" : "star"
+                                                        cat.id === "İÇECEKLER" ? "local-drink" : "star"
                                             } size={20} color={colors.primary} />
                                             <Text style={styles.categoryTitleText}>{cat.label}</Text>
                                             <View style={styles.categoryTitleLine} />
@@ -626,8 +626,8 @@ const ItemCard = ({ item, isPoolTab, handleToggleStatus, handleEditItem, handleD
                         <Image source={{ uri: item.image_url }} style={{ width: '100%', height: '100%', borderRadius: 8 }} resizeMode="cover" />
                     ) : (
                         <MaterialIcons name={
-                            item.category === "İÇECEK" ? "local-drink" :
-                                item.category === "ÇORBA" ? "soup-kitchen" : "restaurant"
+                            item.category === "İÇECEKLER" || item.category === "İÇECEK" ? "local-drink" :
+                                item.category === "ÇORBA ÇEŞİTLERİ" || item.category === "ÇORBA" ? "soup-kitchen" : "restaurant"
                         } size={28} color={colors.primary} />
                     )}
                 </View>

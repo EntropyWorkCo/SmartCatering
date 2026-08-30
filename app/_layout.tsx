@@ -21,20 +21,32 @@ import { NotificationRegister } from "@/components/NotificationRegister";
 import { useAuthStore } from "@/lib/store/authStore";
 import { supabase } from "@/lib/supabase";
 
-import * as Notifications from "expo-notifications";
+
 
 // ─── GLOBAL BİLDİRİM HANDLER ───
 // Uygulama AÇIKKEN gelen bildirimlerin banner olarak düşmesini sağlar.
-if (Platform.OS !== 'android' || Constants.appOwnership !== 'expo') {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowList: true,
-      shouldShowBanner: true,
-    }),
-  });
+// SDK 53+ crash sorunu SADECE Android Expo Go'da — iOS Expo Go'da handler kurulabilir.
+const isAndroidExpoGo = Platform.OS === 'android' && Constants.executionEnvironment === 'storeClient';
+if (!isAndroidExpoGo) {
+  try {
+    const Notifications = require('expo-notifications');
+    Notifications.setNotificationHandler({
+      handleNotification: async () => {
+        const base: any = {
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+        };
+        if (Platform.OS === 'ios') {
+          base.shouldShowBanner = true;
+          base.shouldShowList = true;
+        }
+        return base;
+      },
+    });
+  } catch (err) {
+    console.warn('Notification handler could not be initialized:', err);
+  }
 }
 
 export { ErrorBoundary } from "expo-router";
@@ -48,7 +60,11 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (error) throw error;
+    if (error) {
+      console.error("Critical: Font loading failed:", error);
+      // Uygulamanın tamamen çökmesini engellemek için sadece hata basıyoruz, 
+      // sistem fontları ile devam etmesine izin veriyoruz.
+    }
   }, [error]);
 
   return <RootLayoutNavWrapper loaded={loaded} />;
@@ -97,6 +113,8 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
   }, [loaded, forceLoad]);
 
   const pendingWelcomeRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Birden fazla eş zamanlı yönlendirmeyi engellemek için kilit
+  const isRedirectingRef = React.useRef(false);
 
   // 2. Auth Guard & Yönlendirme Mantığı
   useEffect(() => {
@@ -107,22 +125,22 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
 
     // Kullanıcı giriş yapmamışsa
     if (!user) {
-      if (inAuthGroup || isModalOrRating) {
-        // Giriş sayfasındayız, varsa bekleyen yönlendirmeyi iptal et (Geri atmasın)
-        if (pendingWelcomeRef.current) {
-          clearTimeout(pendingWelcomeRef.current);
-          pendingWelcomeRef.current = null;
-        }
-      } else {
-        // Korumalı sayfadayız (Tabs gibi) ve kullanıcı yok -> Welcome'a yönlendir
-        // Zaten bir sayaç varsa tekrar başlatma
-        if (!pendingWelcomeRef.current) {
-          pendingWelcomeRef.current = setTimeout(() => {
+      isRedirectingRef.current = false;
+      // Kullanıcı yoksa bekleyen welcome yönlendirmesini iptal et (user değişimi)
+      if (pendingWelcomeRef.current) {
+        clearTimeout(pendingWelcomeRef.current);
+        pendingWelcomeRef.current = null;
+      }
+      if (!inAuthGroup && !isModalOrRating) {
+        // Korumalı sayfadayız ve kullanıcı kesinlikle yok → Welcome'a yönlendir
+        pendingWelcomeRef.current = setTimeout(() => {
+          // Timer ateşlendiğinde son kez kontrol et — giriş gerçekleştiyse gitme
+          if (!useAuthStore.getState().user) {
             console.log("🚀 YÖNLENDİRİLİYOR: /welcome");
             router.replace("/welcome");
-            pendingWelcomeRef.current = null;
-          }, 1500);
-        }
+          }
+          pendingWelcomeRef.current = null;
+        }, 2000);  // 1500→2000ms: ağır ağlarda biraz daha marj
       }
       return;
     }
@@ -133,8 +151,20 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
       pendingWelcomeRef.current = null;
     }
 
-    // Kullanıcı giriş yapmışsa ve ana sayfadaysa (veya auth sayfalarındaysa) yönlendir
+    // Rol henüz belirlenmemiş (null) — yönlendirme yapma, bekle
+    if (role === null) {
+      console.log("⏳ Rol bekleniyor, yönlendirme ertelendi");
+      return;
+    }
+
+    // Kullanıcı giriş yapmışsa ve auth/index sayfasındaysa yönlendir
     if (inAuthGroup || !segments[0]) {
+      // Eğer zaten yönlendirme yapılıyorsa tekrar yapma
+      if (isRedirectingRef.current) {
+        console.log("🔒 Zaten yönlendiriliyor, atlandı");
+        return;
+      }
+
       let targetPath: any = "";
 
       switch (role) {
@@ -147,16 +177,23 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
           targetPath = "/(tabs)";
           break;
         default:
-          if (!authLoading) targetPath = "/(tabs)";
+          // Bilinmeyen rol — güvenli tarafta kal
+          targetPath = "/(tabs)";
           break;
       }
 
       if (targetPath) {
-        console.log("🚀 ROL BAZLI YÖNLENDİRME:", targetPath);
+        isRedirectingRef.current = true;
+        console.log("🚀 ROL BAZLI YÖNLENDİRME:", role, "->", targetPath);
         router.replace(targetPath);
+        // Yönlendirme bittikten sonra kilidi aç
+        setTimeout(() => { isRedirectingRef.current = false; }, 500);
       }
     }
-  }, [user, role, segments, loading, authLoading]);
+  // authLoading dependency KASITLI OLARAK ÇIKARILDI:
+  // authLoading değişimi çift yönlendirmeye (sayfa üst üste binmesi) neden oluyordu.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, role, segments, loading]);
 
   // User set olduğu an /welcome timer'ını iptal et (loading bitmese bile)
   useEffect(() => {
@@ -165,6 +202,19 @@ function RootLayoutNavWrapper({ loaded }: { loaded: boolean }) {
       pendingWelcomeRef.current = null;
     }
   }, [user]);
+
+  // GÜVENLİK AĞLARI: user varken role null kalırsa 8sn sonra 'bireysel' zorla
+  useEffect(() => {
+    if (!user || role !== null) return;
+    const fallbackTimer = setTimeout(() => {
+      const st = useAuthStore.getState();
+      if (st.user && st.role === null) {
+        console.warn("⚠️ _layout: Rol 8sn boyunca belirlenemedi, 'bireysel' olarak devam ediliyor.");
+        useAuthStore.setState({ role: 'bireysel', firmaId: null, isAdmin: false });
+      }
+    }, 8000);
+    return () => clearTimeout(fallbackTimer);
+  }, [user, role]);
 
   if (!loaded) {
     return (
@@ -182,30 +232,27 @@ function RootLayoutNav({ user, role, loading }: any) {
   const router = useRouter();
   const isAdmin = role === 'admin';
 
-  // 3. Arka Plan Dinleyicileri (GECİKTİRİLMİŞ BAŞLATMA - DONMAYI ÖNLER)
+  console.log("DEBUG - Current User ID:", user?.id);
+  console.log("DEBUG - Current User Role:", role);
+  console.log("DEBUG - Is Admin Mode Active:", isAdmin);
+
+  // 3. Arka Plan Dinleyicileri (Realtime Listeners)
   useEffect(() => {
     if (loading || !user?.id) return;
 
-    const deferredTimer = setTimeout(() => {
-      const isAndroidExpoGo = Platform.OS === 'android' && (Constants.appOwnership as any) === 'expo';
-      if (isAndroidExpoGo) {
-        console.log("⚠️ Android Expo Go: Bildirim sistemi devre dışı bırakıldı (SDK 53+ Kısıtlaması).");
-      }
+    let orderChannel: any;
+    let customerOrderChannel: any;
+    let responseListener: any;
 
-      let orderChannel: any;
-      let customerOrderChannel: any;
-      let responseListener: any;
-      let foregroundListener: any;
-
+    const setupListeners = async () => {
       try {
+        const isAndroidExpoGo = Platform.OS === 'android' && Constants.executionEnvironment === 'storeClient';
+        
         if (!isAndroidExpoGo) {
           const Notifications = require("expo-notifications");
-
-          // Uygulama AÇIKKEN bildirime tıklanınca yönlendirme
           responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
             const data = response.notification.request.content.data;
             if (data?.url) {
-              console.log('📲 Bildirim tıklandı (app açık), yönlendiriliyor:', data.url);
               if (data.screen === "order-rating" && data.orderId) {
                 router.push(`/order-rating?orderId=${data.orderId}` as any);
               } else {
@@ -213,61 +260,39 @@ function RootLayoutNav({ user, role, loading }: any) {
               }
             }
           });
-
-          // ─── KILLED STATE DEEP LINK ─────────────────────────────────────────
-          // Uygulama tamamen kapalıyken bildirime tıklandığında:
-          // Expo Notifications, uygulamayı açar ve getLastNotificationResponseAsync()
-          // ile o anki bildirimi verir.
-          Notifications.getLastNotificationResponseAsync().then((response: any) => {
-            if (response) {
-              const data = response.notification?.request?.content?.data;
-              if (data?.url) {
-                console.log('📲 Killed state bildirim tıklaması, yönlendiriliyor:', data.url);
-                // Kısa gecikme: router henüz hazır olmayabilir
-                setTimeout(() => {
-                  if (data.screen === "order-rating" && data.orderId) {
-                    router.push(`/order-rating?orderId=${data.orderId}` as any);
-                  } else {
-                    router.push(data.url as any);
-                  }
-                }, 500);
-              }
-            }
-          }).catch(() => {});
         }
 
+        // --- ADMIN: Yeni Sipariş Bildirimleri ---
         if (isAdmin) {
-          const adminChannelName = 'admin-orders-live-root';
-          const existingAdminChannel = supabase.getChannels().find(c => c.topic === `realtime:${adminChannelName}`);
-          if (existingAdminChannel) supabase.removeChannel(existingAdminChannel);
-
+          const adminChannelId = `admin-orders-${Math.random().toString(36).substring(7)}`;
           orderChannel = supabase
-            .channel(adminChannelName)
+            .channel(adminChannelId)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'adisyon' }, (payload: any) => {
               const type = payload.new?.order_type;
               if (type !== "Şimdi Ye" && type !== "MANUAL_DEBT" && type !== "MANUAL_PAYMENT") {
                 Alert.alert("Yeni Paket Siparişi! 🛎️", "Yeni bir paket siparişi düştü.");
               }
-            });
-          
-          orderChannel.subscribe();
+            })
+            .subscribe();
         }
 
-        // Müşteri: Sipariş durum güncellemelerini dinle
-        const customerChannelName = `customer-status-${user.id}`;
-        const existingCustChannel = supabase.getChannels().find(c => c.topic === `realtime:${customerChannelName}`);
-        if (existingCustChannel) supabase.removeChannel(existingCustChannel);
-
+        // --- MÜŞTERİ: Sipariş Durum Güncellemeleri ---
+        const customerChannelId = `customer-status-${user.id}-${Math.random().toString(36).substring(7)}`;
         customerOrderChannel = supabase
-          .channel(customerChannelName)
-          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'adisyon', filter: `user_id=eq.${user.id}` }, (payload: any) => {
+          .channel(customerChannelId)
+          .on('postgres_changes', { 
+            event: 'UPDATE', 
+            schema: 'public', 
+            table: 'adisyon', 
+            filter: `user_id=eq.${user.id}` 
+          }, (payload: any) => {
             const status = (payload.new?.status || '').toString().toUpperCase();
             
-            if (['READY', 'HAZIR'].includes(status)) {
+            if (['PREPARING', 'HAZIRLANIYOR'].includes(status)) {
+              Alert.alert("Siparişiniz Alındı 👨‍🍳", "Yemeğiniz hazırlanmaya başladı. Afiyet olsun!");
+            } else if (['READY', 'HAZIR'].includes(status)) {
               Alert.alert("Siparişiniz Yola Çıktı! 🛵", "Yemeğiniz yola çıktı, afiyet olsun!");
-            }
-
-            if (['COMPLETED', 'TAMAMLANDI'].includes(status)) {
+            } else if (['COMPLETED', 'TAMAMLANDI'].includes(status)) {
               Alert.alert(
                 "Siparişiniz Teslim Edildi ✅", 
                 "Afiyet olsun! Değerlendirmenizi bekliyoruz.",
@@ -280,24 +305,27 @@ function RootLayoutNav({ user, role, loading }: any) {
                 ]
               );
             }
-          });
-        
-        customerOrderChannel.subscribe();
+          })
+          .subscribe();
 
       } catch (err) {
-        console.warn("Background tasks skipped/failed:", err);
+        console.warn("Realtime setup failed:", err);
       }
+    };
 
-      return () => {
-        if (responseListener) responseListener.remove();
-        if (foregroundListener) foregroundListener.remove();
-        if (orderChannel) supabase.removeChannel(orderChannel);
-        if (customerOrderChannel) supabase.removeChannel(customerOrderChannel);
-      };
-    }, 3000);
+    setupListeners();
 
-    return () => clearTimeout(deferredTimer);
+    return () => {
+      if (responseListener) responseListener.remove();
+      if (orderChannel) supabase.removeChannel(orderChannel);
+      if (customerOrderChannel) supabase.removeChannel(customerOrderChannel);
+    };
   }, [user?.id, isAdmin, loading]);
+
+  // Firma sahibi için yemek hatırlatma bildirimleri artık
+  // sunucu taraflı cron (scheduled-meal-reminder Edge Function) üzerinden çalışır.
+  // Bu useEffect kaldırıldı — uygulama kapalıyken tetiklenemiyordu.
+  // if (loading || !user?.id || role !== 'firma_sahibi') return;
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>

@@ -1,5 +1,4 @@
 // Cache buster: forcing file re-evaluation
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useCartStore } from "@/lib/store/cartStore";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -33,7 +32,7 @@ export default function MenuScreen() {
   const orderMode = useCartStore(state => state.orderMode);
 
   const { user } = useAuth();
-  const { profile, refresh } = useProfile(user?.id);
+  const { profile, loading: profileLoading, refresh } = useProfile(user?.id);
 
   const theme = useResolvedTheme();
   const colors = Colors[theme];
@@ -46,7 +45,7 @@ export default function MenuScreen() {
       refresh();
     }, [user?.id])
   );
-  const isCompany = profile?.is_company || false;
+  const isCompany = !!(profile?.is_company || profile?.company_id);
 
   const TABLDOT_PACKAGES = systemPrices
     .filter(p => p.category === "TABLDOT")
@@ -68,6 +67,11 @@ export default function MenuScreen() {
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
   const [packageSelections, setPackageSelections] = useState<{ category: string, item_id: string, item_name: string }[]>([]);
 
+  // Tek Çeşit / Ekstra detay modalı
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [detailItem, setDetailItem] = useState<any>(null);
+  const [detailContext, setDetailContext] = useState<any[]>([]); // o kategorideki diğer günlük öğeler
+
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
@@ -88,28 +92,47 @@ export default function MenuScreen() {
     }
   }, []);
 
-  let filteredMenu: any[] = [];
-
-  // Günün Menüsü (Always separate unless filtered out entirely, but user wants it at top)
+  // Günün Menüsü (aktif/draft/sold_out — İÇECEK hariç tümü)
   const dailyMenu = menu;
 
-  if (selectedCategory === "TÜMÜ") {
+  // DB'deki gerçek kategori adları (web admin paneli ile aynı)
+  const DAILY_FOOD_CATEGORIES = ["ÇORBA ÇEŞİTLERİ", "ANA YEMEK", "YARDIMCI", "TAMAMLAYICI"];
+  const CAT_LABELS: Record<string, string> = {
+    "ÇORBA ÇEŞİTLERİ": "Çorba Çeşitleri",
+    "ANA YEMEK": "Ana Yemek",
+    "YARDIMCI": "Yardımcı Yemek",
+    "TAMAMLAYICI": "Tamamlayıcı",
+    "EKSTRA": "Sabit Ekstralar",
+    "İÇECEK": "İçecekler",
+    "TEK ÇEŞİT": "Tek Çeşit Fiyatları",
+  };
+  const CAT_ORDER = ["ÇORBA ÇEŞİTLERİ", "ANA YEMEK", "YARDIMCI", "TAMAMLAYICI"];
+
+  // TEK ÇEŞİTLER için: günlük menü öğeleri (kategori bazlı gösterim)
+  const tekCesitDailyItems = dailyMenu.filter(m => DAILY_FOOD_CATEGORIES.includes(m.category));
+  const tekCesitSystemPrices = systemPrices.filter(p => p.category === "TEK ÇEŞİT");
+
+  // EKSTRALAR için: günlük menüden ANA YEMEK/YARDIMCI/TAMAMLAYICI + sistem ekstraları
+  const ekstraGunlukItems = dailyMenu.filter(m => ["ANA YEMEK", "YARDIMCI", "TAMAMLAYICI"].includes(m.category));
+  const ekstraSystemItems = systemPrices.filter(p => p.category === "EKSTRA");
+
+  let filteredMenu: any[] = [];
+  if (selectedCategory === "İÇECEKLER") {
     filteredMenu = [
-      ...systemPrices.filter(p => p.category === "TEK ÇEŞİT"),
-      ...menu.filter(m => m.category === "İÇECEK"),
-      ...systemPrices.filter(p => p.category === "İÇECEK"),
-      ...systemPrices.filter(p => p.category === "EKSTRA")
+      // DB'de kategori "İÇECEKLER" (S'li) — web admin paneli bu şekilde kaydediyor
+      ...menu.filter(m => m.category === "İÇECEKLER" || m.category === "İÇECEK"),
+      ...systemPrices.filter(p => p.category === "İÇECEKLER" || p.category === "İÇECEK")
     ];
-  } else if (selectedCategory === "TEK ÇEŞİTLER") {
-    filteredMenu = systemPrices.filter(p => p.category === "TEK ÇEŞİT");
-  } else if (selectedCategory === "İÇECEKLER") {
-    filteredMenu = [
-      ...menu.filter(m => m.category === "İÇECEK"),
-      ...systemPrices.filter(p => p.category === "İÇECEK")
-    ];
-  } else if (selectedCategory === "EKSTRALAR") {
-    filteredMenu = systemPrices.filter(p => p.category === "EKSTRA");
   }
+
+  // Detay modalı açma yardımcısı
+  const openDetailModal = (item: any) => {
+    // Aynı kategorideki diğer günlük öğeleri bul (bağlam için)
+    const siblings = dailyMenu.filter(m => m.category === item.category && m.id !== item.id);
+    setDetailItem(item);
+    setDetailContext(siblings);
+    setDetailModalVisible(true);
+  };
 
   const handleAddToCart = (item: any) => {
     if (!orderMode) {
@@ -230,7 +253,6 @@ export default function MenuScreen() {
           </View>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <ThemeSwitcher />
           <TouchableOpacity style={styles.cartButton} onPress={() => {
             if (totalCartCount > 0) router.push("/(tabs)/cart");
             else Alert.alert("Sepet Boş", "Sepetinizde henüz ürün bulunmuyor.");
@@ -307,21 +329,33 @@ export default function MenuScreen() {
         {((selectedCategory === "TÜMÜ" || selectedCategory === "GÜNÜN MENÜSÜ") && dailyMenu.length > 0) && (
           <View style={{ paddingTop: 24, paddingHorizontal: 24 }}>
             <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 16 }}>Günün Menüsü</Text>
-            
-            {(["ÇORBA", "ANA YEMEK", "YARDIMCI"] as const).map(catKey => {
+
+            {Array.from(new Set(dailyMenu.map(m => m.category)))
+              .filter(cat => cat !== "İÇECEKLER" && cat !== "İÇECEK")
+              .sort((a, b) => {
+                const order = ["ÇORBA ÇEŞİTLERİ", "ANA YEMEK", "YARDIMCI", "TAMAMLAYICI"];
+                const indexA = order.indexOf(a);
+                const indexB = order.indexOf(b);
+                if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+                if (indexA === -1) return 1;
+                if (indexB === -1) return -1;
+                return indexA - indexB;
+              })
+              .map(catKey => {
               const catItems = dailyMenu.filter(item => item.category === catKey);
               if (catItems.length === 0) return null;
-              
+
               const catLabels: Record<string, string> = {
-                "ÇORBA": "Çorbalar",
+                "ÇORBA ÇEŞİTLERİ": "Çorbalar",
                 "ANA YEMEK": "Ana Yemekler",
-                "YARDIMCI": "Yardımcı Yemekler"
+                "YARDIMCI": "Yardımcı Yemekler",
+                "TAMAMLAYICI": "Tamamlayıcılar"
               };
 
               return (
                 <View key={catKey} style={{ marginBottom: 20 }}>
                   <Text style={{ fontSize: 13, fontWeight: 'bold', color: colors.primary, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>
-                    {catLabels[catKey]}
+                    {catLabels[catKey] || catKey}
                   </Text>
                   <View style={{ gap: 16 }}>
                     {catItems.map(item => (
@@ -331,9 +365,9 @@ export default function MenuScreen() {
                             <Image source={{ uri: item.image_url }} style={styles.foodImage} />
                           ) : (
                             <MaterialIcons name={
-                              item.category === "İÇECEK" ? "local-drink" :
-                                item.category === "ÇORBA" ? "soup-kitchen" :
-                                  item.category === "EKSTRA" ? "add-circle-outline" :
+                              item.category === "İÇECEKLER" || item.category === "İÇECEK" ? "local-drink" :
+                                item.category === "ÇORBA ÇEŞİTLERİ" || item.category === "ÇORBA" ? "soup-kitchen" :
+                                  item.category === "EKSTRA FARKLAR" || item.category === "EKSTRA" ? "add-circle-outline" :
                                     "restaurant"
                             } size={40} color={colors.muted} />
                           )}
@@ -343,7 +377,7 @@ export default function MenuScreen() {
                             <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
                           </View>
                           <View style={styles.foodBottomColumn}>
-                            {!isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
+                            {!profileLoading && !isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
                             {item.status === 'sold_out' ? (
                               <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
                                 <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
@@ -377,19 +411,140 @@ export default function MenuScreen() {
           </View>
         )}
 
-        {/* Items List (Diğer Sabit Menü/Kategoriler) */}
-        {(selectedCategory === "TÜMÜ" || (selectedCategory !== "TABLDOT" && selectedCategory !== "GÜNÜN MENÜSÜ")) && (
+        {/* ── TEK ÇEŞİTLER ── Günlük menü öğeleri kategori bazlı + sistem fiyatları */}
+        {selectedCategory === "TEK ÇEŞİTLER" && (
           <View style={styles.listContainer}>
-            {selectedCategory === "TÜMÜ" && (
-              <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 8 }}>Diğer Ürünler</Text>
+            {tekCesitDailyItems.length === 0 && tekCesitSystemPrices.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <MaterialIcons name="fastfood" size={48} color={colors.surfaceBorder} />
+                <Text style={styles.emptyText}>Bugün menü henüz yayınlanmadı</Text>
+              </View>
+            ) : (
+              <>
+                {/* Günlük menü — kategori grupları */}
+                {tekCesitDailyItems.length > 0 && (
+                  <>
+                    <Text style={{ fontSize: 12, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginBottom: 16, textTransform: 'uppercase' }}>Bugünün Menüsü</Text>
+                    {CAT_ORDER
+                      .filter(cat => tekCesitDailyItems.some(m => m.category === cat))
+                      .map(cat => {
+                        const catItems = tekCesitDailyItems.filter(m => m.category === cat);
+                        return (
+                          <View key={cat} style={{ marginBottom: 20 }}>
+                            <Text style={{ fontSize: 11, fontWeight: '900', color: colors.primary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                              {CAT_LABELS[cat] || cat}
+                            </Text>
+                            <View style={{ gap: 10 }}>
+                              {catItems.map(item => (
+                                <TouchableOpacity
+                                  key={item.id}
+                                  style={[styles.foodCard, item.status === 'sold_out' && { opacity: 0.6 }]}
+                                  onPress={() => openDetailModal(item)}
+                                  activeOpacity={0.8}
+                                >
+                                  <View style={styles.foodImageContainer}>
+                                    {item.image_url ? (
+                                      <Image source={{ uri: item.image_url }} style={styles.foodImage} />
+                                    ) : (
+                                      <MaterialIcons name={cat === 'ÇORBA ÇEŞİTLERİ' ? 'soup-kitchen' : 'restaurant'} size={36} color={colors.muted} />
+                                    )}
+                                  </View>
+                                  <View style={styles.foodDetails}>
+                                    <View style={{ flex: 1, paddingRight: 8 }}>
+                                      <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
+                                      {item.status === 'sold_out' && (
+                                        <Text style={{ fontSize: 10, color: colors.danger, fontWeight: 'bold', marginTop: 2 }}>TÜKENDİ</Text>
+                                      )}
+                                    </View>
+                                    <View style={styles.foodBottomColumn}>
+                                      {!profileLoading && !isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
+                                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                                        {getCartQuantity(item.id) > 0 ? (
+                                          <View style={[styles.activeQuantityContainer, { marginTop: 0 }]}>
+                                            <TouchableOpacity onPress={() => handleDecrement(item.id)} style={styles.activeQtyBtn}>
+                                              <MaterialIcons name="remove" size={14} color="#fff" />
+                                            </TouchableOpacity>
+                                            <Text style={styles.activeQtyText}>{getCartQuantity(item.id)}</Text>
+                                            <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); handleAddToCart(item); }} style={styles.activeQtyBtn}>
+                                              <MaterialIcons name="add" size={14} color="#fff" />
+                                            </TouchableOpacity>
+                                          </View>
+                                        ) : (
+                                          item.status !== 'sold_out' && (
+                                            <TouchableOpacity
+                                              style={[styles.addBtnLarge, { marginTop: 0 }]}
+                                              onPress={(e) => { e.stopPropagation?.(); handleAddToCart(item); }}
+                                            >
+                                              <MaterialIcons name="add" size={14} color="#fff" />
+                                              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>EKLE</Text>
+                                            </TouchableOpacity>
+                                          )
+                                        )}
+                                      </View>
+                                    </View>
+                                  </View>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          </View>
+                        );
+                      })
+                    }
+                  </>
+                )}
+
+                {/* Sistem fiyat listesi — Tek Çeşit sabit fiyatlar */}
+                {tekCesitSystemPrices.length > 0 && (
+                  <>
+                    <View style={{ height: 1, backgroundColor: colors.surfaceBorder, marginVertical: 20 }} />
+                    <Text style={{ fontSize: 12, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginBottom: 12, textTransform: 'uppercase' }}>Tek Çeşit Fiyat Listesi</Text>
+                    {tekCesitSystemPrices.map(item => (
+                      <View key={item.id} style={[styles.foodCard, { marginBottom: 10 }]}>
+                        <View style={styles.foodImageContainer}>
+                          <MaterialIcons name="lunch-dining" size={36} color={colors.muted} />
+                        </View>
+                        <View style={styles.foodDetails}>
+                          <View style={{ flex: 1, paddingRight: 8 }}>
+                            <Text style={styles.foodName}>{item.name}</Text>
+                            <Text style={styles.foodCategory}>Sabit Fiyat</Text>
+                          </View>
+                          <View style={styles.foodBottomColumn}>
+                            {!profileLoading && !isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
+                            {getCartQuantity(item.id) > 0 ? (
+                              <View style={[styles.activeQuantityContainer, { marginTop: 8 }]}>
+                                <TouchableOpacity onPress={() => handleDecrement(item.id)} style={styles.activeQtyBtn}>
+                                  <MaterialIcons name="remove" size={14} color="#fff" />
+                                </TouchableOpacity>
+                                <Text style={styles.activeQtyText}>{getCartQuantity(item.id)}</Text>
+                                <TouchableOpacity onPress={() => handleAddToCart(item)} style={styles.activeQtyBtn}>
+                                  <MaterialIcons name="add" size={14} color="#fff" />
+                                </TouchableOpacity>
+                              </View>
+                            ) : (
+                              <TouchableOpacity style={[styles.addBtnLarge, { marginTop: 8 }]} onPress={() => handleAddToCart(item)}>
+                                <MaterialIcons name="add" size={14} color="#fff" style={{ marginRight: 4 }} />
+                                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>EKLE</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </>
             )}
+          </View>
+        )}
+
+        {/* ── İÇECEKLER ── */}
+        {selectedCategory === "İÇECEKLER" && (
+          <View style={styles.listContainer}>
             {filteredMenu.length === 0 ? (
-              selectedCategory !== "TÜMÜ" && (
-                <View style={styles.emptyContainer}>
-                  <MaterialIcons name="fastfood" size={48} color={colors.surfaceBorder} />
-                  <Text style={styles.emptyText}>Bu kategoride aktif ürün yok</Text>
-                </View>
-              )
+              <View style={styles.emptyContainer}>
+                <MaterialIcons name="local-drink" size={48} color={colors.surfaceBorder} />
+                <Text style={styles.emptyText}>Bu kategoride aktif ürün yok</Text>
+              </View>
             ) : (
               filteredMenu.map(item => (
                 <View key={item.id} style={[styles.foodCard, item.status === 'sold_out' && { opacity: 0.6 }]}>
@@ -397,21 +552,16 @@ export default function MenuScreen() {
                     {item.image_url ? (
                       <Image source={{ uri: item.image_url }} style={styles.foodImage} />
                     ) : (
-                      <MaterialIcons name={
-                        item.category === "İÇECEK" ? "local-drink" :
-                          item.category === "ÇORBA" ? "soup-kitchen" :
-                            item.category === "EKSTRA" ? "add-circle-outline" :
-                              "restaurant"
-                      } size={40} color={colors.muted} />
+                      <MaterialIcons name="local-drink" size={40} color={colors.muted} />
                     )}
                   </View>
                   <View style={styles.foodDetails}>
                     <View style={{ flex: 1, paddingRight: 8 }}>
                       <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
-                      <Text style={styles.foodCategory}>{item.category === 'İÇECEK' || item.category === 'EKSTRA' ? 'Tabela Ürünü' : item.category}</Text>
+                      <Text style={styles.foodCategory}>İçecek</Text>
                     </View>
                     <View style={styles.foodBottomColumn}>
-                      {!isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
+                      {!profileLoading && !isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
                       {item.status === 'sold_out' ? (
                         <View style={{ backgroundColor: colors.danger, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
                           <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>TÜKENDİ</Text>
@@ -442,6 +592,132 @@ export default function MenuScreen() {
           </View>
         )}
 
+        {/* ── EKSTRALAR ── Günlük menü öğeleri kategori gruplu + sistem ekstraları */}
+        {selectedCategory === "EKSTRALAR" && (
+          <View style={styles.listContainer}>
+            {ekstraGunlukItems.length === 0 && ekstraSystemItems.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <MaterialIcons name="add-circle-outline" size={48} color={colors.surfaceBorder} />
+                <Text style={styles.emptyText}>Bu kategoride aktif ürün yok</Text>
+              </View>
+            ) : (
+              <>
+                {/* Günlük menüden gelen yemekler — kategori gruplu */}
+                {ekstraGunlukItems.length > 0 && (
+                  <>
+                    <Text style={{ fontSize: 12, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginBottom: 16, textTransform: 'uppercase' }}>Bugünün Menüsünden Ekle</Text>
+                    {["ANA YEMEK", "YARDIMCI", "TAMAMLAYICI"]
+                      .filter(cat => ekstraGunlukItems.some(m => m.category === cat))
+                      .map(cat => {
+                        const catItems = ekstraGunlukItems.filter(m => m.category === cat);
+                        return (
+                          <View key={cat} style={{ marginBottom: 20 }}>
+                            <Text style={{ fontSize: 11, fontWeight: '900', color: colors.primary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                              {CAT_LABELS[cat] || cat}
+                            </Text>
+                            <View style={{ gap: 10 }}>
+                              {catItems.map(item => (
+                                <TouchableOpacity
+                                  key={item.id}
+                                  style={[styles.foodCard, item.status === 'sold_out' && { opacity: 0.6 }]}
+                                  onPress={() => openDetailModal(item)}
+                                  activeOpacity={0.8}
+                                >
+                                  <View style={styles.foodImageContainer}>
+                                    {item.image_url ? (
+                                      <Image source={{ uri: item.image_url }} style={styles.foodImage} />
+                                    ) : (
+                                      <MaterialIcons name="restaurant" size={36} color={colors.muted} />
+                                    )}
+                                  </View>
+                                  <View style={styles.foodDetails}>
+                                    <View style={{ flex: 1, paddingRight: 8 }}>
+                                      <Text style={styles.foodName} numberOfLines={2}>{item.name}</Text>
+                                      {item.status === 'sold_out' && (
+                                        <Text style={{ fontSize: 10, color: colors.danger, fontWeight: 'bold', marginTop: 2 }}>TÜKENDİ</Text>
+                                      )}
+                                    </View>
+                                    <View style={styles.foodBottomColumn}>
+                                      {!profileLoading && !isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
+                                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                                        {getCartQuantity(item.id) > 0 ? (
+                                          <View style={[styles.activeQuantityContainer, { marginTop: 0 }]}>
+                                            <TouchableOpacity onPress={() => handleDecrement(item.id)} style={styles.activeQtyBtn}>
+                                              <MaterialIcons name="remove" size={14} color="#fff" />
+                                            </TouchableOpacity>
+                                            <Text style={styles.activeQtyText}>{getCartQuantity(item.id)}</Text>
+                                            <TouchableOpacity onPress={() => handleAddToCart(item)} style={styles.activeQtyBtn}>
+                                              <MaterialIcons name="add" size={14} color="#fff" />
+                                            </TouchableOpacity>
+                                          </View>
+                                        ) : (
+                                          item.status !== 'sold_out' && (
+                                            <TouchableOpacity
+                                              style={[styles.addBtnLarge, { marginTop: 0 }]}
+                                              onPress={(e) => { e.stopPropagation?.(); handleAddToCart(item); }}
+                                            >
+                                              <MaterialIcons name="add" size={14} color="#fff" />
+                                              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>EKLE</Text>
+                                            </TouchableOpacity>
+                                          )
+                                        )}
+                                      </View>
+                                    </View>
+                                  </View>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          </View>
+                        );
+                      })
+                    }
+                  </>
+                )}
+
+                {/* Sistem ekstraları */}
+                {ekstraSystemItems.length > 0 && (
+                  <>
+                    <View style={{ height: 1, backgroundColor: colors.surfaceBorder, marginVertical: 20 }} />
+                    <Text style={{ fontSize: 12, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginBottom: 12, textTransform: 'uppercase' }}>Sabit Ekstralar</Text>
+                    {ekstraSystemItems.map(item => (
+                      <View key={item.id} style={[styles.foodCard, { marginBottom: 10 }]}>
+                        <View style={styles.foodImageContainer}>
+                          <MaterialIcons name="add-circle-outline" size={36} color={colors.muted} />
+                        </View>
+                        <View style={styles.foodDetails}>
+                          <View style={{ flex: 1, paddingRight: 8 }}>
+                            <Text style={styles.foodName}>{item.name}</Text>
+                            <Text style={styles.foodCategory}>Ekstra</Text>
+                          </View>
+                          <View style={styles.foodBottomColumn}>
+                            {!profileLoading && !isCompany && <Text style={styles.foodPrice}>₺{item.price}</Text>}
+                            {getCartQuantity(item.id) > 0 ? (
+                              <View style={[styles.activeQuantityContainer, { marginTop: 8 }]}>
+                                <TouchableOpacity onPress={() => handleDecrement(item.id)} style={styles.activeQtyBtn}>
+                                  <MaterialIcons name="remove" size={14} color="#fff" />
+                                </TouchableOpacity>
+                                <Text style={styles.activeQtyText}>{getCartQuantity(item.id)}</Text>
+                                <TouchableOpacity onPress={() => handleAddToCart(item)} style={styles.activeQtyBtn}>
+                                  <MaterialIcons name="add" size={14} color="#fff" />
+                                </TouchableOpacity>
+                              </View>
+                            ) : (
+                              <TouchableOpacity style={[styles.addBtnLarge, { marginTop: 8 }]} onPress={() => handleAddToCart(item)}>
+                                <MaterialIcons name="add" size={14} color="#fff" style={{ marginRight: 4 }} />
+                                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>EKLE</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+          </View>
+        )}
+
         {/* Avantajlı Tabldot Menü Section */}
         {TABLDOT_PACKAGES.length > 0 && (selectedCategory === "TÜMÜ" || selectedCategory === "TABLDOT") && (
           <View style={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 }}>
@@ -462,7 +738,7 @@ export default function MenuScreen() {
 
                 {/* Alt Kısım (Fiyat ve Butonlar) */}
                 <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 12 }}>
-                  {!isCompany && <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary, marginRight: 12 }}>₺{pkg.price}</Text>}
+                  {!profileLoading && !isCompany && <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary, marginRight: 12 }}>₺{pkg.price}</Text>}
 
                   {getCartQuantity(pkg.id) > 0 ? (
                     <View style={[styles.activeQuantityContainer, { marginTop: 0 }]}>
@@ -511,6 +787,88 @@ export default function MenuScreen() {
         </TouchableOpacity>
       )}
 
+      {/* ── Ürün Detay / Sepete Ekle Modalı ── */}
+      <Modal visible={detailModalVisible} animationType="slide" transparent onRequestClose={() => setDetailModalVisible(false)}>
+        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '80%' }}>
+            {/* Modal Header */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 24, borderBottomWidth: 1, borderColor: colors.surfaceBorder }}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <View style={{ backgroundColor: colors.cardHighlight, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 6 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '900', color: colors.primary, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                    {CAT_LABELS[detailItem?.category] || detailItem?.category}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 20, fontWeight: '900', color: colors.text, lineHeight: 26 }}>{detailItem?.name}</Text>
+                {!profileLoading && !isCompany && detailItem?.price && (
+                  <Text style={{ fontSize: 16, fontWeight: '900', color: colors.primary, marginTop: 4 }}>₺{detailItem.price}</Text>
+                )}
+              </View>
+              <TouchableOpacity onPress={() => setDetailModalVisible(false)} style={{ backgroundColor: colors.surface, padding: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                <MaterialIcons name="close" size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+              {/* Ürün durumu */}
+              {detailItem?.status === 'sold_out' && (
+                <View style={{ backgroundColor: colors.danger + '20', borderWidth: 1, borderColor: colors.danger, borderRadius: 12, padding: 12, marginBottom: 20, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <MaterialIcons name="cancel" size={18} color={colors.danger} />
+                  <Text style={{ color: colors.danger, fontWeight: 'bold', fontSize: 13 }}>Bu ürün tükenmiştir</Text>
+                </View>
+              )}
+
+              {/* Aynı kategorideki diğer öğeler — bağlam bilgisi */}
+              {detailContext.length > 0 && (
+                <View style={{ marginBottom: 24 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginBottom: 12, textTransform: 'uppercase' }}>
+                    Bugün Bu Kategoride Ayrıca
+                  </Text>
+                  {detailContext.map(sibling => (
+                    <View key={sibling.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.surfaceBorder }}>
+                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: sibling.status === 'sold_out' ? colors.danger : colors.primary, marginRight: 12 }} />
+                      <Text style={{ flex: 1, fontSize: 14, color: sibling.status === 'sold_out' ? colors.muted : colors.text, fontWeight: '600' }}>{sibling.name}</Text>
+                      {sibling.status === 'sold_out' && (
+                        <Text style={{ fontSize: 10, color: colors.danger, fontWeight: 'bold' }}>TÜKENDİ</Text>
+                      )}
+                      {!profileLoading && !isCompany && sibling.status !== 'sold_out' && (
+                        <Text style={{ fontSize: 13, fontWeight: '900', color: colors.primary }}>₺{sibling.price}</Text>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Sepete ekleme bölümü */}
+              {detailItem?.status !== 'sold_out' && (
+                <View style={{ backgroundColor: colors.surface, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: colors.surfaceBorder }}>
+                  <Text style={{ fontSize: 12, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginBottom: 16, textTransform: 'uppercase' }}>Sepete Ekle</Text>
+                  {getCartQuantity(detailItem?.id) > 0 ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+                      <TouchableOpacity onPress={() => detailItem && handleDecrement(detailItem.id)} style={[styles.activeQtyBtn, { width: 44, height: 44, borderRadius: 12 }]}>
+                        <MaterialIcons name="remove" size={20} color="#fff" />
+                      </TouchableOpacity>
+                      <Text style={{ fontSize: 24, fontWeight: '900', color: colors.text, minWidth: 30, textAlign: 'center' }}>{getCartQuantity(detailItem?.id)}</Text>
+                      <TouchableOpacity onPress={() => detailItem && handleAddToCart(detailItem)} style={[styles.activeQtyBtn, { width: 44, height: 44, borderRadius: 12 }]}>
+                        <MaterialIcons name="add" size={20} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.addBtnLarge, { width: '100%', justifyContent: 'center', paddingVertical: 16, borderRadius: 16, marginTop: 0 }]}
+                      onPress={() => { if (detailItem) { handleAddToCart(detailItem); }}}
+                    >
+                      <MaterialIcons name="add-shopping-cart" size={18} color="#fff" style={{ marginRight: 8 }} />
+                      <Text style={{ color: '#fff', fontSize: 15, fontWeight: 'bold' }}>Sepete Ekle</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Package Selection Modal */}
       <Modal visible={packageModalVisible} animationType="slide" transparent>
         <View style={[styles.modalOverlay, { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }]}>
@@ -527,9 +885,9 @@ export default function MenuScreen() {
 
             <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 100 }}>
               {Array.from(new Set(dailyMenu.map(m => m.category)))
-                .filter(cat => cat !== "İÇECEK")
+                .filter(cat => cat !== "İÇECEKLER" && cat !== "İÇECEK" && cat !== "TEK_ÇEŞİT")
                 .sort((a, b) => {
-                  const order = ["ÇORBA", "ANA YEMEK", "YARDIMCI", "EKSTRA", "TATLI"];
+                  const order = ["ÇORBA ÇEŞİTLERİ", "ANA YEMEK", "YARDIMCI", "TAMAMLAYICI"];
                   const indexA = order.indexOf(a);
                   const indexB = order.indexOf(b);
                   if (indexA === -1 && indexB === -1) return a.localeCompare(b);
@@ -567,7 +925,7 @@ export default function MenuScreen() {
             <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 24, backgroundColor: colors.background, borderTopWidth: 1, borderColor: colors.surfaceBorder }}>
               <TouchableOpacity style={[styles.confirmPackageBtn, { margin: 0 }]} onPress={handleConfirmPackage}>
                 <Text style={styles.confirmPackageBtnText}>Paketi Onayla ({packageSelections.length}/{selectedPackage?.maxItems})</Text>
-                {isCompany ? null : <Text style={styles.confirmPackagePriceInfo}>₺{selectedPackage?.price}</Text>}
+                {profileLoading || isCompany ? null : <Text style={styles.confirmPackagePriceInfo}>₺{selectedPackage?.price}</Text>}
               </TouchableOpacity>
             </View>
           </View>

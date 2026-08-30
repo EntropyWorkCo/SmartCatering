@@ -2,19 +2,22 @@
   "expo": {
     "name": "Meydan Lokanta Ankara",
     "slug": "smartcatering",
-    "version": "1.0.0",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mobileapp",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.entropywork.smartcatering"
+      "bundleIdentifier": "com.entropy.smartcatering",
+      "buildNumber": "9",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "entitlements": {
+        "aps-environment": "production"
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "googleServicesFile": "./google-services.json",
@@ -22,11 +25,11 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "predictiveBackGestureEnabled": false,
+      "package": "com.entropywork.smartcatering",
+      "versionCode": 9,
       "permissions": [
         "android.permission.RECORD_AUDIO"
-      ],
-      "package": "com.entropywork.smartcatering"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -42,8 +45,17 @@
           "cameraPermission": "Menüye yemek fotoğrafı çekmek için kameranıza erişim izni gereklidir."
         }
       ],
-      "expo-notifications",
-      "@react-native-community/datetimepicker"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#f59e0b",
+          "defaultChannel": "default",
+          "sounds": []
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true

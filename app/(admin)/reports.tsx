@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -21,7 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 export default function AdminReports() {
     const { orders } = useAdisyon();
     const insets = useSafeAreaInsets();
-    const [view, setView] = useState<"MAIN" | "SALES" | "STATS" | "FEEDBACK">(
+    const [view, setView] = useState<"MAIN" | "SALES" | "STATS" | "FEEDBACK" | "APP_FEEDBACK">(
         "MAIN"
     );
 
@@ -37,12 +36,19 @@ export default function AdminReports() {
             const fetchRatings = async () => {
                 const { data, error } = await supabase
                     .from("feedbacks")
-                    .select("*, users(full_name, companies!users_company_id_fkey(company_name))")
+                    .select("*, users(id, full_name, role, company_id, companies!users_company_id_fkey(company_name))")
                     .order("created_at", { ascending: false });
 
-                if (error) {
-                    console.error("Error fetching ratings:", error);
-                }
+                if (error) console.error("Error fetching ratings:", error);
+
+                // Firma sahiplerinin şirket adlarını ayrıca çek (user_id → companies)
+                const { data: companiesData } = await supabase
+                    .from("companies")
+                    .select("user_id, company_name");
+                const ownerCompanyMap: Record<string, string> = {};
+                (companiesData || []).forEach((c: any) => {
+                    if (c.user_id) ownerCompanyMap[c.user_id] = c.company_name;
+                });
 
                 if (data) {
                     const formatted = data.map((r: any) => {
@@ -62,10 +68,15 @@ export default function AdminReports() {
                             } catch(e) {}
                         }
 
+                        // Çalışan: company join'den gelir | Firma sahibi: ownerCompanyMap'ten gelir
+                        const companyName = company?.company_name
+                            || (user?.id ? ownerCompanyMap[user.id] : null)
+                            || 'Bireysel';
+
                         return {
                             id: r.id,
                             userName: user?.full_name || 'Müşteri',
-                            company: company?.company_name || 'Bireysel',
+                            company: companyName,
                             generalStars: r.rating,
                             rating_details: parsedDetails,
                             note: parsedNote,
@@ -82,12 +93,17 @@ export default function AdminReports() {
         }, [])
     );
 
+    const orderRatings = ratings.filter(r => r.type !== 'app_feedback');
+    const appRatings = ratings.filter(r => r.type === 'app_feedback');
+
     if (view === "SALES")
         return <DailySalesView onBack={() => setView("MAIN")} orders={orders} colors={colors} styles={styles} />;
     if (view === "STATS")
-        return <PerformanceDashboard onBack={() => setView("MAIN")} ratings={ratings} colors={colors} styles={styles} />;
+        return <PerformanceDashboard onBack={() => setView("MAIN")} ratings={orderRatings} colors={colors} styles={styles} />;
     if (view === "FEEDBACK")
-        return <FeedbackView onBack={() => setView("MAIN")} ratings={ratings} colors={colors} styles={styles} />;
+        return <FeedbackView onBack={() => setView("MAIN")} ratings={orderRatings} colors={colors} styles={styles} />;
+    if (view === "APP_FEEDBACK")
+        return <FeedbackView onBack={() => setView("MAIN")} ratings={appRatings} colors={colors} styles={styles} title="Uygulama Görüşleri" isAppFeedback />;
 
     return (
         <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
@@ -98,7 +114,6 @@ export default function AdminReports() {
                 <View style={{ flex: 1 }}>
                     <Text style={styles.title}>Raporlar & Analiz</Text>
                 </View>
-                <ThemeSwitcher />
             </View>
 
             <Text style={styles.sectionHeader}>SİSTEM ÖZETLERİ</Text>
@@ -116,7 +131,7 @@ export default function AdminReports() {
                     <ReportMenuItem
                         icon="star"
                         label="Müşteri Geri Bildirimleri"
-                        subtitle={`Ortalama: ${ratings.filter(r => r.generalStars > 0).length > 0 ? (ratings.filter(r => r.generalStars > 0).reduce((acc, r) => acc + (r.generalStars || 0), 0) / ratings.filter(r => r.generalStars > 0).length).toFixed(1) : "5.0"} | ${ratings.length} Yorum`}
+                        subtitle={`${orderRatings.filter(r => r.generalStars > 0).length > 0 ? (orderRatings.filter(r => r.generalStars > 0).reduce((acc, r) => acc + r.generalStars, 0) / orderRatings.filter(r => r.generalStars > 0).length).toFixed(1) : "5.0"} ⭐ | ${orderRatings.length} sipariş yorumu`}
                         onClick={() => setView("FEEDBACK")}
                         colors={colors}
                         styles={styles}
@@ -124,8 +139,16 @@ export default function AdminReports() {
                     <ReportMenuItem
                         icon="query-stats"
                         label="Performans Analizi"
-                        subtitle="Mutfak başarısı ve kategori skorları."
+                        subtitle="Sipariş puanlarının istatistiksel özeti."
                         onClick={() => setView("STATS")}
+                        colors={colors}
+                        styles={styles}
+                    />
+                    <ReportMenuItem
+                        icon="feedback"
+                        label="Uygulama Görüşleri"
+                        subtitle={`${appRatings.length} kullanıcı görüşü`}
+                        onClick={() => setView("APP_FEEDBACK")}
                         isLast
                         colors={colors}
                         styles={styles}
@@ -203,7 +226,18 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
             return acc + itemQty;
         }, 0);
 
-        const revenue = filtered.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
+        const revenue = filtered.reduce((acc: number, curr: any) => {
+            // Kurumsal ise sadece MANUEL_DEBT ciroyu oluşturur
+            if (mainTab === "KURUMSAL") {
+                if (curr.order_type === 'MANUAL_DEBT') {
+                    return acc + (curr.total_amount || 0);
+                }
+                return acc;
+            }
+            // Bireysel ise MANUAL_PAYMENT/DEBT hariç her şey cirodur
+            if (curr.order_type === 'MANUAL_PAYMENT' || curr.order_type === 'MANUAL_DEBT') return acc;
+            return acc + (curr.total_amount || 0);
+        }, 0);
 
         return { revenue, count: mealsCount, orders: filtered };
     }, [orders, mainTab, filterPeriod]);
@@ -220,7 +254,7 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
     }, []);
 
     const groupedOrders = useMemo(() => {
-        if (mainTab !== "KURUMSAL") return { "Bireysel": stats.orders };
+        if (mainTab !== "KURUMSAL") return { "Bireysel": stats.orders.filter((o: any) => o.order_type !== 'MANUAL_PAYMENT' && o.order_type !== 'MANUAL_DEBT') };
 
         const groups: { [key: string]: any[] } = {};
         stats.orders.forEach((o: any) => {
@@ -298,8 +332,6 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
             });
 
             const rows = Object.values(groupedMap).map((o: any) => {
-                const statusLabel = getLocalizedStatus(o.status);
-                // Gruplanmış item isimleri
                 const itemDetails = o.items?.map((i: any) => i.menu_items?.name).join(', ') || 'Hizmet';
                 
                 return `
@@ -310,9 +342,6 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                         <span style="color: #64748b; font-size: 9px;">${itemDetails}</span>
                     </td>
                     <td style="padding: 6px 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px;">${new Date(o.created_at).toLocaleDateString('tr-TR')}</td>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #f1f5f9; font-size: 10px; color: ${statusLabel === 'ÖDENDİ' ? "#10b981" : "#f97316"}; font-weight: bold;">
-                        ${statusLabel}
-                    </td>
                 </tr>
             `}).join('');
 
@@ -340,7 +369,6 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                                 <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">ID</th>
                                 <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">KİŞİ & SİPARİŞ DETAYI</th>
                                 <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">TARİH</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; font-size: 10px; color: #64748b; text-transform: uppercase;">DURUM</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -435,15 +463,13 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
 
             {/* Sub Filter Tabs */}
             <View style={styles.filterTabsContainer}>
+                <TouchableOpacity style={[styles.filterTab, filterPeriod === "DAILY" && styles.filterTabActive]} onPress={() => setFilterPeriod("DAILY")}>
+                    <Text style={[styles.filterTabText, filterPeriod === "DAILY" && styles.filterTabTextActive]}>Günlük</Text>
+                </TouchableOpacity>
                 {mainTab === "BIREYSEL" && (
-                    <>
-                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "DAILY" && styles.filterTabActive]} onPress={() => setFilterPeriod("DAILY")}>
-                            <Text style={[styles.filterTabText, filterPeriod === "DAILY" && styles.filterTabTextActive]}>Günlük</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.filterTab, filterPeriod === "WEEKLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("WEEKLY")}>
-                            <Text style={[styles.filterTabText, filterPeriod === "WEEKLY" && styles.filterTabTextActive]}>Haftalık</Text>
-                        </TouchableOpacity>
-                    </>
+                    <TouchableOpacity style={[styles.filterTab, filterPeriod === "WEEKLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("WEEKLY")}>
+                        <Text style={[styles.filterTabText, filterPeriod === "WEEKLY" && styles.filterTabTextActive]}>Haftalık</Text>
+                    </TouchableOpacity>
                 )}
                 <TouchableOpacity style={[styles.filterTab, filterPeriod === "MONTHLY" && styles.filterTabActive]} onPress={() => setFilterPeriod("MONTHLY")}>
                     <Text style={[styles.filterTabText, filterPeriod === "MONTHLY" && styles.filterTabTextActive]}>Aylık</Text>
@@ -458,7 +484,11 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                     <View style={[styles.statBox, { backgroundColor: colors.infoBg, borderColor: colors.info }]}>
                         <Text style={[styles.statBoxLabel, { color: colors.info }]}>DÖNEM CİROSU</Text>
                         <Text style={styles.statBoxValue}>₺{stats.revenue.toLocaleString("tr-TR")}</Text>
-                        {mainTab === "KURUMSAL" && <Text style={{ fontSize: 9, color: colors.muted }}>Seçili tarihlerdeki tüm tüketim</Text>}
+                        {mainTab === "KURUMSAL" && (
+                            <Text style={{ fontSize: 9, color: colors.muted, marginTop: 4 }}>
+                                Kurumsal ciro, girilen manuel borçlar üzerinden hesaplanır.
+                            </Text>
+                        )}
                     </View>
                     <View style={[styles.statBox, { backgroundColor: colors.cardHighlight, borderColor: colors.primary }]}>
                         <Text style={[styles.statBoxLabel, { color: colors.primary }]}>ÖĞÜN SAYISI</Text>
@@ -477,7 +507,9 @@ const DailySalesView = ({ onBack, orders, colors, styles }: any) => {
                         const companyDebt = items[0]?.companyBalance || 0;
                         
                         const compMeals = items.reduce((acc: number, o: any) => acc + (o.adisyon_items?.reduce((iq: number, i: any) => iq + (i.quantity || 0), 0) || 0), 0);
-                        const compTotal = items.reduce((acc: number, o: any) => acc + (o.total_amount || 0), 0);
+                        const compTotal = items
+                            .filter((o: any) => o.order_type !== 'MANUAL_PAYMENT' && o.order_type !== 'MANUAL_DEBT')
+                            .reduce((acc: number, o: any) => acc + (o.total_amount || 0), 0);
 
                         return (
                             <View key={companyName} style={{ marginBottom: 12 }}>
@@ -692,13 +724,8 @@ const StatCard = ({ icon, label, score, color, trend, styles }: any) => (
     </View>
 );
 
-const FeedbackView = ({ onBack, ratings, colors, styles }: any) => {
+const FeedbackView = ({ onBack, ratings, colors, styles, title = "Müşteri Geri Bildirimleri", isAppFeedback = false }: any) => {
     const insets = useSafeAreaInsets();
-    const [feedbackTab, setFeedbackTab] = useState<"ORDER" | "APP">("ORDER");
-
-    const filteredRatings = ratings.filter((r: any) => 
-        feedbackTab === "ORDER" ? r.type !== 'app_feedback' : r.type === 'app_feedback'
-    );
 
     return (
         <View style={[styles.container, { paddingTop: insets.top + 20 }]}>
@@ -706,27 +733,14 @@ const FeedbackView = ({ onBack, ratings, colors, styles }: any) => {
                 <TouchableOpacity onPress={onBack} style={styles.backButton}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.title}>Müşteri Yorumları</Text>
-            </View>
-
-            <View style={{ flexDirection: "row", marginHorizontal: 24, marginBottom: 16, backgroundColor: colors.surfaceBorder, padding: 4, borderRadius: 12 }}>
-                <TouchableOpacity
-                    style={[{ flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: 8 }, feedbackTab === "ORDER" && { backgroundColor: colors.surface }]}
-                    onPress={() => setFeedbackTab("ORDER")}
-                >
-                    <Text style={[{ fontSize: 13, fontWeight: "bold", color: colors.muted }, feedbackTab === "ORDER" && { color: colors.text }]}>SİPARİŞ YORUMLARI</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[{ flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: 8 }, feedbackTab === "APP" && { backgroundColor: colors.surface }]}
-                    onPress={() => setFeedbackTab("APP")}
-                >
-                    <Text style={[{ fontSize: 13, fontWeight: "bold", color: colors.muted }, feedbackTab === "APP" && { color: colors.text }]}>UYGULAMA GÖRÜŞLERİ</Text>
-                </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.title}>{title}</Text>
+                </View>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                {filteredRatings.length > 0 ? (
-                    filteredRatings.map((r: any) => (
+                {ratings.length > 0 ? (
+                    ratings.map((r: any) => (
                         <View key={r.id} style={styles.feedbackCard}>
                             <View style={styles.feedbackTop}>
                                 <View style={styles.feedbackUser}>
@@ -842,8 +856,8 @@ const getStyles = (colors: any) => StyleSheet.create({
 
     // Feedback View
     feedbackCard: { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.surfaceBorder, marginBottom: 16 },
-    feedbackTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
-    feedbackUser: { flexDirection: "row", alignItems: "center", gap: 12 },
+    feedbackTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+    feedbackUser: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, marginRight: 8 },
     feedbackAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceBorder, alignItems: "center", justifyContent: "center" },
     feedbackName: { fontSize: 14, fontWeight: "bold", color: colors.text, marginBottom: 2 },
     feedbackCompany: { fontSize: 12, color: colors.muted },

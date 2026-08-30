@@ -52,26 +52,129 @@ export const adisyonService = {
     // 3. Bildirim Tetikleyicileri
     try {
         const { notificationService } = require("./notificationService");
-        
-        // - Admin'e Yeni Paket Servisi Bildirimi (Sadece "Sipariş Ver" / paket modunda)
-        // NOT: "Şimdi Ye" siparişleri restoran içi olduğundan admin'e bildirim gitmez
-        if (orderType !== "Şimdi Ye") {
+
+        // Sipariş veren kullanıcının bilgilerini ve şirket bağlantısını çek
+        const { data: userData } = await supabase
+            .from("users")
+            .select("full_name, company_id")
+            .eq("id", userId)
+            .maybeSingle();
+
+        const personName = userData?.full_name?.split(' ')[0] || 'Bir çalışan';
+        const itemSummary = items.map(i => `${i.quantity}x ${i.name}`).join(', ');
+
+        // Kurumsal çalışan için meal_attendance'a doğrudan yaz.
+        // Trigger bazen RLS veya timezone sorunundan yazamıyor; bu fallback bunu garantiler.
+        // Firma sahibi meal_attendance'ı görebilir (RLS izni var) ama adisyon'u göremez.
+        if (userData?.company_id && orderType !== "MANUAL_DEBT" && orderType !== "MANUAL_PAYMENT") {
+            const turkeyDate = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const { error: maError } = await supabase.from("meal_attendance").insert({
+                user_id: userId,
+                company_id: userData.company_id,
+                attendance_date: turkeyDate,
+                adisyon_id: adisyon.id,
+            });
+            // 23505 = unique_violation: bugün zaten kayıt var, normaldir
+            if (maError && maError.code !== '23505') {
+                console.warn('[meal_attendance] yazma hatası:', maError.code, maError.message);
+            }
+        }
+
+        // Şirket sahibini bul (çalışanın company_id'si varsa)
+        let companyOwnerId: string | null = null;
+        if (userData?.company_id) {
+            const { data: company } = await supabase
+                .from("companies")
+                .select("user_id")
+                .eq("id", userData.company_id)
+                .maybeSingle();
+            companyOwnerId = company?.user_id || null;
+        } else {
+            // Kullanıcı bizzat firma sahibi olabilir, kendi şirketini kontrol et
+            const { data: ownCompany } = await supabase
+                .from("companies")
+                .select("user_id")
+                .eq("user_id", userId)
+                .maybeSingle();
+            // Firma sahibiyse kendine bildirim gitmesin, null bırak
+            if (!ownCompany) companyOwnerId = null;
+        }
+
+        // ── Firma sahibine bildirim (her iki order_type için) ──
+        // Kendi siparişini veren firma sahibine gitmesin
+        if (companyOwnerId && companyOwnerId !== userId) {
             (async () => {
                 try {
-                    const { data: userData } = await supabase
-                        .from("users")
-                        .select("full_name")
-                        .eq("id", userId)
-                        .single();
+                    await notificationService.sendViaEdgeFunction({
+                        type: "NEW_ORDER",
+                        title: `🍽️ ${personName} yemek bildirimi yaptı`,
+                        body: itemSummary || "Yemek siparişi verildi",
+                        data: { screen: "corporate-info", tab: "KONTROL" },
+                        userId: companyOwnerId,
+                    });
+                } catch (err) {
+                    console.error("Firma sahibi bildirimi hatası:", err);
+                }
+            })();
+        }
 
-                    // Edge Function üzerinden gönder — admin uygulaması kapalı olsa da gelir
+        if (orderType === "Şimdi Ye") {
+            // ── BACKEND KUYRUK: 15 dakika sonra değerlendirme bildirimi ──────
+            // Yerel timer (scheduleNotificationAsync) kullanılmıyor; uygulama
+            // kapalı olsa da bildirim iletilsin diye Supabase tarafında
+            // pending_rating_notifications tablosuna kayıt ekliyoruz.
+            // pg_cron her dakika bu tabloyu tarar ve zamanı gelen bildirimleri
+            // process-rating-queue Edge Function aracılığıyla gönderir.
+            //
+            // ADMIN FİLTRESİ: role === 'admin' olan kullanıcılar bu kuyruğa
+            // hiçbir zaman eklenmez — değerlendirme bildirimi almaz.
+            (async () => {
+                try {
+                    // Kullanıcının rolünü kontrol et
+                    const { data: userRoleData } = await supabase
+                        .from("users")
+                        .select("role")
+                        .eq("id", userId)
+                        .maybeSingle();
+
+                    // ── KESİN İSTİSNA: Admin kullanıcısına bildirim GİTMEZ ──
+                    if (userRoleData?.role === "admin") {
+                        console.log("[adisyonService] Admin kullanıcısı — değerlendirme kuyruğuna eklenmedi.");
+                        return;
+                    }
+
+                    // 15 dakika sonrasını hesapla
+                    const scheduledFor = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+                    const { error: queueError } = await supabase
+                        .from("pending_rating_notifications")
+                        .insert({
+                            user_id:       userId,
+                            order_id:      adisyon.id,
+                            scheduled_for: scheduledFor,
+                            status:        "pending",
+                        });
+
+                    if (queueError) {
+                        console.warn("[adisyonService] Bildirim kuyruğuna eklenemedi:", queueError.message);
+                    } else {
+                        console.log(`[adisyonService] Değerlendirme bildirimi kuyruğa eklendi. Gönderilecek: ${scheduledFor}`);
+                    }
+                } catch (err) {
+                    console.warn("[adisyonService] Şimdi Ye kuyruk hatası (kritik değil):", err);
+                }
+            })();
+        } else {
+            // "Sipariş Ver" → admin'e de bildirim gönder
+            (async () => {
+                try {
                     await notificationService.sendViaEdgeFunction({
                         type: "NEW_ORDER",
                         title: "Yeni Paket Siparişi! 🛎️",
                         body: `${userData?.full_name || "Bir müşteri"} yeni bir paket siparişi verdi.`,
                         data: { url: "/(admin)/dashboard", screen: "dashboard" },
                         adminOnly: true,
-                        excludeUserId: userId, // Siparişi veren kişiye bildirim gitmesin (admin hesabı olsa bile)
+                        excludeUserId: userId,
                     });
                 } catch (err) {
                     console.error("Admin bildirimi hatası:", err);
@@ -89,7 +192,7 @@ export const adisyonService = {
     try {
       const { data, error } = await supabase
         .from("adisyon")
-        .select("*, adisyon_items(*, menu_items(name)), users(*, companies!users_company_id_fkey(*))")
+        .select("*, adisyon_items(*, menu_items(id, name, category)), users(*, companies!users_company_id_fkey(*))")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
@@ -104,12 +207,18 @@ export const adisyonService = {
     }
   },
 
-  async getAllOrders() {
+  async getAllOrders(options?: { daysBack?: number; limit?: number }) {
+    const { daysBack = 90, limit = 500 } = options || {};
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+
     try {
       const { data, error } = await supabase
         .from("adisyon")
-        .select("*, adisyon_items(*, menu_items(name)), users(*, companies!users_company_id_fkey(*))")
-        .order("created_at", { ascending: false });
+        .select("*, adisyon_items(*, menu_items(id, name, category)), users(*, companies!users_company_id_fkey(*))")
+        .gte("created_at", cutoffDate.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(limit);
 
       if (error) {
         console.error("getAllOrders Error:", error);
@@ -210,18 +319,69 @@ export const adisyonService = {
   },
 
   async clearUserDebt(userId: string) {
+    // 1. Ödenmemiş gerçek siparişleri bul (MANUAL_PAYMENT HARİÇ)
+    const { data: unpaidOrders, error: fetchError } = await supabase
+      .from("adisyon")
+      .select("id, total_amount")
+      .eq("user_id", userId)
+      .not("status", "in", '("CANCELLED","İptal","PAID","Ödendi")')
+      .not("order_type", "eq", "MANUAL_PAYMENT");
+
+    if (fetchError) {
+      console.error("clearUserDebt fetch error:", fetchError);
+      throw fetchError;
+    }
+
+    const orderTotal = (unpaidOrders || []).reduce((s: number, o: any) => s + (o.total_amount || 0), 0);
+
+    // 2. Mevcut bekleyen kısmi ödemeleri bul (bunlar zaten alınmış para)
+    const { data: pendingPayments } = await supabase
+      .from("adisyon")
+      .select("total_amount")
+      .eq("user_id", userId)
+      .eq("order_type", "MANUAL_PAYMENT")
+      .not("status", "in", '("CANCELLED","PAID","Ödendi")');
+
+    const alreadyPaid = (pendingPayments || []).reduce((s: number, p: any) => s + (p.total_amount || 0), 0);
+
+    // 3. Gerçek siparişleri PAID yap (MANUAL_PAYMENT'lara dokunma)
     const { error } = await supabase
       .from("adisyon")
-      .update({
-        status: "PAID",
-        paid_at: new Date().toISOString()
-      })
+      .update({ status: "PAID", paid_at: new Date().toISOString() })
       .eq("user_id", userId)
-      .not("status", "in", '("CANCELLED","İptal","PAID","Ödendi","COMPLETED","Tamamlandı")');
+      .not("status", "in", '("CANCELLED","İptal","PAID","Ödendi")')
+      .not("order_type", "eq", "MANUAL_PAYMENT");
 
     if (error) {
       console.error("clearUserDebt error:", error);
       throw error;
+    }
+
+    // 4. Bekleyen kısmi ödemeleri de PAID yap (artık settled)
+    await supabase
+      .from("adisyon")
+      .update({ status: "PAID", paid_at: new Date().toISOString() })
+      .eq("user_id", userId)
+      .eq("order_type", "MANUAL_PAYMENT")
+      .not("status", "in", '("CANCELLED","PAID","Ödendi")');
+
+    // 5. Net yeni MANUAL_PAYMENT kaydı ekle (siparişler - zaten alınan kısmi ödeme)
+    const newPaymentAmount = Math.max(0, orderTotal - alreadyPaid);
+    if (newPaymentAmount > 0) {
+      const { error: paymentError } = await supabase
+        .from("adisyon")
+        .insert({
+          user_id: userId,
+          total_amount: newPaymentAmount,
+          status: "PAID",
+          order_type: "MANUAL_PAYMENT",
+          note: "Borç Ödemesi",
+          paid_at: new Date().toISOString(),
+        });
+
+      if (paymentError) {
+        console.warn("clearUserDebt MANUAL_PAYMENT insert error:", paymentError);
+      }
     }
   },
 
@@ -258,7 +418,7 @@ export const adisyonService = {
         .select(`
           *,
           users (*, companies!users_company_id_fkey(*)),
-          adisyon_items (*, menu_items(name))
+          adisyon_items (*, selections, menu_items(id, name, category))
         `)
         .in("user_id", userIds)
         .order("created_at", { ascending: false });

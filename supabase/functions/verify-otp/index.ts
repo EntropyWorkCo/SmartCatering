@@ -31,16 +31,23 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: false, error: 'Telefon ve kod zorunludur' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // --- ADMIN MAGIC CODE BYPASS START ---
-    const adminAccounts = ["admin@meydan.com"];
-    const magicCodes = ["992288"]; // Daha güvenli 6 haneli kod
+    // --- APPLE REVIEW MAGIC CODE BYPASS START ---
+    const appleTestUsers: Record<string, string> = {
+      "+905551000001": "individual",   // Bireysel
+      "+905551000002": "owner",        // Firma Sahibi
+      "+905551000003": "employee",     // Firma Çalışanı
+      "apple-admin@smartcatering.com": "admin",
+      "admin@meydan.com": "admin"
+    };
+    const appleTestNumbers = Object.keys(appleTestUsers);
+    const magicCodes = ["123456", "1234", "992288"];
     let isMagicLogin = false;
 
-    if (adminAccounts.includes(phone) && magicCodes.includes(code)) {
-        console.log("🔐 Admin Güvenli Girişi:", phone);
+    if (appleTestNumbers.includes(phone) && magicCodes.includes(code)) {
+        console.log("🍎 Apple Review / Admin Girişi:", phone);
         isMagicLogin = true;
     }
-    // --- ADMIN MAGIC CODE BYPASS END ---
+    // --- APPLE REVIEW MAGIC CODE BYPASS END ---
 
     // 1. Verify OTP using admin client (bypasses RLS)
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -72,7 +79,9 @@ serve(async (req) => {
 
     // 2. Normalize phone and check if user exists in public.users
     let existingUser;
-    if (phone === "admin@meydan.com") {
+    const testRole = appleTestUsers[phone];
+    
+    if (testRole === "admin") {
         // Test ve Ana Admin için sistemdeki herhangi bir admini alıyoruz
         const { data } = await supabaseAdmin
             .from("users")
@@ -93,6 +102,23 @@ serve(async (req) => {
             .limit(1)
             .maybeSingle();
         existingUser = data;
+
+        // --- APPLE REVIEW OTO-KAYIT ---
+        if (!existingUser && isMagicLogin) {
+            console.log(`🆕 Apple Review kullanıcısı oluşturuluyor (Rol: ${testRole || 'individual'})...`);
+            const { data: newUser, error: createError } = await supabaseAdmin
+                .from("users")
+                .insert({
+                    full_name: `Apple Reviewer (${testRole || 'individual'})`,
+                    phone: basePhone,
+                    role: testRole || "individual",
+                    is_active: true
+                })
+                .select("*")
+                .single();
+            
+            if (!createError) existingUser = newUser;
+        }
     }
 
     if (!existingUser) {

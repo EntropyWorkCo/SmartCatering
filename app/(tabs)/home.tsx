@@ -1,21 +1,23 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { Image } from "expo-image";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useRef } from "react";
-import { Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useMenu } from "@/lib/hooks/useMenu";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { adisyonService } from "@/lib/services/adisyonService";
+import { supabase } from "@/lib/supabase";
 import { useCartStore } from "@/lib/store/cartStore";
 import { useResolvedTheme } from "@/lib/store/themeStore";
+import { useProfilePhotoStore } from "@/lib/store/profilePhotoStore";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -24,7 +26,7 @@ export default function HomeScreen() {
   const styles = getStyles(colors);
 
   const { user, loading: authLoading } = useAuth();
-  const { profile, refresh } = useProfile(user?.id);
+  const { profile, loading: profileLoading, refresh } = useProfile(user?.id);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -75,7 +77,7 @@ export default function HomeScreen() {
   const [companyOrdersLoading, setCompanyOrdersLoading] = React.useState(false);
   const hasAlertedMenuRef = useRef(false);
 
-  const isCompany = profile?.is_company || false;
+  const isCompany = !!(profile?.is_company || profile?.company_id);
   const isCompanyOwner = !!profile?.corporate_info;
   const actualCompanyId = profile?.company_id || profile?.corporate_info?.id; 
 
@@ -85,7 +87,9 @@ export default function HomeScreen() {
   };
 
   const dailyMenu = useMemo(() => {
-    return menu.filter(m => ["ÇORBA", "ANA YEMEK", "YARDIMCI", "TATLI", "MEYVE"].includes(m.category.toUpperCase()));
+    // DB'deki gerçek kategori adlarına göre filtrele (web admin paneli "ÇORBA ÇEŞİTLERİ" ve "TAMAMLAYICI" kullanıyor)
+    const DAILY_CATEGORIES = ["ÇORBA ÇEŞİTLERİ", "ANA YEMEK", "YARDIMCI", "TAMAMLAYICI", "TATLI", "MEYVE"];
+    return menu.filter(m => DAILY_CATEGORIES.includes(m.category?.toUpperCase?.() ?? m.category));
   }, [menu]);
 
   useEffect(() => {
@@ -220,18 +224,18 @@ export default function HomeScreen() {
       .find(o => o.order_type === "Sipariş Ver" && ["PENDING", "PREPARING", "READY", "HAZIR", "HAZIRLANIYOR", "BEKLEMEDE", "BEKLİYOR", "YOLDA"].includes(o.status.toUpperCase()));
   }, [orders]);
 
-  const [localPhoto, setLocalPhoto] = React.useState<string | null>(null);
+  const localPhoto = useProfilePhotoStore((s) => s.photoUrl);
+  const loadPhotoFromStorage = useProfilePhotoStore((s) => s.loadFromStorage);
 
-  useEffect(() => {
-    if (user?.id) {
-      AsyncStorage.getItem(`profile_photo_${user.id}`).then(photo => {
-        if (photo) setLocalPhoto(photo);
-      });
-    }
-  }, [user?.id]);
+  // Reload sonrası ya da store boşsa AsyncStorage/DB'den yükle
+  React.useEffect(() => {
+    if (!user?.id || localPhoto) return;
+    loadPhotoFromStorage(user.id, profile?.avatar_url);
+  }, [user?.id, profile?.avatar_url]);
 
   const firstName = profile?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || "Misafir";
-  const profileImage = localPhoto || profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/png?seed=${firstName}`;
+  // Supabase URL'deki eski timestamp'i temizle — AsyncStorage'da base URL saklanir
+  const profileImage = localPhoto || `https://api.dicebear.com/7.x/avataaars/png?seed=${firstName}`;
 
   const generatePdf = async () => {
     if (!orders) return;
@@ -377,7 +381,6 @@ export default function HomeScreen() {
             <Text style={styles.subtitleText}>BUGÜN NE YEMEK İSTERSİN?</Text>
           </View>
           <View style={styles.headerActions}>
-            <ThemeSwitcher />
             <TouchableOpacity
               style={styles.cartBtn}
               onPress={() => router.push("/(tabs)/cart")}
@@ -390,9 +393,13 @@ export default function HomeScreen() {
                 </View>
               )}
             </TouchableOpacity>
-            <View style={styles.avatarContainer}>
-              <Image source={{ uri: profileImage }} style={styles.avatar} />
-            </View>
+            <TouchableOpacity style={styles.avatarContainer} onPress={() => router.push("/(tabs)/profile")} activeOpacity={0.8}>
+              <Image
+                source={{ uri: profileImage }}
+                style={styles.avatar}
+                contentFit="cover"
+              />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -447,9 +454,9 @@ export default function HomeScreen() {
 
                             {/* Alt Kısım: Fiyat Solda, Butonlar Sağda */}
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                                {!isCompany && (
-                                    <Text style={{ fontSize: 20, fontWeight: '900', color: colors.primary }}>{`₺${pkg.price}`}</Text>
-                                )}
+                                 {!profileLoading && !isCompany && (
+                                     <Text style={{ fontSize: 20, fontWeight: '900', color: colors.primary }}>{`₺${pkg.price}`}</Text>
+                                 )}
                                 {isCompany && <View />}
 
                                 {/* Sepet Kontrolü */}
@@ -504,7 +511,7 @@ export default function HomeScreen() {
 
 
         {/* Balance Card for Individual Accounts */}
-        {!isCompany && (
+        {!profileLoading && !isCompany && (
           <View style={[styles.balanceCard, { marginTop: 16, marginBottom: 32 }]}>
             <MaterialIcons name="account-balance-wallet" size={120} color={colors.text === '#f8fafc' ? 'rgba(6, 78, 59, 0.05)' : 'rgba(255,255,255,0.03)'} style={styles.balanceBgIcon} />
             <Text style={styles.balanceLabel}>GÜNCEL BORÇ DURUMU</Text>

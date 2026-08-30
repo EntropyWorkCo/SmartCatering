@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { 
-  Plus, 
-  Trash2, 
-  Search, 
-  Utensils, 
-  Coffee, 
-  Soup, 
+import {
+  Plus,
+  Trash2,
+  Search,
+  Utensils,
+  Coffee,
+  Soup,
   Star,
   Save,
   Loader2,
@@ -19,13 +19,15 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { menuService } from "../lib/services/menuService";
+import { supabase } from "../lib/supabase";
 
 const CATEGORIES = [
-  { id: "ÇORBA", label: "Çorba", icon: Soup },
+  { id: "ÇORBA ÇEŞİTLERİ", label: "Çorba Çeşitleri", icon: Soup },
   { id: "ANA YEMEK", label: "Ana Yemek", icon: Utensils },
   { id: "YARDIMCI", label: "Yardımcı", icon: Star },
-  { id: "EKSTRA", label: "Ekstra", icon: PlusCircle },
-  { id: "İÇECEK", label: "İçecek", icon: Coffee },
+  { id: "TAMAMLAYICI", label: "Tamamlayıcı", icon: PlusCircle },
+  { id: "EKSTRA FARKLAR", label: "Ekstra Farklar", icon: Plus },
+  { id: "İÇECEKLER", label: "İçecekler", icon: Coffee },
 ];
 
 export default function MenuManagement() {
@@ -43,6 +45,7 @@ export default function MenuManagement() {
   // Bulk Selection State
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+  const [clearPoolBeforeImport, setClearPoolBeforeImport] = useState(false);
 
   // Edit Modal State
   const [editingItem, setEditingItem] = useState<any | null>(null);
@@ -109,9 +112,34 @@ export default function MenuManagement() {
     const validItems = bulkItems.filter(i => i.name.trim() !== "");
     if (validItems.length === 0) return alert("Lütfen en az bir yemek adı girin.");
 
+    // Duplicate check
+    const existingNames = new Set(menu.map(m => m.name.toLowerCase()));
+    const newItems = validItems.filter(i => !existingNames.has(i.name.toLowerCase()));
+    const duplicates = validItems.length - newItems.length;
+
+    if (duplicates > 0) {
+      alert(`⚠️  ${duplicates} yemek zaten yüklü! Sadece ${newItems.length} yeni yemek eklenecek.`);
+    }
+
+    if (newItems.length === 0) {
+      alert("❌ Tüm yemekler zaten yüklü!");
+      return;
+    }
+
     try {
       setLoading(true);
-      for (const item of validItems) {
+
+      // 1. Havuzu Sıfırla: Tüm yemekleri sil (sistem_fiyati hariç)
+      if (clearPoolBeforeImport) {
+        const itemsToDelete = menu.filter(item => item.status !== 'sistem_fiyati');
+        for (const item of itemsToDelete) {
+          await menuService.deleteMenuItem(item.id);
+        }
+        setClearPoolBeforeImport(false);
+      }
+
+      // 2. Yeni yemekleri ekle
+      for (const item of newItems) {
         await menuService.addMenuItem(item.name, item.category, Number(item.price), item.image_url, item.image_base64);
       }
       setBulkItems([{ id: "1", name: "", category: "ANA YEMEK", price: "180", image_url: null, image_base64: null }]);
@@ -125,56 +153,149 @@ export default function MenuManagement() {
     }
   };
 
-  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [importMode, setImportMode] = useState<"replace" | "append">("replace");
+  const [importProgress, setImportProgress] = useState<string>("");
+
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsImporting(true);
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: "binary" });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+    setImportProgress("Excel dosyası parse ediliyor...");
 
-        // Skip header row and map data
-        const newItems = data.slice(1)
-          .filter(row => row[0]) // Only rows with a name
-          .map((row, idx) => ({
-            id: `excel-${Date.now()}-${idx}`,
-            name: String(row[0]),
-            category: (String(row[1]).toUpperCase().replace(" ", "_")) as any || "ANA YEMEK",
-            price: String(row[2] || "180"),
-            image_url: null,
-            image_base64: null
-          }));
+    try {
+      // Client-side: Parse Excel
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const bstr = evt.target?.result;
+          const wb = XLSX.read(bstr, { type: "binary" });
 
-        if (newItems.length === 0) {
-          alert("Dosyada geçerli yemek verisi bulunamadı.");
-        } else {
-          setBulkItems(newItems);
-          alert(`${newItems.length} yemek dosyadan okundu. Şimdi kontrol edip "Hepsini Havuza Kaydet" butonuna basabilirsiniz.`);
+          const sheetCategoryMapping: Record<string, string> = {
+            "Başlangıç": "ÇORBA ÇEŞİTLERİ",
+            "Ana Yemek": "ANA YEMEK",
+            "Yardımcı": "YARDIMCI",
+            "Tamamlayıcı": "TAMAMLAYICI",
+          };
+
+          const priceMap: Record<string, number> = {
+            "ÇORBA ÇEŞİTLERİ": 135,
+            "ANA YEMEK": 180,
+            "YARDIMCI": 90,
+            "TAMAMLAYICI": 35,
+          };
+
+          let allItems: any[] = [];
+
+          for (const wsname of wb.SheetNames) {
+            if (
+              wsname.toLowerCase().includes("özet") ||
+              wsname.toLowerCase().includes("tüm liste") ||
+              wsname.toLowerCase().includes("tekrarsız")
+            ) {
+              continue;
+            }
+
+            const ws = wb.Sheets[wsname];
+            const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+            const sheetCategory = sheetCategoryMapping[wsname];
+
+            if (!sheetCategory) continue;
+
+            const price = priceMap[sheetCategory];
+
+            for (let i = 1; i < data.length; i++) {
+              const row = data[i];
+              if (!row || !row[1]) continue;
+
+              const name = String(row[1]).trim();
+              if (!name || name.length < 2) continue;
+              if (!isNaN(Number(name))) continue;
+
+              allItems.push({
+                name,
+                category: sheetCategory,
+                price,
+                status: "passive",
+                is_active: true,
+              });
+            }
+          }
+
+          if (allItems.length === 0) {
+            alert("❌ Dosyada geçerli yemek verisi bulunamadı.");
+            setIsImporting(false);
+            setImportProgress("");
+            return;
+          }
+
+          setImportProgress(`${allItems.length} yemek Server'a gönderiliyor...`);
+
+          // Server'a JSON gönder
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData?.session?.access_token;
+
+          const response = await fetch(
+            "https://vruwzmljqfvnerenwzpy.supabase.co/functions/v1/import-menu-excel",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                items: allItems,
+                mode: importMode,
+              }),
+            }
+          );
+
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(result.error || "Import başarısız oldu");
+          }
+
+          setImportProgress("İşlem tamamlandı!");
+
+          const summary = Object.entries(result.imported)
+            .map(([cat, count]) => `${cat}: ${count}`)
+            .join("\n");
+
+          alert(
+            `✅ BAŞARILI!\n\n📊 Yüklenen Yemekler:\n${summary}\n\nToplam: ${result.total}\nDuplikat: ${result.duplicates}\n\nMode: ${result.mode === "replace" ? "Tümünü Değiştir" : "Ekle"}`
+          );
+
+          setImportProgress("");
+          setIsImporting(false);
+          fetchMenu();
+          setActiveTab("POOL");
+        } catch (err) {
+          console.error("Excel parse error:", err);
+          alert(`❌ Hata: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`);
+          setImportProgress("");
+          setIsImporting(false);
         }
-      } catch (err) {
-        console.error("Excel import error:", err);
-        alert("Dosya okunurken bir hata oluştu. Lütfen formatı kontrol edin.");
-      } finally {
-        setIsImporting(false);
-        e.target.value = "";
-      }
-    };
-    reader.readAsBinaryString(file);
+      };
+      reader.readAsBinaryString(file);
+    } catch (error) {
+      console.error("Excel import error:", error);
+      alert(`❌ Hata: ${error instanceof Error ? error.message : "Bilinmeyen hata"}`);
+      setImportProgress("");
+      setIsImporting(false);
+    } finally {
+      e.target.value = "";
+    }
   };
 
   const downloadTemplate = () => {
     const ws_data = [
       ["Yemek Adı", "Kategori", "Fiyat"],
-      ["Mercimek Çorbası", "ÇORBA", "120"],
-      ["İzmir Köfte", "ANA YEMEK", "250"],
-      ["Pilav", "YARDIMCI", "100"],
-      ["Ayran", "İÇECEK", "40"]
+      ["Mercimek Çorbası", "Başlangıç", "120"],
+      ["İzmir Köfte", "Ana Yemek", "250"],
+      ["Pilav", "Yardımcı", "100"],
+      ["Cacık", "Tamamlayıcı", "35"],
+      ["Ayran", "İçecekler", "40"]
     ];
     const ws = XLSX.utils.aoa_to_sheet(ws_data);
     const wb = XLSX.utils.book_new();
@@ -219,6 +340,34 @@ export default function MenuManagement() {
       alert("Fiyatlar güncellendi!");
     } catch (error) {
       console.error("Bulk price update error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClearAllPool = async () => {
+    if (!confirm("⚠️  TÜM YEMEKLERİ SİLECEKSİNİZ!\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?")) return;
+
+    try {
+      setLoading(true);
+      const itemsToDelete = menu.filter(item => item.status !== 'sistem_fiyati');
+      const idsToDelete = itemsToDelete.map(item => item.id);
+
+      if (idsToDelete.length === 0) {
+        alert("Silinecek yemek yok.");
+        setLoading(false);
+        return;
+      }
+
+      // Bulk delete — tüm yemekleri tek API call'da sil
+      await menuService.deleteItemsInBulk(idsToDelete);
+
+      setSelectedIds([]);
+      fetchMenu();
+      alert(`✅ ${itemsToDelete.length} yemek silindi. Havuz sıfırlandı!`);
+    } catch (error: any) {
+      console.error("Clear pool error:", error);
+      alert(`❌ Silme işlemi sırasında hata oluştu.\n\nHata: ${error?.message || error}`);
     } finally {
       setLoading(false);
     }
@@ -442,7 +591,7 @@ export default function MenuManagement() {
                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                   <div className="relative max-w-md w-full">
                       <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                      <input 
+                      <input
                         type="text"
                         placeholder="Havuzda yemek ara..."
                         className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-3xl text-sm focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent shadow-sm transition-all"
@@ -451,22 +600,30 @@ export default function MenuManagement() {
                       />
                   </div>
 
-                  {selectedIds.length > 0 && (
-                    <div className="flex items-center space-x-2 animate-in fade-in zoom-in duration-300">
-                      <button 
-                        onClick={handleBulkPriceUpdate}
-                        className="px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl font-bold text-xs hover:bg-emerald-100 transition-all"
-                      >
-                        Fiyat Güncelle ({selectedIds.length})
-                      </button>
-                      <button 
-                        onClick={handleBulkDelete}
-                        className="px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl font-bold text-xs hover:bg-red-100 transition-all"
-                      >
-                        Seçilenleri Sil
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleClearAllPool}
+                      className="px-4 py-2 bg-red-100 text-red-700 border border-red-300 rounded-xl font-bold text-xs hover:bg-red-200 transition-all"
+                    >
+                      🗑️  HAVUZU TAMAMEN SIFIRLA
+                    </button>
+                    {selectedIds.length > 0 && (
+                      <>
+                        <button
+                          onClick={handleBulkPriceUpdate}
+                          className="px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl font-bold text-xs hover:bg-emerald-100 transition-all"
+                        >
+                          Fiyat Güncelle ({selectedIds.length})
+                        </button>
+                        <button
+                          onClick={handleBulkDelete}
+                          className="px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl font-bold text-xs hover:bg-red-100 transition-all"
+                        >
+                          Seçilenleri Sil
+                        </button>
+                      </>
+                    )}
+                  </div>
                </div>
 
                <div className="space-y-12">
@@ -503,17 +660,24 @@ export default function MenuManagement() {
                                    </div>
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                   <button 
+                                   <button
                                      onClick={() => handleToggleStatus(item.id, "draft")}
                                      className="flex-1 py-3 bg-accent text-white rounded-2xl text-[10px] font-black hover:scale-105 active:scale-95 transition-all shadow-lg shadow-accent/20 uppercase"
                                    >
                                       Günün Menüsüne Ekle
                                    </button>
-                                   <button 
+                                   <button
                                      onClick={() => handleEditClick(item)}
                                      className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:text-accent transition-all border border-slate-100"
                                    >
                                       <Plus size={18} className="rotate-45" />
+                                   </button>
+                                   <button
+                                     onClick={() => handleDelete(item.id)}
+                                     title="Havuzdan Sil"
+                                     className="p-3 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all"
+                                   >
+                                      <Trash2 size={18} />
                                    </button>
                                 </div>
                              </div>
@@ -541,7 +705,7 @@ export default function MenuManagement() {
                         <p className="text-slate-500 mt-1 font-medium">Havuzunuza çok sayıda yemeği aynı anda kaydedebilirsiniz.</p>
                       </div>
                       <div className="flex flex-wrap gap-3">
-                        <button 
+                        <button
                           onClick={downloadTemplate}
                           className="flex items-center space-x-2 px-4 py-2 bg-slate-50 text-slate-600 border border-slate-200 rounded-xl font-bold text-xs hover:bg-slate-100 transition-all"
                         >
@@ -551,16 +715,76 @@ export default function MenuManagement() {
                         <label className="flex items-center space-x-2 px-4 py-2 bg-accent/10 text-accent border border-accent/20 rounded-xl font-bold text-xs hover:bg-accent/20 cursor-pointer transition-all">
                           <Upload size={16} />
                           <span>{isImporting ? 'OKUNUYOR...' : 'EXCEL YÜKLE'}</span>
-                          <input 
-                            type="file" 
-                            className="hidden" 
-                            accept=".xlsx, .xls, .csv"
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept=".xlsx, .xls"
                             onChange={handleImportExcel}
                             disabled={isImporting}
                           />
                         </label>
                       </div>
                    </div>
+
+                   {/* Excel Mode Seçimi */}
+                   {!isImporting && (
+                     <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                       <p className="text-sm font-bold text-blue-900 mb-3">📋 Excel Yükleme Modu:</p>
+                       <div className="flex gap-4">
+                         <label className="flex items-center gap-2 cursor-pointer">
+                           <input
+                             type="radio"
+                             name="importMode"
+                             value="replace"
+                             checked={importMode === "replace"}
+                             onChange={(e) => setImportMode(e.target.value as "replace" | "append")}
+                             className="w-4 h-4"
+                           />
+                           <span className="text-sm font-medium text-blue-900">
+                             🔄 Tümünü Değiştir (eski yemekleri sil, yenisini baştan koy)
+                           </span>
+                         </label>
+                         <label className="flex items-center gap-2 cursor-pointer">
+                           <input
+                             type="radio"
+                             name="importMode"
+                             value="append"
+                             checked={importMode === "append"}
+                             onChange={(e) => setImportMode(e.target.value as "replace" | "append")}
+                             className="w-4 h-4"
+                           />
+                           <span className="text-sm font-medium text-blue-900">
+                             ➕ Ekle (yeni yemekleri ekle, eski kalabilir)
+                           </span>
+                         </label>
+                       </div>
+                     </div>
+                   )}
+
+                   {/* Import Progress */}
+                   {isImporting && importProgress && (
+                     <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                       <p className="text-sm font-bold text-amber-900 mb-2">⏳ {importProgress}</p>
+                       <div className="w-full bg-amber-200 rounded-full h-2">
+                         <div className="bg-amber-500 h-2 rounded-full w-1/3 animate-pulse" />
+                       </div>
+                     </div>
+                   )}
+
+                  {/* Havuzu Sıfırla Checkbox */}
+                  {bulkItems.some(i => i.id.startsWith('excel-')) && (
+                    <label className="flex items-center gap-3 p-4 bg-orange-50 border border-orange-200 rounded-xl cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={clearPoolBeforeImport}
+                        onChange={(e) => setClearPoolBeforeImport(e.target.checked)}
+                        className="w-4 h-4 cursor-pointer"
+                      />
+                      <span className="text-sm font-bold text-orange-700">
+                        Excel yüklemeden önce havuzu tamamen sıfırla (tüm mevcut yemekleri sil)
+                      </span>
+                    </label>
+                  )}
 
                   <div className="space-y-4">
                     {bulkItems.map((item, index) => (

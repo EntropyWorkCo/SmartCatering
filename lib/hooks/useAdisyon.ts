@@ -51,10 +51,22 @@ export const useAdisyon = (userId?: string, onNewOrder?: (payload: any) => void)
         "postgres_changes",
         channelConf,
         (payload) => {
-          if (payload.eventType === 'INSERT' && !userId && onNewOrder) {
-            onNewOrder(payload.new);
+          if (payload.eventType === 'INSERT') {
+            // Yeni sipariş geldi → listeye ekle ve callback'i tetikle
+            if (!userId && onNewOrder) {
+              onNewOrder(payload.new);
+            }
+            fetchOrders(); // Yeni kayıt için join'li veri gerekiyor, fetch şart
+          } else if (payload.eventType === 'UPDATE') {
+            // Durum değişikliği → sadece o siparişi local state'te güncelle, DB'ye gitme
+            const updatedOrder = payload.new as any;
+            setOrders(prev =>
+              prev.map(o => o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o)
+            );
+          } else if (payload.eventType === 'DELETE') {
+            // Silindi → listeden çıkar
+            setOrders(prev => prev.filter(o => o.id !== (payload.old as any).id));
           }
-          fetchOrders();
         },
       )
       .subscribe();

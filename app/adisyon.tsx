@@ -4,7 +4,6 @@ import React, { useMemo } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -67,7 +66,6 @@ export default function AdisyonScreen() {
                 <View style={{ flex: 1 }}>
                     <Text style={styles.title}>Adisyonum</Text>
                 </View>
-                <ThemeSwitcher />
             </View>
 
             <View style={styles.filterContainer}>

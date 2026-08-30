@@ -1,21 +1,28 @@
 import Constants from "expo-constants";
+import { Platform } from "react-native";
 import { supabase } from "../supabase";
 
-const isExpoGo = Constants.appOwnership === 'expo';
+// executionEnvironment değerleri:
+//   'storeClient'  → Expo Go uygulaması
+//   'standalone'   → App Store / production build
+//   'bare'         → expo run:ios / development build
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
+const isProductionBuild = Constants.executionEnvironment === 'standalone';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Edge Function helper — sunucu tarafı push gönderimi (background/killed safe)
 // ─────────────────────────────────────────────────────────────────────────────
-type NotificationType = "NEW_ORDER" | "ORDER_STATUS" | "RATING_REQUEST" | "DAILY_MENU";
+type NotificationType = "NEW_ORDER" | "ORDER_STATUS" | "RATING_REQUEST" | "DAILY_MENU" | "MEAL_REMINDER";
 
 interface EdgeNotificationOptions {
   type: NotificationType;
   title: string;
   body: string;
   data?: Record<string, any>;
-  userId?: string;      // Belirli bir kullanıcıya
-  adminOnly?: boolean;  // Sadece admin(ler)e
-  broadcast?: boolean;  // Herkese
+  userId?: string;       // Belirli bir kullanıcıya
+  userIds?: string[];    // Birden fazla kullanıcıya
+  adminOnly?: boolean;   // Sadece admin(ler)e
+  broadcast?: boolean;   // Herkese
   excludeUserId?: string; // Bu userId'yi hariç tut (örn: sipariş veren kendisiyse)
 }
 
@@ -27,7 +34,9 @@ export const notificationService = {
   async sendViaEdgeFunction(options: EdgeNotificationOptions): Promise<void> {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
+      // access_token yoksa (session henüz yüklenmediyse) anon key ile devam et
+      const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZydXd6bWxqcWZ2bmVyZW53enB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNjgwNjIsImV4cCI6MjA4Njg0NDA2Mn0.DyFBoBjHhvd67xwiR0YTHu_bkHR3-klsRu36EFq0hSE";
+      const token = sessionData?.session?.access_token ?? ANON_KEY;
 
       const supabaseUrl = "https://vruwzmljqfvnerenwzpy.supabase.co";
 
@@ -182,7 +191,7 @@ export const notificationService = {
    */
   async registerForPushNotificationsAsync() {
     const { Platform } = require("react-native");
-    const isAndroidExpoGo = Platform.OS === 'android' && Constants.appOwnership === 'expo';
+    const isAndroidExpoGo = Platform.OS === 'android' && Constants.executionEnvironment === 'storeClient';
 
     if (isAndroidExpoGo) {
       console.log("Skipping push registration on Android Expo Go (Not supported on SDK 53+)");
@@ -209,30 +218,45 @@ export const notificationService = {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
     if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
+      // iOS için tüm izin türleri açıkça isteniyor
+      const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+          allowCriticalAlerts: false,
+          provideAppNotificationSettings: false,
+          allowProvisional: false,
+        },
+      });
       finalStatus = status;
     }
-    
+
     if (finalStatus !== 'granted') {
       console.warn('Bildirim izni verilmedi (push token alınamayacak)');
       return null;
     }
 
     try {
-      const projectId = 
-        Constants?.expoConfig?.extra?.eas?.projectId ?? 
-        Constants?.easConfig?.projectId ?? 
-        "de0c5b9d-8af0-44b2-8441-3be30b372aa0"; // Fallback from app.json
+      const projectId =
+        Constants?.expoConfig?.extra?.eas?.projectId ??
+        Constants?.easConfig?.projectId ??
+        "de0c5b9d-8af0-44b2-8441-3be30b372aa0";
 
       if (!projectId) {
         console.warn("DİKKAT: ProjectId çekilemedi. Expo Push Token oluşturulamıyor.");
         return null;
       }
 
-      token = (await Notifications.getExpoPushTokenAsync({
-        projectId,
-      })).data;
+      // iOS için devicePushToken (APNs) yerine Expo Push Token kullanıyoruz
+      const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+      token = tokenData.data;
       console.log("Başarıyla alınan Push Token:", token);
+
+      // iOS'ta badge sayacını sıfırla
+      if (Platform.OS === 'ios') {
+        await Notifications.setBadgeCountAsync(0);
+      }
     } catch (e) {
       console.error("Expo Push Token hatası:", e);
     }

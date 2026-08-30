@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { 
-  User, 
+import {
+  User,
   Shield, 
   Bell, 
   Save,

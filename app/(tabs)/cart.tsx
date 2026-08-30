@@ -1,4 +1,3 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useCartStore } from "@/lib/store/cartStore";
 import { useResolvedTheme } from "@/lib/store/themeStore";
@@ -28,9 +27,9 @@ export default function CartScreen() {
     const { items, removeItem, clearCart, getTotal, addItem, decrementItem } = useCartStore();
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
-    const { user, isAdmin } = useAuth();
-    const { profile } = useProfile(user?.id);
-    const isCompany = profile?.is_company || false;
+    const { user, loading: authLoading } = useAuth();
+    const { profile, loading: profileLoading } = useProfile(user?.id);
+    const isCompany = !!(profile?.is_company || profile?.company_id);
 
     const theme = useResolvedTheme();
     const colors = Colors[theme];
@@ -99,7 +98,7 @@ export default function CartScreen() {
 
         Alert.alert(
             "Siparişi Onayla",
-            `${isCompany ? '' : `${getTotal()}₺ tutarındaki `}siparişinizi onaylıyor musunuz?\nSipariş Türü: ${orderType}`,
+            `${profileLoading || isCompany ? '' : `${getTotal()}₺ tutarındaki `}siparişinizi onaylıyor musunuz?\nSipariş Türü: ${orderType}`,
             [
                 { text: "İptal", style: "cancel" },
                 {
@@ -161,7 +160,6 @@ export default function CartScreen() {
                     <Text style={styles.title}>Sepetim</Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <ThemeSwitcher />
                     {items.length > 0 && (
                         <TouchableOpacity onPress={handleClearCart} style={styles.clearBtn}>
                             <MaterialIcons name="delete-sweep" size={24} color={colors.danger} />
@@ -170,7 +168,7 @@ export default function CartScreen() {
                 </View>
             </View>
 
-            <ScrollView contentContainerStyle={styles.listContainer} showsVerticalScrollIndicator={false}>
+            <ScrollView contentContainerStyle={styles.listContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 {items.length === 0 ? (
                     <View style={styles.emptyState}>
                         <MaterialIcons name="remove-shopping-cart" size={64} color={colors.tabIconDefault} />
@@ -194,7 +192,7 @@ export default function CartScreen() {
                                     </View>
                                 )}
                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-                                    {!isCompany && <Text style={[styles.itemPrice, { marginRight: 16 }]}>{item.price} ₺</Text>}
+                                    {!profileLoading && !isCompany && <Text style={[styles.itemPrice, { marginRight: 16 }]}>{item.price} ₺</Text>}
                                     <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: 8, padding: 4, gap: 12, borderWidth: 1, borderColor: colors.surfaceBorder }}>
                                         <TouchableOpacity 
                                             onPress={() => decrementItem(item.menu_item_id)} 
@@ -211,7 +209,7 @@ export default function CartScreen() {
                                 </View>
                             </View>
                             <View style={styles.itemActions}>
-                                {isCompany ? null : <Text style={styles.itemTotal}>{item.price * item.quantity} ₺</Text>}
+                                {!profileLoading && !isCompany && <Text style={styles.itemTotal}>{item.price * item.quantity} ₺</Text>}
                                 <TouchableOpacity onPress={() => removeItem(item.id)} style={styles.removeBtn}>
                                     <MaterialIcons name="close" size={20} color={colors.danger} />
                                 </TouchableOpacity>
@@ -219,77 +217,72 @@ export default function CartScreen() {
                         </View>
                     ))
                 )}
-            </ScrollView>
 
-            {items.length > 0 && (
-                <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
-                    <View style={styles.noteContainer}>
-                        {orderType === "Sipariş Ver" && (
-                            <>
-                                <Text style={[styles.orderTypeLabel, { marginBottom: 8 }]}>Teslimat Adresi:</Text>
-                                <TextInput
-                                    style={[styles.noteInput, { minHeight: 48, marginBottom: 12 }]}
-                                    placeholder="Açık adres, bina, kat, daire giriniz..."
-                                    placeholderTextColor={colors.muted}
-                                    value={address}
-                                    onChangeText={setAddress}
-                                    multiline
-                                />
-                                <Text style={[styles.orderTypeLabel, { marginBottom: 8 }]}>İletişim Telefonu:</Text>
-                                <TextInput
-                                    style={[styles.noteInput, { minHeight: 48, marginBottom: 16 }]}
-                                    placeholder="5XX XXX XX XX"
-                                    placeholderTextColor={colors.muted}
-                                    value={phone}
-                                    onChangeText={setPhone}
-                                    keyboardType="phone-pad"
-                                />
-                            </>
-                        )}
-
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                            <Text style={[styles.orderTypeLabel, { marginBottom: 0 }]}>Sipariş Notu (Opsiyonel):</Text>
-                            <TouchableOpacity 
+                {items.length > 0 && (
+                    <View style={[styles.footer, { paddingBottom: insets.bottom + 20, marginTop: 8 }]}>
+                        <View style={{ height: 1, backgroundColor: colors.surfaceBorder, marginBottom: 20 }} />
+                        <View style={styles.noteContainer}>
+                            {orderType === "Sipariş Ver" && (
+                                <>
+                                    <Text style={[styles.orderTypeLabel, { marginBottom: 8 }]}>Teslimat Adresi:</Text>
+                                    <TextInput
+                                        style={[styles.noteInput, { minHeight: 48, marginBottom: 12 }]}
+                                        placeholder="Açık adres, bina, kat, daire giriniz..."
+                                        placeholderTextColor={colors.muted}
+                                        value={address}
+                                        onChangeText={setAddress}
+                                        multiline
+                                    />
+                                    <Text style={[styles.orderTypeLabel, { marginBottom: 8 }]}>İletişim Telefonu:</Text>
+                                    <TextInput
+                                        style={[styles.noteInput, { minHeight: 48, marginBottom: 16 }]}
+                                        placeholder="5XX XXX XX XX"
+                                        placeholderTextColor={colors.muted}
+                                        value={phone}
+                                        onChangeText={setPhone}
+                                        keyboardType="phone-pad"
+                                    />
+                                </>
+                            )}
+                            <TouchableOpacity
                                 onPress={() => setHasGuest(!hasGuest)}
                                 activeOpacity={0.7}
                                 style={{
-                                    flexDirection: 'row', alignItems: 'center', gap: 6,
-                                    backgroundColor: hasGuest ? colors.primary + '15' : 'transparent',
-                                    paddingHorizontal: 12, paddingVertical: 6,
-                                    borderRadius: 12, borderWidth: 1, borderColor: hasGuest ? colors.primary : colors.surfaceBorder
+                                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                                    backgroundColor: hasGuest ? colors.primary + '15' : colors.surface,
+                                    paddingHorizontal: 14, paddingVertical: 10,
+                                    borderRadius: 12, borderWidth: 1, borderColor: hasGuest ? colors.primary : colors.surfaceBorder,
+                                    marginBottom: 16, alignSelf: 'flex-start'
                                 }}>
-                                <MaterialIcons name={hasGuest ? "check-box" : "check-box-outline-blank"} size={18} color={hasGuest ? colors.primary : colors.muted} />
-                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: hasGuest ? colors.primary : colors.text }}>Misafirim Var</Text>
+                                <MaterialIcons name={hasGuest ? "check-box" : "check-box-outline-blank"} size={20} color={hasGuest ? colors.primary : colors.muted} />
+                                <Text style={{ fontSize: 13, fontWeight: 'bold', color: hasGuest ? colors.primary : colors.text }}>Misafirim Var</Text>
                             </TouchableOpacity>
+                            <Text style={[styles.orderTypeLabel, { marginBottom: 8 }]}>Sipariş Notu (Opsiyonel):</Text>
+                            <TextInput
+                                style={styles.noteInput}
+                                placeholder="Örn: Bol acılı olsun..."
+                                placeholderTextColor={colors.muted}
+                                value={orderNote}
+                                onChangeText={setOrderNote}
+                                multiline
+                            />
                         </View>
-                        <TextInput
-                            style={styles.noteInput}
-                            placeholder="Örn: Bol acılı olsun..."
-                            placeholderTextColor={colors.muted}
-                            value={orderNote}
-                            onChangeText={setOrderNote}
-                            multiline
-                        />
+                        <View style={styles.totalContainer}>
+                            <Text style={styles.totalText}>Toplam</Text>
+                            <Text style={styles.totalAmount}>{profileLoading || isCompany ? "-" : `${getTotal()} ₺`}</Text>
+                        </View>
+                        <TouchableOpacity
+                            style={[styles.checkoutBtn, isSubmitting && { opacity: 0.7 }]}
+                            onPress={handleCheckout}
+                            disabled={isSubmitting}
+                        >
+                            <Text style={styles.checkoutBtnText}>
+                                {isSubmitting ? "Sipariş Alınıyor..." : "Siparişi Onayla"}
+                            </Text>
+                        </TouchableOpacity>
                     </View>
-
-
-
-                    <View style={styles.totalContainer}>
-                        <Text style={styles.totalText}>Toplam</Text>
-                        <Text style={styles.totalAmount}>{isCompany ? "-" : `${getTotal()} ₺`}</Text>
-                    </View>
-
-                    <TouchableOpacity
-                        style={[styles.checkoutBtn, isSubmitting && { opacity: 0.7 }]}
-                        onPress={handleCheckout}
-                        disabled={isSubmitting}
-                    >
-                        <Text style={styles.checkoutBtnText}>
-                            {isSubmitting ? "Sipariş Alınıyor..." : "Siparişi Onayla"}
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-            )}
+                )}
+            </ScrollView>
         </View>
         </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
@@ -315,7 +308,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     },
     listContainer: {
         padding: 24,
-        paddingBottom: 40,
+        paddingBottom: 60,
         flexGrow: 1,
     },
     emptyState: {

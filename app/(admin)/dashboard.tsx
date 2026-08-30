@@ -1,10 +1,8 @@
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAdisyon } from "@/lib/hooks/useAdisyon";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import * as Notifications from 'expo-notifications';
 import React, { useMemo, useState, useCallback, useEffect } from "react";
 import {
   ActivityIndicator,
@@ -78,7 +76,6 @@ export default function AdminDashboard() {
           <Text style={styles.title}>Canlı Siparişler</Text>
           <Text style={styles.subtitle}>SADECE AKTİF PAKET SİPARİŞLERİ</Text>
         </View>
-        <ThemeSwitcher />
       </View>
 
       <View style={styles.quickActions}>

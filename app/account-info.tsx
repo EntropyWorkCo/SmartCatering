@@ -4,7 +4,6 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfile } from "@/lib/hooks/useProfile";
@@ -180,7 +179,6 @@ export default function AccountInfoScreen() {
                 <View style={{ flex: 1 }}>
                     <Text style={styles.title}>Hesap Bilgilerim</Text>
                 </View>
-                <ThemeSwitcher />
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

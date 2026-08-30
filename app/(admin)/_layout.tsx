@@ -131,8 +131,11 @@ export default function AdminLayout() { //Admin panelindeki tüm sayfaların lay
             <Tabs.Screen name="reports" options={{ href: null }} />
             <Tabs.Screen name="unit-price" options={{ href: null }} />
             <Tabs.Screen name="summary" options={{ href: null }} />
+            <Tabs.Screen name="summary_test_head" options={{ href: null }} />
             <Tabs.Screen name="change-code" options={{ href: null }} />
             <Tabs.Screen name="ekstre-list" options={{ href: null }} />
+            <Tabs.Screen name="month-close" options={{ href: null }} />
+            <Tabs.Screen name="PreviewModalBody" options={{ href: null }} />
         </Tabs>
     );
 }

@@ -1,5 +1,4 @@
 import Logo from "@/components/Logo";
-import ThemeSwitcher from "@/components/ThemeSwitcher";
 import Colors from "@/constants/Colors";
 import { useResolvedTheme } from "@/lib/store/themeStore";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -16,9 +15,6 @@ export default function WelcomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.topBar}>
-        <ThemeSwitcher />
-      </View>
       <View style={styles.content}>
         <View style={styles.header}>
           <Logo size="large" style={{ marginBottom: 10 }} />

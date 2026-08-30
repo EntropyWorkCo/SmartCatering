@@ -95,9 +95,25 @@ export const userService = {
         .eq("user_id", userId);
 
       if (error) throw error;
+
+      // Firma adresi değiştiyse tüm çalışanların adresini de güncelle
+      if (data.invoiceAddress) {
+        try {
+          await supabase
+            .from("users")
+            .update({ address: data.invoiceAddress } as any)
+            .eq("company_id", existingCompany.id)
+            .neq("role", "owner")
+            .neq("role", "deleted");
+          console.log("✅ Çalışan adresleri firma adresiyle senkronize edildi.");
+        } catch (e) {
+          // Kritik değil — firma bilgisi yine de kaydedildi
+          console.warn("Çalışan adresi senkronizasyon hatası (kritik değil):", e);
+        }
+      }
     } else {
       // Şirket kaydı yoksa yeni bir tane oluştur
-      const { error } = await supabase
+      const { data: newCompany, error } = await supabase
         .from("companies")
         .insert({
           user_id: userId,
@@ -105,9 +121,14 @@ export const userService = {
           tax_number: data.taxNumber,
           company_phone: data.companyPhone,
           address: data.invoiceAddress,
-        });
+        })
+        .select("id")
+        .single();
 
       if (error) throw error;
+
+      // Yeni firma kuruldu — şu an hiç çalışan yok ama ileride eklenebilir (addEmployee zaten halleder)
+      console.log("✅ Yeni firma oluşturuldu:", newCompany?.id);
     }
 
     // KRİTİK: Kullanıcıyı kurumsal olarak işaretle (is_company flag'ini güncelle)
@@ -155,13 +176,16 @@ export const userService = {
   },
 
   async updatePushToken(userId: string, token: string) {
-    const { error } = await supabase
-      .from("users")
-      .update({ push_token: token })
-      .eq("id", userId);
+    // claim_push_token RPC'si (security definer):
+    // 1. Token'ı daha önce kullanmış diğer hesaplardan siler (RLS'e takılmaz —
+    //    eski istemci tarafı "ghost token fix" RLS yüzünden sessizce çalışmıyordu)
+    // 2. Token'ı auth.uid() (şu anki kullanıcı) hesabına atar
+    const { error } = await supabase.rpc("claim_push_token", {
+      p_token: token,
+    });
 
     if (error) {
-      console.error("Error updating push token:", error);
+      console.error("Error updating push token (claim_push_token):", error);
       throw error;
     }
   },
@@ -178,14 +202,28 @@ export const userService = {
 
     if (userError) throw userError;
 
-    // 2. Şirket bilgisini sil (veya tutmak istersen silme, ama genellikle temizlenir)
-    const { error: companyError } = await supabase
+    // 2. Şirket kaydını SOFT DELETE: Gerçek silme YOK.
+    // company_name başına [ARŞİV] eklenerek işaretlenir.
+    // Böylece geçmiş adisyon/borç kayıtları company_id referansını korur, veri kaybolmaz.
+    const { data: existingCompany } = await supabase
       .from("companies")
-      .delete()
-      .eq("user_id", userId);
+      .select("id, company_name")
+      .eq("user_id", userId)
+      .maybeSingle();
 
-    if (companyError) {
-      console.error("Şirket silinirken hata (downgrade):", companyError);
+    if (existingCompany) {
+      const archivedName = existingCompany.company_name?.startsWith('[ARŞİV]')
+        ? existingCompany.company_name
+        : `[ARŞİV] ${existingCompany.company_name}`;
+
+      const { error: archiveError } = await supabase
+        .from("companies")
+        .update({ company_name: archivedName })
+        .eq("id", existingCompany.id);
+
+      if (archiveError) {
+        console.error("Şirket arşivlenirken hata (downgrade):", archiveError);
+      }
     }
   },
 

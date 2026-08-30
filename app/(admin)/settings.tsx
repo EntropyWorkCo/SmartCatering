@@ -63,6 +63,20 @@ export default function AdminSettings() {
                         styles={styles}
                     />
                     <SettingsBtn
+                        icon="receipt-long"
+                        label="Firma Ekstre Yönetimi"
+                        onPress={() => router.push("/(admin)/ekstre-list")}
+                        colors={colors}
+                        styles={styles}
+                    />
+                    <SettingsBtn
+                        icon="lock-clock"
+                        label="Ay Kapanışı"
+                        onPress={() => router.push("/(admin)/month-close" as any)}
+                        colors={colors}
+                        styles={styles}
+                    />
+                    <SettingsBtn
                         icon="admin-panel-settings"
                         label="Giriş Kodunu Değiştir"
                         onPress={() => router.push("/(admin)/change-code")}
@@ -82,15 +96,15 @@ export default function AdminSettings() {
     );
 }
 
-const SettingsBtn = ({ icon, label, onPress, colors, styles }: any) => (
-    <TouchableOpacity style={styles.settingsBtn} onPress={onPress} activeOpacity={0.7}>
+const SettingsBtn = ({ icon, label, onPress, colors, styles, accent }: any) => (
+    <TouchableOpacity style={[styles.settingsBtn, accent && { backgroundColor: "#f5f3ff" }]} onPress={onPress} activeOpacity={0.7}>
         <View style={styles.settingsBtnLeft}>
-            <View style={styles.settingsBtnIcon}>
-                <MaterialIcons name={icon} size={20} color={colors.primary} />
+            <View style={[styles.settingsBtnIcon, accent && { backgroundColor: "#ede9fe" }]}>
+                <MaterialIcons name={icon} size={20} color={accent ? "#7c3aed" : colors.primary} />
             </View>
-            <Text style={styles.settingsBtnLabel}>{label}</Text>
+            <Text style={[styles.settingsBtnLabel, accent && { color: "#7c3aed" }]}>{label}</Text>
         </View>
-        <MaterialIcons name="chevron-right" size={24} color={colors.muted} />
+        <MaterialIcons name="chevron-right" size={24} color={accent ? "#7c3aed" : colors.muted} />
     </TouchableOpacity>
 );
 

@@ -59,11 +59,17 @@ export const adisyonService = {
     return data || [];
   },
 
-  async getAllOrders() {
+  async getAllOrders(options?: { daysBack?: number; limit?: number }) {
+    const { daysBack = 90, limit = 500 } = options || {};
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+
     const { data: orders, error: ordersError } = await supabase
       .from("adisyon")
       .select("*, adisyon_items(*, menu_items(name)), users(*)")
-      .order("created_at", { ascending: false });
+      .gte("created_at", cutoffDate.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
     if (ordersError) throw ordersError;
 
@@ -73,8 +79,8 @@ export const adisyonService = {
 
     return (orders || []).map((order: any) => {
       const user = order.users?.[0] || order.users;
-      
-      // Find company: 
+
+      // Find company:
       // 1. By company_id (employee)
       // 2. By user_id (owner)
       const company = companies?.find(c => c.id === user?.company_id || c.user_id === user?.id);
@@ -157,12 +163,70 @@ export const adisyonService = {
   },
 
   async clearUserDebt(userId: string) {
+    // 1. Ödenmemiş gerçek siparişleri bul (MANUAL_PAYMENT HARİÇ)
+    const { data: unpaidOrders, error: fetchError } = await supabase
+      .from("adisyon")
+      .select("id, total_amount")
+      .eq("user_id", userId)
+      .not("status", "in", '("CANCELLED","İptal","PAID","Ödendi")')
+      .not("order_type", "eq", "MANUAL_PAYMENT");
+
+    if (fetchError) {
+      console.error("clearUserDebt fetch error:", fetchError);
+      throw fetchError;
+    }
+
+    const orderTotal = (unpaidOrders || []).reduce((s: number, o: any) => s + (o.total_amount || 0), 0);
+
+    // 2. Mevcut bekleyen kısmi ödemeleri bul (bunlar zaten alınmış para)
+    const { data: pendingPayments } = await supabase
+      .from("adisyon")
+      .select("total_amount")
+      .eq("user_id", userId)
+      .eq("order_type", "MANUAL_PAYMENT")
+      .not("status", "in", '("CANCELLED","PAID","Ödendi")');
+
+    const alreadyPaid = (pendingPayments || []).reduce((s: number, p: any) => s + (p.total_amount || 0), 0);
+
+    // 3. Gerçek siparişleri PAID yap (MANUAL_PAYMENT'lara dokunma)
     const { error } = await supabase
       .from("adisyon")
       .update({ status: "PAID", paid_at: new Date().toISOString() })
       .eq("user_id", userId)
-      .not("status", "in", '("CANCELLED","İptal","PAID","Ödendi","COMPLETED","Tamamlandı")');
-    if (error) throw error;
+      .not("status", "in", '("CANCELLED","İptal","PAID","Ödendi")')
+      .not("order_type", "eq", "MANUAL_PAYMENT");
+
+    if (error) {
+      console.error("clearUserDebt error:", error);
+      throw error;
+    }
+
+    // 4. Bekleyen kısmi ödemeleri de PAID yap (artık settled)
+    await supabase
+      .from("adisyon")
+      .update({ status: "PAID", paid_at: new Date().toISOString() })
+      .eq("user_id", userId)
+      .eq("order_type", "MANUAL_PAYMENT")
+      .not("status", "in", '("CANCELLED","PAID","Ödendi")');
+
+    // 5. Net yeni MANUAL_PAYMENT kaydı ekle (siparişler - zaten alınan kısmi ödeme)
+    const newPaymentAmount = Math.max(0, orderTotal - alreadyPaid);
+    if (newPaymentAmount > 0) {
+      const { error: paymentError } = await supabase
+        .from("adisyon")
+        .insert({
+          user_id: userId,
+          total_amount: newPaymentAmount,
+          status: "PAID",
+          order_type: "MANUAL_PAYMENT",
+          note: "Borç Ödemesi",
+          paid_at: new Date().toISOString(),
+        });
+
+      if (paymentError) {
+        console.warn("clearUserDebt MANUAL_PAYMENT insert error:", paymentError);
+      }
+    }
   },
 
   async getCompanyOrders(companyId: string) {
