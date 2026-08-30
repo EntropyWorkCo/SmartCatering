@@ -9,11 +9,14 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.entropywork.smartcatering",
+      "bundleIdentifier": "com.entropy.smartcatering",
       "buildNumber": "9",
       "googleServicesFile": "./GoogleService-Info.plist",
       "entitlements": {
         "aps-environment": "production"
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -23,7 +26,10 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.entropywork.smartcatering",
-      "versionCode": 9
+      "versionCode": 9,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",

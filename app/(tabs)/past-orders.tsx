@@ -19,7 +19,7 @@ export default function PastOrdersScreen() {
 
     const { user, loading: authLoading } = useAuth();
     const { profile, loading: profileLoading } = useProfile(user?.id);
-    const isCompany = profile?.is_company || false;
+    const isCompany = !!(profile?.is_company || profile?.company_id);
 
     // EĞER KULLANICI HENÜZ YÜKLENMEDİYSE null GÖNDER Kİ ADMİN MODU TETİKLENMESİN
     // Supabase uuid beklediği için standart boş uuid gönderiyoruz

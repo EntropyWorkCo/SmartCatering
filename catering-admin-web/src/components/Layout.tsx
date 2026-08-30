@@ -12,7 +12,8 @@ import {
   Sun, 
   Moon,
   Clock,
-  ChevronRight
+  ChevronRight,
+  CalendarRange
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { adisyonService } from "../lib/services/adisyonService";
@@ -174,6 +175,7 @@ export default function Layout() {
     { path: "/customers", label: "Müşteriler", icon: Users },
     { path: "/reports", label: "Özetler ve Borçlar", icon: BarChart3 },
     { path: "/messages", label: "Mesajlar", icon: MessageSquare },
+    { path: "/month-close", label: "Ay Kapanışı", icon: CalendarRange },
     { path: "/settings", label: "Ayarlar", icon: Settings },
   ];
 

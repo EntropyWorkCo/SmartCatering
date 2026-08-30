@@ -5,7 +5,7 @@ export const feedbackService = {
   async submitFeedback(userId: string, rating: number, comment?: string) {
     const { data, error } = await supabase
       .from("feedbacks")
-      .insert([{ user_id: userId, rating, comment }])
+      .insert([{ user_id: userId, rating, note: comment }])
       .select();
 
     if (error) throw error;

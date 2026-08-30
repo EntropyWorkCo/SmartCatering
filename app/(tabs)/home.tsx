@@ -77,7 +77,7 @@ export default function HomeScreen() {
   const [companyOrdersLoading, setCompanyOrdersLoading] = React.useState(false);
   const hasAlertedMenuRef = useRef(false);
 
-  const isCompany = profile?.is_company || false;
+  const isCompany = !!(profile?.is_company || profile?.company_id);
   const isCompanyOwner = !!profile?.corporate_info;
   const actualCompanyId = profile?.company_id || profile?.corporate_info?.id; 
 

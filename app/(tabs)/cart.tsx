@@ -29,7 +29,7 @@ export default function CartScreen() {
     const navigation = useNavigation();
     const { user, loading: authLoading } = useAuth();
     const { profile, loading: profileLoading } = useProfile(user?.id);
-    const isCompany = profile?.is_company || false;
+    const isCompany = !!(profile?.is_company || profile?.company_id);
 
     const theme = useResolvedTheme();
     const colors = Colors[theme];

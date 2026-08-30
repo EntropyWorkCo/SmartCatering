@@ -45,7 +45,7 @@ export default function MenuScreen() {
       refresh();
     }, [user?.id])
   );
-  const isCompany = profile?.is_company || false;
+  const isCompany = !!(profile?.is_company || profile?.company_id);
 
   const TABLDOT_PACKAGES = systemPrices
     .filter(p => p.category === "TABLDOT")

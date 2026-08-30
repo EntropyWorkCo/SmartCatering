@@ -9,6 +9,7 @@ import Customers from "./pages/Customers";
 import Messages from "./pages/Messages";
 import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
+import MonthClose from "./pages/MonthClose";
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
             <Route path="customers" element={<Customers />} />
             <Route path="messages" element={<Messages />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="month-close" element={<MonthClose />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Route>
