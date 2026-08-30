@@ -245,7 +245,13 @@ function SalesView({ onBack, orders }: any) {
       )
         return false;
 
-      const orderDate = new Date(o.created_at);
+      const getDebtEffectiveDate = (order: any): Date => {
+        const match = (order.note || '').match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+        if (match) return new Date(parseInt(match[3]), parseInt(match[2]) - 1, parseInt(match[1]));
+        return new Date(order.created_at);
+      };
+
+      const orderDate = getDebtEffectiveDate(o);
 
       if (period === "DAILY") {
         const d = new Date(selectedDate);
@@ -454,13 +460,10 @@ function SalesView({ onBack, orders }: any) {
                 <th className="pb-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">
                   Tutar
                 </th>
-                <th className="pb-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  Durum
-                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-              {currentStats.filteredOrders.slice(0, 50).map((o: any) => (
+              {stats.filteredOrders.map((o: any) => (
                 <tr key={o.id}>
                   <td className="py-3 text-xs font-bold text-slate-600 dark:text-slate-400">
                     {new Date(o.created_at).toLocaleDateString("tr-TR")}
@@ -480,15 +483,12 @@ function SalesView({ onBack, orders }: any) {
                   <td className="py-3 text-right text-xs font-black text-slate-900 dark:text-white">
                     ₺{o.total_amount?.toLocaleString("tr-TR")}
                   </td>
-                  <td className="py-3 text-right text-[10px] font-black text-accent uppercase tracking-wider">
-                    {getStatusLabel(o.status)}
-                  </td>
                 </tr>
               ))}
               {stats.filteredOrders.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={4}
                     className="py-12 text-center text-slate-400 text-sm font-bold"
                   >
                     Bu dönemde satış bulunmuyor.
@@ -795,7 +795,7 @@ function DebtsView({ onBack, setOrders }: any) {
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [accountHistory, setAccountHistory] = useState<any[]>([]);
 
-  // Ekstre Modalı
+  // Ekstre Modalı (Kurumsal + Bireysel)
   const [ekstreModalVisible, setEkstreModalVisible] = useState(false);
   const [ekstreTargetGroup, setEkstreTargetGroup] = useState<any>(null);
   const [ekstreStartDate, setEkstreStartDate] = useState("");
@@ -966,6 +966,7 @@ function DebtsView({ onBack, setOrders }: any) {
     }
   };
 
+
   const handlePayment = async () => {
     if (!selectedAccount || !newAmount) return;
     try {
@@ -1035,12 +1036,23 @@ function DebtsView({ onBack, setOrders }: any) {
     if (!ekstreTargetGroup) return;
     try {
       setProcessing(true);
-      const data = await ekstreService.getEkstreVerisi(
-        ekstreTargetGroup.companyId,
-        ekstreStartDate,
-        ekstreEndDate,
-      );
-
+      let data;
+      if (ekstreTargetGroup.isBireysel) {
+        // Bireysel müşteri
+        data = await ekstreService.getEkstreVerisiForUser(
+          ekstreTargetGroup.userId,
+          ekstreStartDate,
+          ekstreEndDate,
+          ekstreTargetGroup.balance,
+        );
+      } else {
+        // Kurumsal firma
+        data = await ekstreService.getEkstreVerisi(
+          ekstreTargetGroup.companyId,
+          ekstreStartDate,
+          ekstreEndDate,
+        );
+      }
       pdfService.generateHesapEkstresi(data);
       setEkstreModalVisible(false);
     } catch (err: any) {
@@ -1232,6 +1244,13 @@ function DebtsView({ onBack, setOrders }: any) {
                             title="İşlem Geçmişi"
                           >
                             <Clock size={16} />
+                          </button>
+                          <button
+                            onClick={() => openEkstreModal({ isBireysel: true, userId: c.id, name: c.name, balance: c.balance })}
+                            className="px-4 py-2 bg-slate-50 text-slate-600 rounded-xl hover:bg-slate-900 hover:text-white transition-all text-[11px] font-black uppercase tracking-wider flex items-center gap-2 border border-slate-200 shadow-sm"
+                          >
+                            <Download size={14} />
+                            <span>DÖKÜM</span>
                           </button>
                           <button
                             onClick={() => {
@@ -1446,8 +1465,8 @@ function DebtsView({ onBack, setOrders }: any) {
         </div>
       )}
 
-      {/* Ekstre İndirme Modalı */}
       {ekstreModalVisible && ekstreTargetGroup && (
+
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-300">
             <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
