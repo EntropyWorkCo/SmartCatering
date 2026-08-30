@@ -4,8 +4,10 @@ import {
     Calendar,
     ChevronDown,
     ChevronUp,
+    CreditCard,
     Download,
     Loader2,
+    RotateCcw,
     Search,
     User as UserIcon,
     X,
@@ -13,6 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
+import { adisyonService } from "../lib/services/adisyonService";
 import { billingService } from "../lib/services/billingService";
 import { ekstreService } from "../lib/services/ekstreService";
 import { pdfService } from "../lib/services/pdfService";
@@ -40,6 +43,18 @@ export default function Customers() {
   >({});
 
   const [processing, setProcessing] = useState(false);
+
+  // Bireysel Detay State
+  type BireyselSectionTab = "OPEN" | "PAID" | "FINANCIAL";
+  const [expandedBireysel, setExpandedBireysel] = useState<Record<string, boolean>>({});
+  const [bireyselOrders, setBireyselOrders] = useState<Record<string, any[]>>({});
+  const [loadingBireysel, setLoadingBireysel] = useState<Record<string, boolean>>({});
+  const [bireyselTab, setBireyselTab] = useState<Record<string, BireyselSectionTab>>({});
+  // Parcali Odeme Modal State
+  const [partialModalUserId, setPartialModalUserId] = useState<string | null>(null);
+  const [partialAmount, setPartialAmount] = useState("");
+  const [partialMethod, setPartialMethod] = useState("");
+  const [partialDesc, setPartialDesc] = useState("");
 
   // Ekstre İndirme Modalı State
   const [ekstreModalVisible, setEkstreModalVisible] = useState(false);
@@ -185,6 +200,67 @@ export default function Customers() {
       groups[key].customers.push(c);
     }
     return Object.values(groups).sort((a, b) => b.totalDebt - a.totalDebt);
+  })();
+
+  // --- Bireysel Musteri Detay Fonksiyonlari ---
+
+  const toggleBireysel = async (userId: string) => {
+    const nextState = !expandedBireysel[userId];
+    setExpandedBireysel((prev) => ({ ...prev, [userId]: nextState }));
+    if (nextState && !bireyselOrders[userId]) {
+      setLoadingBireysel((prev) => ({ ...prev, [userId]: true }));
+      try {
+        const orders = await adisyonService.getUserOrders(userId);
+        setBireyselOrders((prev) => ({ ...prev, [userId]: orders }));
+        setBireyselTab((prev) => ({ ...prev, [userId]: "OPEN" }));
+      } catch (err) { console.error("Bireysel siparis yukleme hatasi:", err); }
+      finally { setLoadingBireysel((prev) => ({ ...prev, [userId]: false })); }
+    }
+  };
+
+  const handleClearBireyselDebt = async (customer: User) => {
+    if (!window.confirm(`"${customer.name}" adli musterinin tum borcunu sifirlamak istediginizden emin misiniz? Bu islem geri alinamaz.`)) return;
+    try {
+      setProcessing(true);
+      await adisyonService.clearUserDebt(customer.id);
+      const orders = await adisyonService.getUserOrders(customer.id);
+      setBireyselOrders((prev) => ({ ...prev, [customer.id]: orders }));
+      await fetchCustomers();
+      alert(`"${customer.name}" musterisinin borcu basariyla sifirlandi.`);
+    } catch (err: any) { alert("Borc sifirlama hatasi: " + err.message); }
+    finally { setProcessing(false); }
+  };
+
+  const handlePartialPayment = async () => {
+    if (!partialModalUserId) return;
+    const amount = parseFloat(partialAmount);
+    if (!amount || amount <= 0) { alert("Gecerli bir tutar girin."); return; }
+    const customer = customers.find((c) => c.id === partialModalUserId);
+    if (!customer) return;
+    try {
+      setProcessing(true);
+      await billingService.recordPayment(partialModalUserId, null, amount, partialMethod, partialDesc || customer.name);
+      const orders = await adisyonService.getUserOrders(partialModalUserId);
+      setBireyselOrders((prev) => ({ ...prev, [partialModalUserId!]: orders }));
+      await fetchCustomers();
+      setPartialModalUserId(null); setPartialAmount(""); setPartialMethod(""); setPartialDesc("");
+      alert("Kismi odeme basariyla kaydedildi.");
+    } catch (err: any) { alert("Odeme kaydi hatasi: " + err.message); }
+    finally { setProcessing(false); }
+  };
+
+  const getBireyselOrders = (userId: string) => {
+    const orders = bireyselOrders[userId] || [];
+    const CLOSED = ["PAID", "ODENDI", "ÖDENDİ", "CANCELLED", "IPTAL", "İPTAL"];
+    const openOrders = orders.filter((o) => o.order_type !== "MANUAL_PAYMENT" && o.order_type !== "MANUAL_DEBT" && !CLOSED.includes((o.status || "").toUpperCase()));
+    const paidOrders = orders.filter((o) => o.order_type !== "MANUAL_PAYMENT" && o.order_type !== "MANUAL_DEBT" && CLOSED.includes((o.status || "").toUpperCase()));
+    const financialOrders = orders.filter((o) => o.order_type === "MANUAL_PAYMENT" || o.order_type === "MANUAL_DEBT").sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return { openOrders, paidOrders, financialOrders };
+  };
+
+  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+
+  const groupedKurumsal2 = (() => {
   })();
 
   const toggleCompany = async (groupKey: string, companyId: string) => {
@@ -363,56 +439,92 @@ export default function Customers() {
       ) : (
         <div className="space-y-4">
           {mainTab === "BIREYSEL" ? (
-            <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-slate-50/50 text-slate-400 text-[11px] uppercase tracking-wider font-extrabold border-b border-slate-100">
-                    <th className="px-6 py-5">Müşteri</th>
-                    <th className="px-6 py-5">İletişim</th>
-                    <th className="px-6 py-5">Bakiye / Borç</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {bireyselCustomers.map((c) => (
-                    <tr
-                      key={c.id}
-                      className="hover:bg-slate-50/50 transition-colors"
-                    >
-                      <td className="px-6 py-5">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold border border-slate-200 shadow-inner">
-                            {c.name.charAt(0)}
-                          </div>
-                          <span className="text-sm font-bold text-slate-800">
-                            {c.name}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5">
-                        <span className="text-sm text-slate-500 font-medium italic underline">
-                          {c.phone}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5">
+            <div className="grid grid-cols-1 gap-3">
+              {bireyselCustomers.map((c) => {
+                const isExpanded = expandedBireysel[c.id];
+                const isLoadingOrders = loadingBireysel[c.id];
+                const activeTab = bireyselTab[c.id] || "OPEN";
+                const { openOrders, paidOrders, financialOrders } = getBireyselOrders(c.id);
+                return (
+                  <div key={c.id} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm transition-all hover:shadow-lg hover:shadow-slate-200/50">
+                    <div className="p-5 flex items-center justify-between cursor-pointer active:bg-slate-50 transition-colors group" onClick={() => toggleBireysel(c.id)}>
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-black text-lg group-hover:scale-105 transition-transform">{c.name.charAt(0)}</div>
+                        <div><p className="text-sm font-black text-slate-800">{c.name}</p><p className="text-xs text-slate-400 italic underline mt-0.5">{c.phone}</p></div>
+                      </div>
+                      <div className="flex items-center gap-4">
                         {c.balance && c.balance > 0 ? (
-                          <div className="flex flex-col">
-                            <span className="text-sm font-black text-red-500 italic">
-                              ₺{(c.balance ?? 0).toLocaleString("tr-TR")}
-                            </span>
-                            <span className="text-[9px] font-black text-red-400 uppercase tracking-tighter mt-0.5">
-                              BORÇLU
-                            </span>
-                          </div>
+                          <div className="text-right"><p className="text-sm font-black text-red-500">₺{(c.balance ?? 0).toLocaleString("tr-TR")}</p><p className="text-[9px] font-black text-red-400 uppercase tracking-tighter">BORÇLU</p></div>
                         ) : (
-                          <span className="text-xs font-bold text-emerald-500 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 shadow-sm">
-                            TEMİZ
-                          </span>
+                          <span className="text-xs font-bold text-emerald-500 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">TEMİZ</span>
                         )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        {isExpanded ? <ChevronUp className="text-slate-300" size={20} /> : <ChevronDown className="text-slate-300" size={20} />}
+                      </div>
+                    </div>
+                    {isExpanded && (
+                      <div className="border-t border-slate-100 bg-slate-50/50 animate-in slide-in-from-top duration-300">
+                        {isLoadingOrders ? (
+                          <div className="py-12 flex flex-col items-center gap-3"><Loader2 className="w-8 h-8 text-accent animate-spin" /><p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</p></div>
+                        ) : (
+                          <div className="p-6 space-y-5">
+                            <div className="flex items-center gap-3">
+                              <div className={`flex-1 rounded-2xl border p-4 ${c.balance && c.balance > 0 ? "bg-red-50 border-red-100" : "bg-emerald-50 border-emerald-100"}`}>
+                                <p className={`text-[10px] font-black uppercase tracking-widest ${c.balance && c.balance > 0 ? "text-red-400" : "text-emerald-500"}`}>Güncel Borç</p>
+                                <p className={`text-2xl font-black mt-1 ${c.balance && c.balance > 0 ? "text-red-500" : "text-emerald-500"}`}>{c.balance && c.balance > 0 ? `₺${c.balance.toLocaleString("tr-TR")}` : "Temiz"}</p>
+                              </div>
+                              <div className="bg-white rounded-2xl border border-slate-200 p-4 flex-1">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Toplam Sipariş</p>
+                                <p className="text-2xl font-black text-slate-800 mt-1">{(bireyselOrders[c.id] || []).filter((o) => o.order_type !== "MANUAL_PAYMENT" && o.order_type !== "MANUAL_DEBT").length}</p>
+                              </div>
+                            </div>
+                            <div className="flex gap-3">
+                              <button onClick={() => { setPartialModalUserId(c.id); setPartialDesc(c.name); }} disabled={processing} className="flex-1 flex items-center justify-center gap-2 bg-accent text-white py-3 rounded-2xl text-xs font-black uppercase tracking-wider shadow-md hover:bg-accent/90 transition-all disabled:opacity-50 cursor-pointer">
+                                <CreditCard size={14} />Kısmi Ödeme Al
+                              </button>
+                              {c.balance && c.balance > 0 ? (
+                                <button onClick={() => handleClearBireyselDebt(c)} disabled={processing} className="flex-1 flex items-center justify-center gap-2 bg-red-50 border border-red-100 text-red-600 hover:bg-red-600 hover:text-white py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer">
+                                  <RotateCcw size={14} />Borcu Sıfırla
+                                </button>
+                              ) : null}
+                            </div>
+                            <div className="flex gap-1 bg-white border border-slate-200 rounded-2xl p-1">
+                              {([{ key: "OPEN", label: `Açık (${openOrders.length})` }, { key: "PAID", label: `Ödendi (${paidOrders.length})` }, { key: "FINANCIAL", label: `Hareketler (${financialOrders.length})` }] as { key: any; label: string }[]).map((tab) => (
+                                <button key={tab.key} onClick={() => setBireyselTab((prev) => ({ ...prev, [c.id]: tab.key }))} className={`flex-1 py-2.5 rounded-xl text-xs font-black transition-all ${activeTab === tab.key ? "bg-accent text-white shadow-md shadow-accent/20" : "text-slate-500 hover:bg-slate-50"}`}>{tab.label}</button>
+                              ))}
+                            </div>
+                            <div className="space-y-2">
+                              {activeTab === "OPEN" && (openOrders.length === 0 ? <div className="text-center py-8 text-slate-400 text-sm font-medium">Açık sipariş bulunmuyor ✓</div> : openOrders.map((order) => (
+                                <div key={order.id} className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center justify-between">
+                                  <div><p className="text-xs font-black text-slate-700">{formatDate(order.created_at)}</p><p className="text-[10px] text-slate-400 mt-0.5">{order.order_type || "Sipariş"}</p></div>
+                                  <div className="flex items-center gap-3">{order.total_amount > 0 && <p className="text-sm font-black text-slate-800">₺{order.total_amount.toLocaleString("tr-TR")}</p>}<span className="text-[10px] font-black bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full border border-amber-200 uppercase tracking-tight">Açık</span></div>
+                                </div>
+                              )))}
+                              {activeTab === "PAID" && (paidOrders.length === 0 ? <div className="text-center py-8 text-slate-400 text-sm font-medium">Ödendi kaydı bulunmuyor</div> : paidOrders.map((order) => (
+                                <div key={order.id} className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center justify-between opacity-70">
+                                  <div><p className="text-xs font-black text-slate-700">{formatDate(order.created_at)}</p><p className="text-[10px] text-slate-400 mt-0.5">{order.order_type || "Sipariş"}</p></div>
+                                  <div className="flex items-center gap-3">{order.total_amount > 0 && <p className="text-sm font-black text-slate-800">₺{order.total_amount.toLocaleString("tr-TR")}</p>}<span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full border border-emerald-200 uppercase tracking-tight">Ödendi</span></div>
+                                </div>
+                              )))}
+                              {activeTab === "FINANCIAL" && (financialOrders.length === 0 ? <div className="text-center py-8 text-slate-400 text-sm font-medium">Finansal hareket bulunmuyor</div> : financialOrders.map((entry) => {
+                                const isPayment = entry.order_type === "MANUAL_PAYMENT";
+                                return (
+                                  <div key={entry.id} className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center justify-between">
+                                    <div><p className="text-xs font-black text-slate-700">{entry.note || (isPayment ? "Kısmi Ödeme" : "Borç Girişi")}</p><p className="text-[10px] text-slate-400 mt-0.5">{formatDate(entry.created_at)}</p></div>
+                                    <div className="flex items-center gap-3">
+                                      {entry.total_amount > 0 && <p className={`text-sm font-black ${isPayment ? "text-emerald-600" : "text-slate-800"}`}>{isPayment ? "-" : "+"}₺{entry.total_amount.toLocaleString("tr-TR")}</p>}
+                                      <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-tight border ${isPayment ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-blue-100 text-blue-700 border-blue-200"}`}>{isPayment ? "Ödeme" : "Borç"}</span>
+                                    </div>
+                                  </div>
+                                );
+                              }))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
@@ -739,6 +851,35 @@ export default function Customers() {
                       <span>PDF OLUŞTUR</span>
                     </>
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bireysel Kismi Odeme Modali */}
+      {partialModalUserId && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between">
+              <div><h2 className="text-2xl font-black text-slate-900 leading-tight">Kısmi Ödeme Al</h2><p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">{customers.find((c) => c.id === partialModalUserId)?.name}</p></div>
+              <button onClick={() => setPartialModalUserId(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={24} className="text-slate-400" /></button>
+            </div>
+            <div className="p-8 space-y-5">
+              <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Ödeme Tutarı (₺)</label><input type="number" placeholder="0.00" value={partialAmount} onChange={(e) => setPartialAmount(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-lg font-black focus:outline-none focus:border-accent transition-all" /></div>
+              <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Ödeme Yöntemi</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {["Nakit", "Havale", "Kredi Kartı"].map((method) => (
+                    <button key={method} onClick={() => setPartialMethod(method)} className={`py-3 rounded-2xl text-xs font-black transition-all border ${partialMethod === method ? "bg-accent text-white border-accent shadow-md" : "bg-slate-50 border-slate-200 text-slate-500 hover:border-accent/50"}`}>{method}</button>
+                  ))}
+                </div>
+              </div>
+              <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 block">Açıklama (opsiyonel)</label><input type="text" placeholder="Ödeme notu..." value={partialDesc} onChange={(e) => setPartialDesc(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 text-sm font-bold focus:outline-none focus:border-accent transition-all" /></div>
+              <div className="pt-2 flex items-center space-x-3">
+                <button onClick={() => setPartialModalUserId(null)} className="flex-1 py-4 text-slate-500 font-black text-sm hover:bg-slate-50 rounded-2xl transition-colors">İPTAL</button>
+                <button onClick={handlePartialPayment} disabled={processing || !partialAmount} className="flex-[2] bg-accent py-4 rounded-2xl text-white font-black text-sm shadow-lg shadow-accent/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center space-x-2">
+                  {processing ? <Loader2 className="animate-spin" size={18} /> : <><CreditCard size={18} /><span>KAYDET</span></>}
                 </button>
               </div>
             </div>
