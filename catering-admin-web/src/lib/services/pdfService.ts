@@ -49,23 +49,6 @@ const formatDate = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
-const BASE_CSS = `
-  body{font-family:Helvetica,Arial,sans-serif;color:#1e293b;margin:0;padding:40px;line-height:1.5;background:#fff;}
-  .header{border-bottom:2px solid #e2e8f0;padding-bottom:20px;margin-bottom:30px;display:flex;justify-content:space-between;align-items:flex-end;}
-  .brand{font-size:26px;font-weight:900;color:#1a2e4a;}
-  .title{font-size:13pt;color:#e8a020;font-weight:bold;margin-top:4px;}
-  .meta{text-align:right;font-size:10px;color:#64748b;}
-  .firm-box{background:#f8fafc;padding:16px 20px;border-radius:8px;border:1px solid #e2e8f0;margin-bottom:24px;}
-  .firm-name{font-size:16px;font-weight:bold;color:#1a2e4a;}
-  .firm-details{font-size:11px;color:#64748b;margin-top:4px;}
-  .section-title{font-size:11px;font-weight:900;color:#1a2e4a;margin:24px 0 8px 0;text-transform:uppercase;border-left:4px solid #e8a020;padding-left:10px;}
-  table{width:100%;border-collapse:collapse;margin-bottom:16px;}
-  th{background:#1a2e4a;color:#fff;text-align:left;padding:10px 12px;font-size:10px;text-transform:uppercase;}
-  td{border-bottom:1px solid #f1f5f9;}
-  .footer{margin-top:48px;border-top:1px solid #e2e8f0;padding-top:16px;font-size:9px;color:#94a3b8;text-align:center;}
-  @media print{.page-break{page-break-before:always;}}
-`;
-
 export const pdfService = {
 
   generateSalesReport: (orders: any[], period: string) => {
