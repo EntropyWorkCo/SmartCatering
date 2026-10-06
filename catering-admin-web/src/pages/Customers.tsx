@@ -131,9 +131,14 @@ export default function Customers() {
                   )
                 );
               });
-              balance = userOrders.reduce(
-                (sum: number, order: any) => sum + (order.total_amount || 0),
+              balance = Math.max(
                 0,
+                userOrders.reduce((sum: number, order: any) => {
+                  if (order.order_type === "MANUAL_PAYMENT") {
+                    return sum - (order.total_amount || 0);
+                  }
+                  return sum + (order.total_amount || 0);
+                }, 0),
               );
             }
           }
@@ -260,8 +265,6 @@ export default function Customers() {
 
   const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 
-  const groupedKurumsal2 = (() => {
-  })();
 
   const toggleCompany = async (groupKey: string, companyId: string) => {
     const nextState = !expandedCompanies[groupKey];
