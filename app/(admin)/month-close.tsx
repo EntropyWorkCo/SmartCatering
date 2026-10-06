@@ -37,7 +37,7 @@ const MONTHS = [
     "Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık",
 ];
 
-const CLOSED_STATUSES = '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal","COMPLETED","Tamamlandı")';
+const CLOSED_STATUSES = '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal")';
 const EXCLUDED_TYPES  = '("MANUAL_PAYMENT","MANUAL_DEBT")';
 
 // ── Yardımcı: Önizleme sorgula ──────────────────────────────────────────────

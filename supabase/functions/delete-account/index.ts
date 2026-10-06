@@ -59,7 +59,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Profil bulunamadı.' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // ── 2. BORÇ KONTROLÜ (Sadece Owner İçin) ───────────────────────
+    // ── 2. BORÇ KONTROLÜ ───────────────────────────────────────────
     if (profile.role === 'owner' || profile.role === 'corporate') {
        const { data: company } = await supabaseAdmin
          .from('companies')
@@ -71,7 +71,7 @@ serve(async (req) => {
          .from('adisyon')
          .select('*', { count: 'exact', head: true })
          .eq('company_id', company?.id || 'none')
-         .not('status', 'in', '("PAID", "ÖDENDİ", "ÖDENDI")');
+         .not('status', 'in', '("PAID", "ÖDENDİ", "ÖDENDI", "CANCELLED", "İPTAL", "İPTAL EDİLDİ")');
 
        if ((company?.balance || 0) > 0 || (unpaidCount || 0) > 0) {
          return new Response(JSON.stringify({ 
@@ -98,6 +98,21 @@ serve(async (req) => {
             .from('companies')
             .update({ company_name: archivedName })
             .eq('id', company.id);
+       }
+    } else {
+       // Bireysel Kullanıcı: Ödenmemiş/açık siparişi var mı kontrol et
+       const { count: unpaidOrdersCount } = await supabaseAdmin
+         .from('adisyon')
+         .select('*', { count: 'exact', head: true })
+         .eq('user_id', userId)
+         .not('status', 'in', '("PAID", "ÖDENDİ", "ÖDENDI", "CANCELLED", "İPTAL", "İPTAL EDİLDİ")');
+
+       if ((unpaidOrdersCount || 0) > 0) {
+         return new Response(JSON.stringify({ 
+           success: false, 
+           code: 'UNPAID_ORDERS', 
+           error: 'Tamamlanmamış veya ödenmemiş siparişiniz bulunmaktadır. Hesabınızı silmeden önce lütfen siparişinizi tamamlayınız veya işletmeyle iletişime geçiniz.' 
+         }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
        }
     }
 

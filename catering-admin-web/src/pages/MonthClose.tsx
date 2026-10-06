@@ -45,7 +45,7 @@ export default function MonthClose() {
       const month = selectedMonth;
       
       const endDate = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
-      const CLOSED_STATUSES = '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal","COMPLETED","Tamamlandı")';
+      const CLOSED_STATUSES = '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal")';
       const EXCLUDED_TYPES  = '("MANUAL_PAYMENT","MANUAL_DEBT")';
 
       // 1. Kurumsal çalışanları bul

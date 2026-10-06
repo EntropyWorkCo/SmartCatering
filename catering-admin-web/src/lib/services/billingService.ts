@@ -82,7 +82,7 @@ export const billingService = {
     }
 
     // 3. Ödenmemiş tüm siparişlerini ve manuel borçlarını PAID (ÖDENDİ) olarak işaretle
-    const CLOSED_STATUSES = '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal","COMPLETED","Tamamlandı")';
+    const CLOSED_STATUSES = '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal")';
     const EXCLUDED_TYPES  = '("MANUAL_PAYMENT")';
     
     let ordersQ = supabase
@@ -268,7 +268,7 @@ export const billingService = {
   ): Promise<{ affectedOrders: number; totalAmount: number; affectedFirms: number }> {
     const endDate   = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
 
-    const CLOSED_STATUSES = '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal","COMPLETED","Tamamlandı")';
+    const CLOSED_STATUSES = '("PAID","Ödendi","ÖDENDİ","CANCELLED","İptal")';
     const EXCLUDED_TYPES  = '("MANUAL_PAYMENT","MANUAL_DEBT")';
 
     // Kurumsal kullanıcıları bul (sahip + çalışanlar)

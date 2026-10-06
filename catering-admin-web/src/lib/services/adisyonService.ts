@@ -84,12 +84,20 @@ export const adisyonService = {
       // 1. By company_id (employee)
       // 2. By user_id (owner)
       const company = companies?.find(c => c.id === user?.company_id || c.user_id === user?.id);
+      const isCorporate = !!company;
+
+      const isManual = ["MANUAL_DEBT", "MANUAL_PAYMENT"].includes(order.order_type);
+      const safeAmount = (isCorporate && !isManual) ? 0 : (order.total_amount || 0);
+
+      const displayName = user?.full_name 
+        || (order.deleted_user_name ? `${order.deleted_user_name} (Silinmiş Hesap)` : 'Müşteri');
 
       return {
         ...order,
-        userName: user?.full_name || 'Müşteri',
+        total_amount: safeAmount,
+        userName: displayName,
         companyName: company?.company_name || null,
-        isCorporate: !!company
+        isCorporate
       };
     });
   },

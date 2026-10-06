@@ -30,7 +30,7 @@ const CHART_COLORS = ["#74CF62", "#3b82f6", "#f59e0b", "#ec4899", "#8b5cf6"];
 import { adisyonService } from "../lib/services/adisyonService";
 import { supabase } from "../lib/supabase";
 
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -337,14 +337,14 @@ export default function Dashboard() {
 
           {/* Large Navigation Arrow */}
           <div className="flex flex-col items-center lg:items-end justify-center">
-             <a 
-              href="/orders" 
+             <Link 
+              to="/orders" 
               className="flex flex-col items-center group bg-accent dark:bg-accent p-10 lg:p-14 rounded-[50px] shadow-2xl shadow-accent/20 hover:scale-105 active:scale-95 transition-all"
              >
                 <ArrowRightCircle size={80} className="text-white group-hover:rotate-[-45deg] transition-transform duration-500" />
                 <span className="text-white font-black uppercase tracking-widest mt-4 text-xs whitespace-nowrap">TÜM SİPARİŞLERE GİT</span>
                 <ChevronRight className="text-white/50 group-hover:translate-x-2 transition-transform" />
-             </a>
+             </Link>
           </div>
         </div>
       </div>
